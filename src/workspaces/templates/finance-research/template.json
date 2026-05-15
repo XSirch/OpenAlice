@@ -1,0 +1,6 @@
+{
+  "displayName": "Finance Research",
+  "groupOrder": 30,
+  "description": "Finance research workspace bundling himself65/finance-skills (yfinance market data, valuation, earnings, social readers, sentiment). Cloned fresh from upstream on each workspace creation — credit and traffic flow back to the author. Plugins install at project scope; user-global Claude Code state stays clean.",
+  "defaultAgents": ["claude"]
+}
