@@ -42,6 +42,17 @@ the item when done — git log is the history.
       catches a future drift. Repo has no ESLint config today; setting
       one up is a separate pass.
 
+- [ ] Broker SDK deps (ccxt / longbridge / @alpacahq/alpaca-trade-api)
+      currently double-declared in root + services/uta package.json.
+      Step 8 tried to move them only to services/uta for hygiene, but
+      `pnpm prune --prod` at root then stripped them and the Docker
+      runtime couldn't resolve them from `services/uta/dist/uta.js`.
+      Workaround for now: keep both declarations. Cleaner fix:
+      `pnpm deploy` a self-contained `services/uta` tree into the
+      image, or wire `pnpm prune --filter` to keep workspace-package
+      transitive deps. Verify the runtime resolution stays intact
+      before tightening.
+
 ## Events / Automation
 
 - [ ] `task.requested`: add optional `silent?: boolean` to the payload so
