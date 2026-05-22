@@ -29,12 +29,12 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl: string }): Hono {
   const app = new Hono()
   const base = opts.utaBaseUrl.replace(/\/$/, '')
 
-  app.all('/*', async (c) => {
+  app.all('*', async (c) => {
     const incoming = c.req.raw
-    // Reconstruct target URL: preserve everything after the mount prefix.
-    // Hono mounts this app at `/api/trading`, and inside the app `c.req.path`
-    // is the *sub-path* (e.g. `/uta`, `/equity`, `/uta/:id/wallet/push`).
-    const target = `${base}/api/trading${c.req.path === '/' ? '' : c.req.path}${url(incoming).search}`
+    // Reconstruct target URL: Hono's `c.req.path` is the *full* path
+    // including the mount prefix (`/api/trading/uta`, not `/uta`), so
+    // we forward it as-is.
+    const target = `${base}${c.req.path}${url(incoming).search}`
 
     const forwardHeaders = new Headers()
     for (const name of PASSTHROUGH_HEADERS) {
