@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createSimulatorRoutes } from './routes-simulator.js'
-import { MockBroker } from '@/domain/trading/brokers/mock/MockBroker.js'
+import { MockBroker } from '../domain/trading/brokers/mock/MockBroker.js'
 import type { EngineContext } from '@/core/types.js'
 
 interface FakeUTA {

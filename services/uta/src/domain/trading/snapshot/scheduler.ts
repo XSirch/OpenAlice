@@ -14,7 +14,7 @@
  */
 
 import type { SnapshotService } from './service.js'
-import { createPump, type Pump } from '../../../core/pump.js'
+import { createPump, type Pump } from '@/core/pump.js'
 
 export interface SnapshotConfig {
   enabled: boolean

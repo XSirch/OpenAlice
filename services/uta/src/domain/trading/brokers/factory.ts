@@ -15,7 +15,7 @@
 import type { IBroker } from './types.js'
 import { BROKER_ENGINE_REGISTRY } from './registry.js'
 import { getBrokerPreset } from '@traderalice/uta-protocol'
-import type { UTAConfig } from '../../../core/config.js'
+import type { UTAConfig } from '@/core/config.js'
 import type { FxService } from '../fx-service.js'
 
 /** Optional services brokers can opt into via duck-typed setters. */

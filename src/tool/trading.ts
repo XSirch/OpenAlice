@@ -12,8 +12,9 @@ import Decimal from 'decimal.js'
 import { Contract, UNSET_DECIMAL, coerceSecType } from '@traderalice/ibkr'
 import { BrokerError, type OpenOrder } from '@traderalice/uta-protocol'
 import type { UTAManagerSDK } from '@/services/uta-client/index.js'
-import { normalizeBrokerSearchPattern } from '@/domain/trading/contract-search-rules.js'
-import '@/domain/trading/contract-ext.js'
+import { normalizeBrokerSearchPattern } from '@traderalice/uta-protocol'
+// `Contract.aliceId` declaration merge is registered as a side-effect
+// of `@traderalice/uta-protocol`'s barrel — already pulled in above.
 
 /** aliceId is "{utaId}|{nativeKey}" — split locally so the tool can pick
  *  the owning account before any HTTP call. Pure utility, no broker

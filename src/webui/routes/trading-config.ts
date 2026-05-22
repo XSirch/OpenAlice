@@ -4,7 +4,6 @@ import {
   readUTAsConfig, writeUTAsConfig,
   utaConfigSchema, wipeUTATradingData,
 } from '../../core/config.js'
-import { createBroker } from '../../domain/trading/brokers/factory.js'
 import {
   BUILTIN_BROKER_PRESETS,
   deriveUtaId,
@@ -239,33 +238,25 @@ export function createTradingConfigRoutes(ctx: EngineContext) {
   })
 
   // ==================== Test Connection ====================
+  // BFF passthrough — the actual broker instantiation lives in UTA
+  // (it owns broker code). Alice forwards the wizard's payload over.
 
   app.post('/test-connection', async (c) => {
-    let broker: {
-      init: () => Promise<void>
-      getAccount: () => Promise<unknown>
-      getPositions: () => Promise<unknown>
-      close: () => Promise<void>
-    } | null = null
+    const utaUrl = process.env['OPENALICE_UTA_URL']
+    if (!utaUrl) {
+      return c.json({ success: false, error: 'UTA URL not set' }, 500)
+    }
     try {
       const body = await c.req.json()
-      const utaConfig = utaConfigSchema.parse({ ...body, id: body.id ?? '__test__' })
-
-      broker = createBroker(utaConfig)
-      await broker.init()
-      // Run both calls in parallel — getAccount proves auth, getPositions
-      // exercises the data path the user actually cares about (e.g. for OKX
-      // UTA, this is what surfaces spot holdings via fetchSpotHoldings).
-      const [account, positions] = await Promise.all([
-        broker.getAccount(),
-        broker.getPositions(),
-      ])
-      return c.json({ success: true, account, positions })
+      const res = await fetch(`${utaUrl.replace(/\/$/, '')}/api/trading/test-connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      return c.json(data, res.status as 200 | 400 | 500)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      return c.json({ success: false, error: msg }, 400)
-    } finally {
-      try { await broker?.close() } catch { /* best effort */ }
+      return c.json({ success: false, error: err instanceof Error ? err.message : String(err) }, 500)
     }
   })
 

@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Decimal from 'decimal.js'
 import { ContractDescription, Order, OrderState, UNSET_DOUBLE, UNSET_DECIMAL } from '@traderalice/ibkr'
+// Co-located with the broker stubs it exercises — MockBroker +
+// UTAManager + UnifiedTradingAccount live in services/uta/src/domain/
+// trading/. The spec still tests Alice's tool layer (createTradingTools),
+// imported via the `@/` alias (resolves to ../../src/* per services/uta
+// tsconfig.json).
 import type { OpenOrder } from '../domain/trading/brokers/types.js'
 import { MockBroker, makeContract } from '../domain/trading/brokers/mock/index.js'
 import { UTAManager } from '../domain/trading/uta-manager.js'
 import { UnifiedTradingAccount } from '../domain/trading/UnifiedTradingAccount.js'
-import type { UTAManagerSDK } from '../services/uta-client/index.js'
-import { createTradingTools } from './trading.js'
+import type { UTAManagerSDK } from '@/services/uta-client/index.js'
+import { createTradingTools } from '@/tool/trading.js'
 import '../domain/trading/contract-ext.js'
 
 function makeUta(broker: MockBroker): UnifiedTradingAccount {

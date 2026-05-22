@@ -2,11 +2,11 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import type { EngineContext } from '@/core/types.js'
-import { BrokerError } from '@/domain/trading/brokers/types.js'
-import type { UnifiedTradingAccount } from '@/domain/trading/UnifiedTradingAccount.js'
-import { searchTradeableContracts } from '@/domain/trading/contract-search.js'
-import type { AssetClassHint } from '@/domain/trading/contract-search-rules.js'
-import { executeOneShotOrder, type OrderEntryPhase } from '@/domain/trading/order-entry.js'
+import { BrokerError } from '../domain/trading/brokers/types.js'
+import type { UnifiedTradingAccount } from '../domain/trading/UnifiedTradingAccount.js'
+import { searchTradeableContracts } from '../domain/trading/contract-search.js'
+import type { AssetClassHint } from '@traderalice/uta-protocol'
+import { executeOneShotOrder, type OrderEntryPhase } from '../domain/trading/order-entry.js'
 
 // ==================== Order entry schemas ====================
 //
@@ -176,6 +176,31 @@ export function createTradingRoutes(ctx: EngineContext) {
       rates.push({ currency: cur, rate: fx.rate, source: fx.source, updatedAt: fx.updatedAt })
     }
     return c.json({ rates })
+  })
+
+  // ==================== Broker test-connection ====================
+  // Setup-wizard probe: instantiate a broker from the supplied preset
+  // config, connect, query account + positions to prove credentials are
+  // valid, then disconnect. Ephemeral — does NOT register the broker
+  // with UTAManager. Alice's `/api/trading/config/test-connection`
+  // endpoint forwards here.
+  app.post('/test-connection', async (c) => {
+    let broker: { init: () => Promise<void>; getAccount: () => Promise<unknown>; getPositions: () => Promise<unknown>; close: () => Promise<void> } | null = null
+    try {
+      const { createBroker } = await import('../domain/trading/brokers/factory.js')
+      const { utaConfigSchema } = await import('@traderalice/uta-protocol')
+      const body = await c.req.json()
+      const utaConfig = utaConfigSchema.parse({ ...body, id: body.id ?? '__test__' })
+      broker = createBroker(utaConfig)
+      await broker.init()
+      const [account, positions] = await Promise.all([broker.getAccount(), broker.getPositions()])
+      return c.json({ success: true, account, positions })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ success: false, error: msg }, 400)
+    } finally {
+      try { await broker?.close() } catch { /* best-effort */ }
+    }
   })
 
   // ==================== Per-account routes ====================

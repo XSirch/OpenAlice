@@ -9,7 +9,7 @@
  */
 
 import type { UTAManager } from '../uta-manager.js'
-import type { EventLog } from '../../../core/event-log.js'
+import type { EventLog } from '@/core/event-log.js'
 import type { SnapshotStore } from './store.js'
 import type { UTASnapshot, SnapshotTrigger } from './types.js'
 import { buildSnapshot } from './builder.js'

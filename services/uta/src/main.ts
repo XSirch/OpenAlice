@@ -19,8 +19,8 @@ import {
   UTAManager,
   createSnapshotService,
   createSnapshotScheduler,
-} from '@/domain/trading/index.js'
-import { FxService } from '@/domain/trading/fx-service.js'
+} from './domain/trading/index.js'
+import { FxService } from './domain/trading/fx-service.js'
 import {
   getSDKExecutor,
   buildRouteMap,
