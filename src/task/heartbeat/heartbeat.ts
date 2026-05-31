@@ -35,7 +35,6 @@ import type { ListenerRegistry } from '../../core/listener-registry.js'
 import type { ProducerHandle } from '../../core/producer.js'
 import { createPump, type Pump } from '../../core/pump.js'
 import type { AgentWorkListener, AgentWorkSourceConfig } from '../../core/agent-work-listener.js'
-import type { AgentWorkResultProbe } from '../../core/agent-work.js'
 
 // ==================== Config ====================
 
@@ -58,13 +57,7 @@ export const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
   every: '30m',
   prompt: `You're Alice in the heartbeat monitoring loop. The system pings you periodically so you can check on what's happening — markets, watchlists, pending items, anything trade-relevant the user might want surfaced.
 
-If something is genuinely worth flagging — a notable move, a finished analysis, an answer to a question they've been waiting on — call the \`notify_user\` tool with a concise message in the user's language.
-
-If there's nothing worth surfacing, simply respond briefly with what you observed (or with nothing at all). Don't call \`notify_user\` out of politeness; reserve it for genuinely useful pushes — the user gets pinged whenever it fires.
-
-In short:
-- silence = nothing pushed
-- \`notify_user("...")\` = a push lands in the user's inbox`,
+Note: heartbeat delivery is currently stubbed — there is no user-facing push from this loop while its trigger chain is being reworked for the Harness scheduler. Just observe and respond briefly with what you noticed (or nothing at all). Don't attempt to notify the user from here.`,
   activeHours: null,
 }
 
@@ -108,38 +101,25 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
   let producer: ProducerHandle<readonly ['agent.work.requested', 'agent.work.skip']> | null = null
   let pump: Pump | null = null
 
-  const dedup = new HeartbeatDedup()
-
   // ---- Source config (registered with agent-work-listener) ----
   //
-  // Output-side semantics (notify_user inspection + dedup gate) live
-  // here, closing over the dedup instance heartbeat owns. The
-  // agent-work-listener calls these when an agent.work.requested event
-  // with source='heartbeat' arrives.
+  // The push is STUBBED. Heartbeat keeps its scheduler (the Pump still
+  // ticks, active-hours still filter, the AI still runs each tick), but
+  // the output gate unconditionally skips delivery — nothing lands in
+  // the user's inbox. The old notify_user-inspecting + dedup gate is
+  // gone along with the notify_user tool; heartbeat's trigger chain
+  // isn't closed in the current Harness architecture, so until Harness
+  // scheduling lands there's no meaningful sink to push to. Making the
+  // skip explicit (rather than relying on "the tool no longer exists so
+  // find() returns undefined") keeps the behavior obvious to the next
+  // reader. The agent-work-listener calls this when an
+  // agent.work.requested event with source='heartbeat' arrives.
   const sourceConfig: AgentWorkSourceConfig = {
     source: 'heartbeat',
     session,
     preamble: () =>
       'You are operating in the heartbeat monitoring context (session: heartbeat). The following is the recent heartbeat conversation history.',
-    outputGate: (probe: AgentWorkResultProbe) => {
-      const call = probe.toolCalls.find((c) => c.name === 'notify_user')
-      if (!call) {
-        return { kind: 'skip', reason: 'ack', payload: { reason: 'ack' } }
-      }
-      const text = ((call.input ?? {}) as { text?: string }).text ?? ''
-      if (!text.trim()) {
-        return { kind: 'skip', reason: 'empty', payload: { reason: 'empty' } }
-      }
-      if (dedup.isDuplicate(text, now())) {
-        return {
-          kind: 'skip',
-          reason: 'duplicate',
-          payload: { reason: 'duplicate', parsedReason: text.slice(0, 80) },
-        }
-      }
-      return { kind: 'deliver', text, media: probe.media }
-    },
-    onDelivered: (text) => dedup.record(text, now()),
+    outputGate: () => ({ kind: 'skip', reason: 'stubbed', payload: { reason: 'stubbed' } }),
   }
 
   /** The pump's tick callback — active-hours guard then emit. */
@@ -263,32 +243,3 @@ function currentMinutesInTimezone(tz: string, nowMs?: number): number {
   }
 }
 
-// ==================== Dedup ====================
-
-/**
- * Suppress identical heartbeat notify_user texts within a time window
- * (default 24h). In-memory only — restart loses dedup state. Acceptable
- * trade-off: heartbeats are coarse-grained (~30m), restart-window
- * collisions are rare, single-duplicate cost is low.
- */
-export class HeartbeatDedup {
-  /** Public for callers that want to inspect the last-delivered text. */
-  public lastText: string | null = null
-  private lastSentAt = 0
-  private windowMs: number
-
-  constructor(windowMs = 24 * 60 * 60 * 1000) {
-    this.windowMs = windowMs
-  }
-
-  isDuplicate(text: string, nowMs = Date.now()): boolean {
-    if (this.lastText === null) return false
-    if (text !== this.lastText) return false
-    return (nowMs - this.lastSentAt) < this.windowMs
-  }
-
-  record(text: string, nowMs = Date.now()): void {
-    this.lastText = text
-    this.lastSentAt = nowMs
-  }
-}

@@ -1,14 +1,13 @@
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { dirname } from 'path'
-// Engine removed — AgentCenter is the top-level AI entry point
+// AgentCenter retired — the in-process agent loop now runs inside the
+// native workspace CLIs; Alice drives GenerateRouter directly.
 import { loadConfig } from './core/config.js'
 import { dataPath, defaultPath } from '@/core/paths.js'
-import type { Plugin, EngineContext, ReconnectResult } from './core/types.js'
+import type { Plugin, EngineContext } from './core/types.js'
 import { McpPlugin } from './server/mcp.js'
-import { TelegramPlugin } from './connectors/telegram/index.js'
 import { WebPlugin } from './webui/index.js'
 import { createWorkspaceServiceRef } from './webui/plugin.js'
-import { McpAskPlugin } from './connectors/mcp-ask/index.js'
 import { createThinkingTools } from './tool/thinking.js'
 import { createUTAClient } from '@traderalice/uta-protocol'
 import { UTAManagerSDK } from './services/uta-client/index.js'
@@ -28,17 +27,12 @@ import { OpenBBEconomyClient } from './domain/market-data/client/openbb-api/econ
 import { createMarketSearchTools } from './tool/market.js'
 import { createAnalysisTools } from './tool/analysis.js'
 import { createEconomyTools } from './tool/economy.js'
-import { createSessionTools } from './tool/session.js'
 import { SessionStore } from './core/session.js'
-import { ConnectorCenter } from './core/connector-center.js'
-import { createNotificationsStore } from './core/notifications-store.js'
 import { createInboxStore } from './core/inbox-store.js'
 import { ToolCenter } from './core/tool-center.js'
 import { WorkspaceToolCenter } from './core/workspace-tool-center.js'
 import { inboxPushFactory } from './tool/inbox-push.js'
-import { AgentCenter } from './core/agent-center.js'
 import { AgentWorkRunner } from './core/agent-work.js'
-import { createNotifyUserTool } from './tool/notify-user.js'
 import { GenerateRouter } from './core/ai-provider-manager.js'
 import { VercelAIProvider } from './ai-providers/vercel-ai-sdk/vercel-provider.js'
 import { AgentSdkProvider } from './ai-providers/agent-sdk/agent-sdk-provider.js'
@@ -205,7 +199,6 @@ async function main() {
   }
   toolCenter.register(createAnalysisTools(equityClient, cryptoClient, currencyClient, commodityClient), 'analysis')
   toolCenter.register(createEconomyTools(economyClient, commodityClient), 'economy')
-  toolCenter.register(createNotifyUserTool(), 'notify')
 
   console.log(`tool-center: ${toolCenter.list().length} tools registered`)
 
@@ -226,24 +219,17 @@ async function main() {
   )
   const router = new GenerateRouter(vercelProvider, agentSdkProvider, codexProvider)
 
-  const agentCenter = new AgentCenter({
-    router,
-    compaction: config.compaction,
-    toolCallLog,
-  })
+  // ==================== Inbox store ====================
 
-  // ==================== Notifications store + Connector Center ====================
-
-  const notificationsStore = createNotificationsStore()
   const inboxStore = createInboxStore()
-  const connectorCenter = new ConnectorCenter({ eventLog, listenerRegistry, notificationsStore })
-
-  // Session awareness tools (registered here because they need connectorCenter)
-  toolCenter.register(createSessionTools(connectorCenter), 'session')
 
   // ==================== AgentWork runner — shared by all autonomous trigger sources ====================
+  //
+  // Drives the AI loop via GenerateRouter directly (no AgentCenter
+  // layer) and delivers replies to the Inbox under a synthetic
+  // `automation:<source>` workspace id.
 
-  const agentWorkRunner = new AgentWorkRunner({ agentCenter, connectorCenter })
+  const agentWorkRunner = new AgentWorkRunner({ router, inboxStore })
 
   // ==================== AgentWork Listener (single dispatch point) ====================
   //
@@ -352,87 +338,22 @@ async function main() {
     ))
   }
 
-  // Optional plugins — toggleable at runtime via reconnectConnectors()
+  // Optional plugins — none today. The legacy connector cluster
+  // (Telegram / MCP-Ask) was removed; the map is kept (empty) so the
+  // start/stop iteration below stays uniform and future optional
+  // plugins have a home.
   const optionalPlugins = new Map<string, Plugin>()
-
-  if (config.connectors.mcpAsk.enabled && config.connectors.mcpAsk.port) {
-    optionalPlugins.set('mcp-ask', new McpAskPlugin({ port: config.connectors.mcpAsk.port }))
-  }
-
-  if (config.connectors.telegram.enabled && config.connectors.telegram.botToken) {
-    optionalPlugins.set('telegram', new TelegramPlugin({
-      token: config.connectors.telegram.botToken,
-      allowedChatIds: config.connectors.telegram.chatIds,
-      webPort: config.connectors.web.port,
-    }))
-  }
-
-  // ==================== Connector Reconnect ====================
-
-  let connectorsReconnecting = false
-  const reconnectConnectors = async (): Promise<ReconnectResult> => {
-    if (connectorsReconnecting) return { success: false, error: 'Reconnect already in progress' }
-    connectorsReconnecting = true
-    try {
-      const fresh = await loadConfig()
-      const changes: string[] = []
-
-      // --- MCP Ask ---
-      const mcpAskWanted = fresh.connectors.mcpAsk.enabled && !!fresh.connectors.mcpAsk.port
-      const mcpAskRunning = optionalPlugins.has('mcp-ask')
-      if (mcpAskRunning && !mcpAskWanted) {
-        await optionalPlugins.get('mcp-ask')!.stop()
-        optionalPlugins.delete('mcp-ask')
-        changes.push('mcp-ask stopped')
-      } else if (!mcpAskRunning && mcpAskWanted) {
-        const p = new McpAskPlugin({ port: fresh.connectors.mcpAsk.port! })
-        await p.start(ctx)
-        optionalPlugins.set('mcp-ask', p)
-        changes.push('mcp-ask started')
-      }
-
-      // --- Telegram ---
-      const telegramWanted = fresh.connectors.telegram.enabled && !!fresh.connectors.telegram.botToken
-      const telegramRunning = optionalPlugins.has('telegram')
-      if (telegramRunning && !telegramWanted) {
-        await optionalPlugins.get('telegram')!.stop()
-        optionalPlugins.delete('telegram')
-        changes.push('telegram stopped')
-      } else if (!telegramRunning && telegramWanted) {
-        const p = new TelegramPlugin({
-          token: fresh.connectors.telegram.botToken!,
-          allowedChatIds: fresh.connectors.telegram.chatIds,
-          webPort: fresh.connectors.web.port,
-        })
-        await p.start(ctx)
-        optionalPlugins.set('telegram', p)
-        changes.push('telegram started')
-      }
-
-      if (changes.length > 0) {
-        console.log(`reconnect: connectors — ${changes.join(', ')}`)
-      }
-      return { success: true, message: changes.length > 0 ? changes.join(', ') : 'no changes' }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('reconnect: connectors failed:', msg)
-      return { success: false, error: msg }
-    } finally {
-      connectorsReconnecting = false
-    }
-  }
 
   // ==================== Engine Context ====================
 
   const ctx: EngineContext = {
-    config, connectorCenter, notificationsStore, inboxStore, agentCenter, eventLog, toolCallLog, heartbeat, cronEngine, toolCenter,
+    config, inboxStore, router, eventLog, toolCallLog, heartbeat, cronEngine, toolCenter,
     listenerRegistry,
     fire: createEventBus(eventLog),
     bbEngine: getSDKExecutor(),
     marketSearch,
     utaManager,
     newsProvider: newsStore,
-    reconnectConnectors,
   }
 
   for (const plugin of [...corePlugins, ...optionalPlugins.values()]) {
@@ -455,7 +376,6 @@ async function main() {
     metricsListener.stop()
     cronListener.stop()
     cronEngine.stop()
-    connectorCenter.stop()
     await listenerRegistry.stop()
     for (const plugin of [...corePlugins, ...optionalPlugins.values()]) {
       await plugin.stop()

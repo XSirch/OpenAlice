@@ -3,12 +3,12 @@
  * canonical `agent.work.requested` events. The agent-work-listener
  * picks them up and runs the AI dispatch pipeline.
  *
- * Serial-execution lock so concurrent fires don't overlap. No
- * notification policy lives here — every successful cron reply is
- * pushed (the AgentWork default). Cron jobs that want
- * AI-decides-to-notify semantics can teach their prompt about
- * `notify_user`; the source config registered here doesn't reference
- * any output gate, so the default deliver-result.text behaviour wins.
+ * Serial-execution lock so concurrent fires don't overlap. No output
+ * policy lives here — every successful cron reply is delivered to the
+ * Inbox (the AgentWork default). The source config registered here
+ * doesn't reference any output gate, so the default deliver-result.text
+ * behaviour wins; each cron reply lands as an inbox entry under the
+ * synthetic `automation:cron` workspace.
  *
  * Internal jobs (heartbeat / snapshot) no longer live in the cron
  * engine — they each own their own Pump. Migration 0004 prunes any
@@ -54,8 +54,8 @@ export function createCronListener(opts: CronListenerOpts): CronListener {
       const jobName = (metadata as { jobName?: string } | undefined)?.jobName
       return `You are operating in the cron job context (session: cron/default${jobName ? `, job: ${jobName}` : ''}). This is an automated cron job execution.`
     },
-    // No output gate — every successful reply is pushed (default
-    // AgentWork behaviour matches today's cron semantics).
+    // No output gate — every successful reply is delivered to the Inbox
+    // (default AgentWork behaviour matches today's cron semantics).
     buildDoneMetadata: (req) => {
       const m = req.metadata as { jobId?: string; jobName?: string }
       return { jobId: m.jobId, jobName: m.jobName }

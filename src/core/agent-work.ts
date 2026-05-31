@@ -6,31 +6,37 @@
  * gates, and a set of event names to emit on completion.
  *
  * The runner threads it through:
- *   inputGate  → AI call → outputGate → notify → emit
+ *   inputGate  → AI call → outputGate → inbox append → emit
+ *
+ * The AI call runs directly on GenerateRouter (no AgentCenter layer),
+ * and delivery lands in the workspace Inbox under a synthetic
+ * `automation:<source>` workspace id.
  *
  * Three trigger sources today consume this primitive — heartbeat (with
- * active-hours inputGate + notify_user-inspecting outputGate + dedup
- * onDelivered), cron (no gates, default delivery), task-router (same).
- * Future sources (factor mining, asset monitoring, etc.) plug in
- * without re-implementing the gate→AI→notify→emit pipeline.
+ * active-hours inputGate + an output gate that stubs the push while its
+ * trigger chain is reworked for Harness), cron (no gates, default
+ * delivery), task-router (same). Future sources (factor mining, asset
+ * monitoring, etc.) plug in without re-implementing the
+ * gate→AI→inbox→emit pipeline.
  *
  * The runner itself is stateless — construct once at startup with
  * shared deps, call run() per request with the per-call emit fn from
  * the listener context.
  */
 
-import type { AgentCenter } from './agent-center.js'
-import type { ConnectorCenter } from './connector-center.js'
+import type { GenerateRouter } from './ai-provider-manager.js'
+import type { IInboxStore } from './inbox-store.js'
 import type { ISessionStore } from './session.js'
-import type { NotificationSource } from './notifications-store.js'
+import type { AgentWorkSource } from './agent-event.js'
 import type { ProviderResult, ToolCallSummary } from '../ai-providers/types.js'
 import type { MediaAttachment } from './types.js'
 
 // ==================== Request / Result types ====================
 
 /** Probe handed to outputGate — combines AI text/media plus the tool
- *  calls observed during generation. The latter is the mechanism by
- *  which structured tools like `notify_user` signal intent. */
+ *  calls observed during generation. The latter lets a source's gate
+ *  inspect what the AI invoked (e.g. whether it opted to push) before
+ *  deciding deliver vs skip. */
 export interface AgentWorkResultProbe {
   text: string
   media: MediaAttachment[]
@@ -62,11 +68,11 @@ export interface AgentWorkRequest {
    *  AskOptions.historyPreamble. */
   preamble: string
 
-  /** Used as connectorCenter.notify source label, plus available to
-   *  gate functions for trigger-specific decisions. The source must
-   *  match the NotificationSource union; adding a new trigger source
-   *  means widening that union in notifications-store.ts. */
-  metadata: { source: NotificationSource; [k: string]: unknown }
+  /** Source label for the inbox entry, plus available to gate functions
+   *  for trigger-specific decisions. The source must match the
+   *  AgentWorkSource union; adding a new trigger source means widening
+   *  that union in agent-event.ts. */
+  metadata: { source: AgentWorkSource; [k: string]: unknown }
 
   /** Pre-AI guard. Return non-null to short-circuit (skip event emitted,
    *  AI never invoked). Used by heartbeat for active-hours filtering;
@@ -119,8 +125,13 @@ export interface AgentWorkRunResult {
 }
 
 export interface AgentWorkRunnerDeps {
-  agentCenter: AgentCenter
-  connectorCenter: ConnectorCenter
+  /** Drives the AI loop directly — no AgentCenter layer. The runner
+   *  resolves the active profile + provider and consumes the provider's
+   *  event stream itself. */
+  router: GenerateRouter
+  /** Output sink. Delivered work lands here as an inbox entry under a
+   *  synthetic `automation:<source>` workspace id. */
+  inboxStore: IInboxStore
   /** Inject the wall clock for tests. */
   now?: () => number
   /** Inject a logger for tests; defaults to console. */
@@ -147,14 +158,14 @@ export type AgentWorkEmitFn = (
  *  consistent and gives a stable hook point for future deps injection
  *  (rate limiting, observability, etc.) without API churn at call sites. */
 export class AgentWorkRunner {
-  private readonly agentCenter: AgentCenter
-  private readonly connectorCenter: ConnectorCenter
+  private readonly router: GenerateRouter
+  private readonly inboxStore: IInboxStore
   private readonly now: () => number
   private readonly logger: Pick<Console, 'warn' | 'error'>
 
   constructor(deps: AgentWorkRunnerDeps) {
-    this.agentCenter = deps.agentCenter
-    this.connectorCenter = deps.connectorCenter
+    this.router = deps.router
+    this.inboxStore = deps.inboxStore
     this.now = deps.now ?? Date.now
     this.logger = deps.logger ?? console
   }
@@ -179,9 +190,7 @@ export class AgentWorkRunner {
     // ---- 2. AI invocation -------------------------------------------
     let result: ProviderResult
     try {
-      result = await this.agentCenter.askWithSession(req.prompt, req.session, {
-        historyPreamble: req.preamble,
-      })
+      result = await this.generateForWork(req)
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err))
       const durationMs = this.now() - startMs
@@ -222,21 +231,27 @@ export class AgentWorkRunner {
       }
     }
 
-    // ---- 4. Notify --------------------------------------------------
+    // ---- 4. Deliver to Inbox ---------------------------------------
+    // AgentWork is a scheduler actor with no workspace of its own, so it
+    // appends directly to the InboxStore under a synthetic workspace id
+    // (`automation:<source>`) rather than going through the workspace-
+    // scoped inbox_push tool. The Inbox contract requires a non-empty
+    // workspaceId + at least one of {docs, comments}; the AI reply is the
+    // comment body.
     let delivered = false
     try {
-      await this.connectorCenter.notify(decision.text, {
-        media: decision.media,
-        source: req.metadata.source,
+      await this.inboxStore.append({
+        workspaceId: `automation:${req.metadata.source}`,
+        workspaceLabel: `Automation · ${req.metadata.source}`,
+        comments: decision.text,
       })
       delivered = true
     } catch (sendErr) {
-      // notify failure isn't fatal to the work — log and continue;
-      // the done event flag tells consumers whether the user actually
-      // got a push. Connectors that surface notifications make their
-      // own delivery decisions downstream.
+      // inbox append failure isn't fatal to the work — log and continue;
+      // the done event flag tells consumers whether the reply actually
+      // landed in the inbox.
       this.logger.warn(
-        `agent-work[${req.metadata.source}]: notify failed:`,
+        `agent-work[${req.metadata.source}]: inbox append failed:`,
         sendErr,
       )
     }
@@ -269,6 +284,42 @@ export class AgentWorkRunner {
     }
 
     return { outcome: 'delivered', durationMs }
+  }
+
+  /**
+   * Drive the AI loop directly via GenerateRouter — the slim slice that
+   * AgentCenter used to own. Appends the prompt to the session, resolves
+   * the active profile + provider, consumes the provider's event stream,
+   * captures observed tool calls (so outputGate can inspect them), and
+   * appends the final assistant text back to the session.
+   *
+   * Deliberately lighter than AgentCenter._generate: no compaction, no
+   * media extraction (the Inbox renders workspace files, not inline
+   * binaries), no structured tool-call logging, no per-round ContentBlock
+   * reconstruction. Automation fires are short prompt → answer; the
+   * heavyweight chat-replay pipeline isn't needed here.
+   */
+  private async generateForWork(req: AgentWorkRequest): Promise<ProviderResult> {
+    await req.session.appendUser(req.prompt, 'human')
+    const { provider, profile } = await this.router.resolve()
+    const entries = await req.session.readActive()
+    const source = provider.generate(entries, req.prompt, {
+      historyPreamble: req.preamble,
+      profile,
+    })
+
+    const toolCalls: ToolCallSummary[] = []
+    let text = ''
+    for await (const event of source) {
+      if (event.type === 'tool_use') {
+        toolCalls.push({ id: event.id, name: event.name, input: event.input })
+      } else if (event.type === 'done') {
+        text = event.result.text
+      }
+    }
+
+    await req.session.appendAssistant([{ type: 'text', text }], provider.providerTag)
+    return { text, media: [], mediaUrls: [], toolCalls }
   }
 
   private async emitSkip(

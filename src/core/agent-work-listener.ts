@@ -19,7 +19,7 @@
 import type { Listener, ListenerContext } from './listener.js'
 import type { ListenerRegistry } from './listener-registry.js'
 import type { ISessionStore } from './session.js'
-import type { NotificationSource } from './notifications-store.js'
+import type { AgentWorkSource } from './agent-event.js'
 import type { AgentWorkRequest, AgentWorkRunner, AgentWorkSkip } from './agent-work.js'
 import type { ProviderResult } from '../ai-providers/types.js'
 import type { AgentWorkRequestedPayload } from './agent-event.js'
@@ -30,7 +30,7 @@ import type { AgentWorkRequestedPayload } from './agent-event.js'
  *  at startup; the listener uses it to build an AgentWorkRequest when
  *  an event arrives with the matching `source` field. */
 export interface AgentWorkSourceConfig {
-  source: NotificationSource
+  source: AgentWorkSource
   /** Session scope for this source. All work from a given source shares
    *  the same conversation history. */
   session: ISessionStore
@@ -82,7 +82,7 @@ export interface AgentWorkListener {
    *  the same source overwrites the previous entry. */
   registerSource(config: AgentWorkSourceConfig): void
   /** List registered source labels — surfaced by the Automation Flow UI. */
-  listSources(): ReadonlyArray<NotificationSource>
+  listSources(): ReadonlyArray<AgentWorkSource>
   /** Expose the raw listener for direct testing. */
   readonly listener: Listener<'agent.work.requested', AgentWorkEmits>
 }
@@ -92,7 +92,7 @@ export interface AgentWorkListener {
 export function createAgentWorkListener(opts: AgentWorkListenerOpts): AgentWorkListener {
   const { runner, registry } = opts
   const logger = opts.logger ?? console
-  const sources = new Map<NotificationSource, AgentWorkSourceConfig>()
+  const sources = new Map<AgentWorkSource, AgentWorkSourceConfig>()
   let registered = false
 
   const listener: Listener<'agent.work.requested', AgentWorkEmits> = {

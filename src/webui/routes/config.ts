@@ -7,10 +7,10 @@ import {
 import type { EngineContext } from '../../core/types.js'
 import { BUILTIN_PRESETS } from '../../ai-providers/presets.js'
 import { getSdkAdapterInfo } from '../../ai-providers/sdk-adapters.js'
+import { testWithProfile } from '../../core/ai-config.js'
 
 interface ConfigRouteOpts {
   ctx?: EngineContext
-  onConnectorsChange?: () => Promise<void>
 }
 
 /** Config routes: GET /, PUT /:section, profile CRUD, presets, test */
@@ -118,7 +118,7 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
     try {
       const profileData = await c.req.json<Profile>()
       const validated = profileSchema.parse(profileData)
-      const result = await opts.ctx.agentCenter.testWithProfile(validated, 'Hi')
+      const result = await testWithProfile(opts.ctx.router, validated, 'Hi')
       return c.json({ ok: true, response: result.text })
     } catch (err) {
       return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) })
@@ -143,10 +143,10 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
         const fresh = await loadConfig()
         Object.assign(opts.ctx.config, fresh)
       }
-      // Hot-reload connectors / OpenBB server when their config changes
-      if (section === 'connectors' || section === 'marketData') {
-        await opts?.onConnectorsChange?.()
-      }
+      // marketData edits are picked up lazily by the opentypebb resolver
+      // (it reads ctx.config per request), so no explicit hot-reload hook
+      // is needed. The old connector hot-reload path was removed with the
+      // legacy connector cluster.
       return c.json(validated)
     } catch (err) {
       if (err instanceof Error && err.name === 'ZodError') {

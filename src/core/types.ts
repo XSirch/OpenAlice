@@ -5,14 +5,12 @@ import type { MarketSearchDeps } from '../domain/market-data/aggregate-search.js
 import type { CronEngine } from '../task/cron/engine.js'
 import type { Heartbeat } from '../task/heartbeat/index.js'
 import type { Config, WebChannel } from './config.js'
-import type { ConnectorCenter } from './connector-center.js'
-import type { AgentCenter } from './agent-center.js'
+import type { GenerateRouter } from './ai-provider-manager.js'
 import type { EventLog } from './event-log.js'
 import type { ToolCallLog } from './tool-call-log.js'
 import type { ToolCenter } from './tool-center.js'
 import type { ListenerRegistry } from './listener-registry.js'
 import type { EventBus } from './event-bus.js'
-import type { INotificationsStore } from './notifications-store.js'
 import type { IInboxStore } from './inbox-store.js'
 
 export type { Config, WebChannel }
@@ -23,6 +21,9 @@ export interface Plugin {
   stop(): Promise<void>
 }
 
+/** Generic result of an out-of-band reconnect attempt. Still used by the
+ *  UTA client SDK (`reconnectUTA`); the connector-reconnect path that
+ *  used to share it was removed with the legacy connector cluster. */
 export interface ReconnectResult {
   success: boolean
   error?: string
@@ -31,14 +32,16 @@ export interface ReconnectResult {
 
 export interface EngineContext {
   config: Config
-  connectorCenter: ConnectorCenter
-  /** Canonical store of system notifications; connectors subscribe via onAppended. */
-  notificationsStore: INotificationsStore
-  /** Workspace-anchored push surface (Linear-inbox style). v0: read path
-   *  wired, production write path deliberately deferred — only dev seed
-   *  endpoint exists until the workspace integration pathway is decided. */
+  /** Workspace-anchored push surface (Linear-inbox style). Written by
+   *  workspace agents (via the inbox_push MCP tool) and by AgentWork's
+   *  autonomous trigger sources (cron / task), which append directly
+   *  under a synthetic `automation:<source>` workspace id. */
   inboxStore: IInboxStore
-  agentCenter: AgentCenter
+  /** Provider router — resolves the active profile to an AIProvider and
+   *  drives one-shot / test calls. The in-process agent loop (formerly
+   *  AgentCenter) is retired; the model loop now runs inside the native
+   *  workspace CLIs, and AgentWork drives this router directly. */
+  router: GenerateRouter
   eventLog: EventLog
   toolCallLog: ToolCallLog
   heartbeat: Heartbeat
@@ -62,8 +65,6 @@ export interface EngineContext {
   // for FX-converted totals).
   utaManager: UTAManagerSDK
   newsProvider?: INewsProvider
-  /** Reconnect connector plugins (Telegram, MCP-Ask, etc.). */
-  reconnectConnectors: () => Promise<ReconnectResult>
 }
 
 /** A media attachment collected from tool results (e.g. browser screenshots). */

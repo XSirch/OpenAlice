@@ -16,10 +16,18 @@
 
 import { Type, type TSchema } from '@sinclair/typebox'
 import AjvPkg from 'ajv'
-import type { NotificationSource } from './notifications-store.js'
 
 // Re-export CronFirePayload from its canonical location
 export type { CronFirePayload } from '../task/cron/engine.js'
+
+/**
+ * Which trigger source produced an AgentWork request — the routing key
+ * the agent-work-listener uses to pick a source config. Canonical home
+ * for this union (it used to live in the now-deleted notifications-store
+ * as `NotificationSource`). Kept in lockstep with the TypeBox
+ * `SourceUnion` literals below.
+ */
+export type AgentWorkSource = 'heartbeat' | 'cron' | 'task' | 'manual'
 
 // ==================== Payload Interfaces ====================
 
@@ -50,7 +58,7 @@ export interface MessageSentPayload {
 export interface AgentWorkRequestedPayload {
   /** Which trigger source produced this work request. Drives the
    *  agent-work-listener's source-registry lookup. */
-  source: NotificationSource
+  source: AgentWorkSource
   /** The AI prompt to execute. */
   prompt: string
   /** Trigger-specific metadata, surfaced back on the canonical
@@ -59,7 +67,7 @@ export interface AgentWorkRequestedPayload {
 }
 
 export interface AgentWorkDonePayload {
-  source: NotificationSource
+  source: AgentWorkSource
   reply: string
   durationMs: number
   /** Did the notification actually reach the connector? */
@@ -68,7 +76,7 @@ export interface AgentWorkDonePayload {
 }
 
 export interface AgentWorkSkipPayload {
-  source: NotificationSource
+  source: AgentWorkSource
   /** Free-form reason — e.g. 'ack' | 'duplicate' | 'empty' |
    *  'outside-active-hours' | per-source extension. */
   reason: string
@@ -76,7 +84,7 @@ export interface AgentWorkSkipPayload {
 }
 
 export interface AgentWorkErrorPayload {
-  source: NotificationSource
+  source: AgentWorkSource
   error: string
   durationMs: number
   metadata?: Record<string, unknown>
@@ -121,7 +129,7 @@ const MessageSentSchema = Type.Object({
 
 // ---- Canonical agent-work event schemas ----
 //
-// `source` is constrained to the NotificationSource union literal set.
+// `source` is constrained to the AgentWorkSource union literal set.
 // Free-form `metadata` is `unknown` at validation time (downstream
 // shape decided per-source).
 

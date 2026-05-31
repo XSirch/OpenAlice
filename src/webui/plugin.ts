@@ -6,10 +6,9 @@ import { uiBundlePath } from '@/core/paths.js'
 import type { Plugin, EngineContext } from '../core/types.js'
 import type { ProducerHandle } from '../core/producer.js'
 import { SessionStore } from '../core/session.js'
-import { WebConnector } from '../connectors/web/web-connector.js'
 import { readWebSubchannels } from '../core/config.js'
-import { createChatRoutes, createMediaRoutes, type SSEClient } from './routes/chat.js'
-import { createChannelsRoutes } from './routes/channels.js'
+import { createMediaRoutes } from './routes/media.js'
+import { createChannelsRoutes, type SSEClient } from './routes/channels.js'
 import { createConfigRoutes, createMarketDataRoutes } from './routes/config.js'
 import { createEventsRoutes } from './routes/events.js'
 import { createTopologyRoutes } from './routes/topology.js'
@@ -17,13 +16,11 @@ import { createCronRoutes } from './routes/cron.js'
 import { createHeartbeatRoutes } from './routes/heartbeat.js'
 import { createTradingProxyRoutes } from './routes/trading-proxy.js'
 import { createTradingConfigRoutes } from './routes/trading-config.js'
-import { createDevRoutes } from './routes/dev.js'
 import { createToolsRoutes } from './routes/tools.js'
 import { createAgentStatusRoutes } from './routes/agent-status.js'
 import { createPersonaRoutes } from './routes/persona.js'
 import { createNewsRoutes } from './routes/news.js'
 import { createMarketRoutes } from './routes/market.js'
-import { createNotificationsRoutes } from './routes/notifications.js'
 import { createInboxRoutes } from './routes/inbox.js'
 import { createVersionRoutes } from './routes/version.js'
 import { createAuthRoutes } from './routes/auth.js'
@@ -61,7 +58,6 @@ export class WebPlugin implements Plugin {
   private server: ReturnType<typeof serve> | null = null
   /** SSE clients grouped by channel ID. Default channel: 'default'. */
   private sseByChannel = new Map<string, Map<string, SSEClient>>()
-  private unregisterConnector?: () => void
   private ingestProducer?: ProducerHandle<readonly ['agent.work.requested']>
   private workspaceService: WorkspaceService | null = null
   private workspacesWs: AttachedWS | null = null
@@ -181,13 +177,12 @@ export class WebPlugin implements Plugin {
     })
 
     // ==================== Mount route modules ====================
-    app.route('/api/chat', createChatRoutes({ ctx, sessions, sseByChannel: this.sseByChannel }))
+    // /api/channels is the last surviving piece of the legacy web-chat
+    // stack — kept (vestigial) only because the surviving TabStrip reads
+    // channel titles. Slated for end-to-end removal (tracked in Linear).
     app.route('/api/channels', createChannelsRoutes({ sessions, sseByChannel: this.sseByChannel }))
     app.route('/api/media', createMediaRoutes())
-    app.route('/api/config', createConfigRoutes({
-      ctx,
-      onConnectorsChange: async () => { await ctx.reconnectConnectors() },
-    }))
+    app.route('/api/config', createConfigRoutes({ ctx }))
     app.route('/api/market-data', createMarketDataRoutes(ctx))
     app.route('/api/events', createEventsRoutes({ ctx, ingestProducer: this.ingestProducer }))
     app.route('/api/topology', createTopologyRoutes(ctx))
@@ -203,15 +198,11 @@ export class WebPlugin implements Plugin {
     }
     app.route('/api/trading', createTradingProxyRoutes({ utaBaseUrl: utaUrl }))
     app.route('/api/simulator', createTradingProxyRoutes({ utaBaseUrl: utaUrl }))
-    app.route('/api/dev', createDevRoutes(ctx.connectorCenter))
     app.route('/api/tools', createToolsRoutes(ctx.toolCenter))
     app.route('/api/agent-status', createAgentStatusRoutes(ctx))
     app.route('/api/news', createNewsRoutes(ctx))
     app.route('/api/market', createMarketRoutes(ctx))
     app.route('/api/persona', createPersonaRoutes())
-    app.route('/api/notifications', createNotificationsRoutes({
-      notificationsStore: ctx.notificationsStore,
-    }))
     app.route('/api/inbox', createInboxRoutes({ inboxStore: ctx.inboxStore }))
     app.route('/api/version', createVersionRoutes())
 
@@ -246,13 +237,6 @@ export class WebPlugin implements Plugin {
     app.use('/*', serveStatic({ root: uiRoot }))
     app.get('*', serveStatic({ root: uiRoot, path: 'index.html' }))
 
-    // ==================== Connector registration ====================
-    // WebConnector exists primarily so `lastInteraction` tracking
-    // identifies 'web' as the active surface. Notifications themselves
-    // are pulled by the UI via 20s polling against /api/notifications/history
-    // — no in-process push wire is needed for the web surface.
-    this.unregisterConnector = ctx.connectorCenter.register(new WebConnector())
-
     // ==================== Start server ====================
     // Default hostname is 127.0.0.1 — public-internet exposure requires
     // explicit `OPENALICE_BIND_HOST=0.0.0.0` (gated by the safety check
@@ -270,7 +254,6 @@ export class WebPlugin implements Plugin {
 
   async stop() {
     this.sseByChannel.clear()
-    this.unregisterConnector?.()
     this.ingestProducer?.dispose()
     this.ingestProducer = undefined
     this.workspacesWs?.dispose()
