@@ -51,7 +51,7 @@ export interface TemplateMeta {
    * Launcher-owned context injection, post-bootstrap, gated per template
    * (defaults preserve each template's pre-standardization behavior):
    *   injectMcp     — write the standard OpenAlice `.mcp.json`
-   *   injectPersona — compose Alice persona + this template's CLAUDE.md
+   *   injectPersona — compose Alice persona + this template's instruction.md
    *                   into CLAUDE.md / AGENTS.md
    *   bundledSkills — names under `default/skills/` to copy into the
    *                   workspace's `.claude/skills` + `.agents/skills`

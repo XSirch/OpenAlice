@@ -52,13 +52,16 @@ export async function injectWorkspaceContext(opts: {
   }
 
   if (template.injectPersona) {
-    // Compose `persona + "\n\n---\n\n" + <template>/CLAUDE.md`, byte-identical
-    // to the old `compose_persona_claude_md`. A template that asks for persona
-    // injection but ships no CLAUDE.md is a misconfiguration — let the readFile
-    // throw so the create fails loudly (matches the old `exit 4`).
+    // One neutral instruction source (`<template>/instruction.md`), composed
+    // with the persona, then written byte-identically to BOTH CLAUDE.md (Claude
+    // Code's filename) and AGENTS.md (Codex's). The CLIs disagree on the
+    // filename; we don't pick a side — we copy to each at injection. A template
+    // that asks for persona injection but ships no instruction.md is a
+    // misconfiguration — let the readFile throw so the create fails loudly
+    // (matches the old `compose_persona_claude_md` exit 4).
     const persona = await resolvePersona();
-    const templateMd = await readFile(join(template.filesDir, 'CLAUDE.md'), 'utf8');
-    const composed = persona !== null ? `${persona}\n\n---\n\n${templateMd}` : templateMd;
+    const instruction = await readFile(join(template.filesDir, 'instruction.md'), 'utf8');
+    const composed = persona !== null ? `${persona}\n\n---\n\n${instruction}` : instruction;
     await writeWorkspaceFile(dir, 'CLAUDE.md', composed);
     await writeWorkspaceFile(dir, 'AGENTS.md', composed);
   }
