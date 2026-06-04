@@ -135,4 +135,13 @@ export const ja: Resources = {
     dateThisWeek: '今週',
     dateOlder: 'それ以前',
   },
+  auth: {
+    heading: 'OpenAlice にサインイン',
+    instruction: '初回起動時に表示された管理者トークンを貼り付けてください。',
+    adminTokenLabel: '管理者トークン',
+    signingIn: 'サインイン中…',
+    signIn: 'サインイン',
+    noTokenHeading: '管理者トークンが設定されていません',
+    loginFailed: 'ログインに失敗しました',
+  },
 }

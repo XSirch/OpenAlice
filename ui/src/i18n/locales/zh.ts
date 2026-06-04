@@ -135,4 +135,13 @@ export const zh: Resources = {
     dateThisWeek: '本周',
     dateOlder: '更早',
   },
+  auth: {
+    heading: '登录 OpenAlice',
+    instruction: '粘贴首次启动时显示的管理员令牌。',
+    adminTokenLabel: '管理员令牌',
+    signingIn: '登录中…',
+    signIn: '登录',
+    noTokenHeading: '未配置管理员令牌',
+    loginFailed: '登录失败',
+  },
 }

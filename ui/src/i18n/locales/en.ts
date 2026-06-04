@@ -146,6 +146,15 @@ export const en = {
     dateThisWeek: 'This week',
     dateOlder: 'Older',
   },
+  auth: {
+    heading: 'Sign in to OpenAlice',
+    instruction: 'Paste the admin token shown on first launch.',
+    adminTokenLabel: 'Admin token',
+    signingIn: 'Signing in…',
+    signIn: 'Sign in',
+    noTokenHeading: 'No admin token configured',
+    loginFailed: 'Login failed',
+  },
 } as const
 
 /** The `en` shape with every string leaf widened to `string` — the contract
