@@ -27,7 +27,7 @@
  * itself when you can't run Windows.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { connect } from 'node:net'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
@@ -39,6 +39,15 @@ const RESTART_TIMEOUT_MS = 30_000
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+// CI (GitHub Actions) forces color, so child output carries ANSI SGR codes
+// even through a pipe — e.g. `http://localhost:\x1b[1m5173`. Strip them before
+// matching or readiness regexes break (a `localhost:\d+` won't see the digit).
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*m/g
+function stripAnsi(s: string): string {
+  return s.replace(ANSI, '')
 }
 
 /** Append a line to the GitHub step summary if running in Actions. No-op locally. */
@@ -102,11 +111,13 @@ async function main(): Promise<void> {
     shell: IS_WIN,
   })
 
+  // `out` holds ANSI-stripped text for matching; raw output is mirrored to the
+  // CI log so colors are still readable there.
   let out = ''
   const onData = (buf: Buffer) => {
     const s = buf.toString('utf8')
-    out += s
-    process.stdout.write(s) // mirror dev output into CI logs
+    out += stripAnsi(s)
+    process.stdout.write(s)
   }
   child.stdout?.on('data', onData)
   child.stderr?.on('data', onData)
@@ -120,7 +131,8 @@ async function main(): Promise<void> {
     if (childExited || child.pid == null) return
     try {
       if (IS_WIN) {
-        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'])
+        // spawnSync so the tree is actually reaped before process.exit().
+        spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'])
       } else {
         process.kill(-child.pid, 'SIGKILL')
       }
