@@ -9,6 +9,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { EquityClientLike } from '@/domain/market-data/client/types'
+import type { EquityDiscoveryData } from '@traderalice/opentypebb'
 
 export function createEquityTools(equityClient: EquityClientLike) {
   return {
@@ -134,20 +135,46 @@ If unsure about the symbol, use marketSearchForResearch to find it.`,
     equityDiscover: tool({
       description: `Discover trending stocks in the market right now.
 
-Returns top gainers, losers, or most actively traded stocks.
-Use this to get a pulse on what the market is trading today.`,
+Returns top gainers, losers, or most actively traded stocks. Use this to get a
+pulse on what the market is trading today.
+
+Each row carries volume-context fields beyond raw price/volume:
+- relative_volume — today's volume / its 3-month average. THIS is how to read
+  volume: raw "most active" is just the usual mega-caps (AAPL, TSLA always
+  trade billions). relative_volume >2 surfaces stocks trading genuinely
+  unusually — the right-side, cross-ticker-comparable signal.
+- turnover — volume / shares outstanding (more sensitive for small caps).
+- avg_volume — the 3-month baseline.
+
+Set sortBy="relative_volume" to rank by unusual volume instead of the default
+(price move for gainers/losers, absolute volume for active). Volume-context
+fields are populated on the default yfinance data only.`,
       inputSchema: z.object({
-        type: z.enum(['gainers', 'losers', 'active']).describe('"gainers" for top price gainers, "losers" for top losers, "active" for most actively traded by volume'),
-      }).meta({ examples: [{ type: 'gainers' }] }),
-      execute: async ({ type }) => {
+        type: z.enum(['gainers', 'losers', 'active']).describe('"gainers" for top price gainers, "losers" for top losers, "active" for most actively traded by absolute volume'),
+        sortBy: z.enum(['default', 'relative_volume']).optional().describe('"default" keeps the provider ranking; "relative_volume" re-ranks by unusual volume (today vs 3-month average), surfacing genuine volume spikes over ever-active mega-caps'),
+      }).meta({ examples: [{ type: 'active', sortBy: 'relative_volume' }] }),
+      execute: async ({ type, sortBy }) => {
+        let rows: EquityDiscoveryData[]
         switch (type) {
           case 'gainers':
-            return await equityClient.getGainers()
+            rows = await equityClient.getGainers()
+            break
           case 'losers':
-            return await equityClient.getLosers()
+            rows = await equityClient.getLosers()
+            break
           case 'active':
-            return await equityClient.getActive()
+            rows = await equityClient.getActive()
+            break
         }
+
+        if (sortBy === 'relative_volume') {
+          // Rank by unusual volume; rows missing relative_volume sink to the bottom.
+          rows = [...rows].sort(
+            (a, b) => (b.relative_volume ?? -Infinity) - (a.relative_volume ?? -Infinity),
+          )
+        }
+
+        return rows
       },
     }),
   }

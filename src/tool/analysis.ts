@@ -102,16 +102,24 @@ Data access (returns array — use [-1] for latest value):
 Statistics (returns a single number — do NOT use [-1]):
   SMA(data, period), EMA, STDEV, MAX, MIN, SUM, AVERAGE.
 
-Technical (returns a single number or object — do NOT use [-1]):
+Technical — trend / momentum (returns a single number or object — do NOT use [-1]):
   RSI(data, 14) → number.  BBANDS(data, 20, 2) → {upper, middle, lower}.
   MACD(data, 12, 26, 9) → {macd, signal, histogram}.  ATR(highs, lows, closes, 14) → number.
 
+Technical — volume / right-side confirmation (returns a single number):
+  RVOL(VOLUME(...), 20) → relative volume: latest bar vs its 20-bar average. >1 = heavier than usual; 2-3+ on a move = volume-confirmed. The right way to read volume — raw VOLUME is not comparable across tickers.
+  OBV(CLOSE(...), VOLUME(...)) → on-balance volume (accumulation/distribution).
+  MFI(HIGH(...), LOW(...), CLOSE(...), VOLUME(...), 14) → money-flow index, 0-100 (volume-weighted RSI).
+  VWAP(HIGH(...), LOW(...), CLOSE(...), VOLUME(...)) → volume-weighted average price; price above it = buyers in control.
+
 Arithmetic: +, -, *, / operators between numbers. E.g. CLOSE(...)[-1] - SMA(..., 50).
+Note: arithmetic needs scalars on both sides, so reduce a series with [-1] or a function first — e.g. RVOL via formula is VOLUME(...)[-1] / SMA(VOLUME(...), 20), or just call RVOL(VOLUME(...), 20).
 
 Examples:
   SMA(CLOSE('AAPL', '1d'), 50)              → equity 50-day moving average
   RSI(CLOSE('BTCUSD', '1d'), 14)            → crypto RSI (single number, no [-1])
-  CLOSE('EURUSD', '1d')[-1]                 → latest forex close (needs [-1])
+  RVOL(VOLUME('AAPL', '1d'), 20)            → is AAPL trading on unusual volume today?
+  VWAP(HIGH('TSLA','1d'), LOW('TSLA','1d'), CLOSE('TSLA','1d'), VOLUME('TSLA','1d'))
   CLOSE('gold', '1d')[-1]                   → latest gold price (canonical name)
 
 Returns { value, dataRange } where dataRange shows the actual date span of the data used.

@@ -60,7 +60,12 @@ export async function getPredefinedScreener(
   for (let attempt = 0; attempt < 2; attempt++) {
     const yf = getYF()
     try {
-      result = await (yf as any).screener({ scrIds: scrId, count })
+      // validateResult: false — Yahoo keeps adding fields to the screener
+      // response (predefined screeners gained a large includeFields set),
+      // tripping yahoo-finance2's strict ScreenerResult schema. Same treatment
+      // as search() below. We only read the whitelisted SCREENER_FIELDS anyway.
+      // moduleOptions (validateResult) is the THIRD arg — screener(overrides, queryOpts, moduleOpts).
+      result = await (yf as any).screener({ scrIds: scrId, count }, undefined, { validateResult: false })
       recordYFSuccess()
       break
     } catch (err) {
@@ -104,6 +109,19 @@ export async function getPredefinedScreener(
     for (const k of SCREENER_FIELDS) {
       result[k] = item[k] ?? null
     }
+
+    // Derive right-side volume reads while the raw yahoo keys are still present.
+    // These snake_case keys aren't in the alias dict, so they pass straight
+    // through applyAliases + the schema's passthrough() to the consumer.
+    const vol = result.regularMarketVolume
+    const avgVol = result.averageDailyVolume3Month
+    const sharesOut = result.sharesOutstanding
+    result.relative_volume =
+      typeof vol === 'number' && typeof avgVol === 'number' && avgVol > 0 ? vol / avgVol : null
+    result.turnover =
+      typeof vol === 'number' && typeof sharesOut === 'number' && sharesOut > 0
+        ? vol / sharesOut
+        : null
 
     if (result.regularMarketChange != null && result.regularMarketVolume != null) {
       output.push(result)
