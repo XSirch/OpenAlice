@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { formatRelativeTime } from '../../lib/intl'
-import { ArrowUpCircle, ChevronRight, Cpu, GitBranch, ScrollText, Settings, Sparkles, Terminal, type LucideIcon } from 'lucide-react'
+import { ArrowUpCircle, Bot, ChevronRight, Code, Cpu, GitBranch, ScrollText, Settings, Sparkles, Terminal, type LucideIcon } from 'lucide-react'
 import type { GitLogEntry, Workspace } from './api'
 
 /**
@@ -18,6 +18,8 @@ import type { GitLogEntry, Workspace } from './api'
 const AGENT_ICONS: Record<string, LucideIcon> = {
   claude: Sparkles,
   codex: Cpu,
+  opencode: Code,
+  pi: Bot,
   shell: Terminal,
 }
 

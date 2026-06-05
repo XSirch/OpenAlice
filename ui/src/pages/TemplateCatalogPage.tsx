@@ -18,7 +18,7 @@ import { useWorkspace } from '../tabs/store'
 import { TemplateCard } from '../components/workspace/TemplateCard'
 
 export function TemplateCatalogPage() {
-  const { templates } = useWorkspaces()
+  const { templates, agents } = useWorkspaces()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
 
   // Sort by groupOrder (ascending), then name. Same idiom as the Overview
@@ -60,6 +60,7 @@ export function TemplateCatalogPage() {
             <TemplateCard
               key={t.name}
               template={t}
+              agents={agents}
               onOpen={() =>
                 openOrFocus({ kind: 'template-detail', params: { name: t.name } })
               }
