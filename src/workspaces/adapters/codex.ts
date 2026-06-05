@@ -91,7 +91,12 @@ export const codexAdapter: CliAdapter = {
       '-c',
       `mcp_servers.openalice.url="${mcpUrl}"`,
       '-c',
-      `mcp_servers."openalice-workspace".url="${mcpUrl}/${workspaceId}"`,
+      // `openalice-workspace` is a valid TOML bare key (hyphen is allowed in
+      // bare keys), so it needs NO quoting. Quoting the segment as
+      // `"openalice-workspace"` made codex carry the literal quotes into the
+      // MCP server name, which then failed codex's own `^[a-zA-Z0-9_-]+$`
+      // name check ("Invalid MCP server name '\"openalice-workspace\"'").
+      `mcp_servers.openalice-workspace.url="${mcpUrl}/${workspaceId}"`,
     ];
     if (ctx.resume === undefined) return head;
     if (ctx.resume === 'last') return [...head, 'resume', '--last'];

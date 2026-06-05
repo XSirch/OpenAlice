@@ -83,7 +83,7 @@ describe('codexAdapter AI-config', () => {
       '-c',
       'mcp_servers.openalice.url="http://127.0.0.1:47332/mcp"',
       '-c',
-      'mcp_servers."openalice-workspace".url="http://127.0.0.1:47332/mcp/ws-abc"',
+      'mcp_servers.openalice-workspace.url="http://127.0.0.1:47332/mcp/ws-abc"',
     ]);
   });
 
@@ -97,7 +97,7 @@ describe('codexAdapter AI-config', () => {
       '-c',
       'mcp_servers.openalice.url="http://127.0.0.1:47332/mcp"',
       '-c',
-      'mcp_servers."openalice-workspace".url="http://127.0.0.1:47332/mcp/ws-abc"',
+      'mcp_servers.openalice-workspace.url="http://127.0.0.1:47332/mcp/ws-abc"',
       'resume',
       '--last',
     ]);
@@ -106,7 +106,7 @@ describe('codexAdapter AI-config', () => {
       '-c',
       'mcp_servers.openalice.url="http://127.0.0.1:47332/mcp"',
       '-c',
-      'mcp_servers."openalice-workspace".url="http://127.0.0.1:47332/mcp/ws-abc"',
+      'mcp_servers.openalice-workspace.url="http://127.0.0.1:47332/mcp/ws-abc"',
       'resume',
       'rollout-id',
     ]);
