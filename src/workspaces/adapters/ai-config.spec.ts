@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { claudeAdapter } from './claude.js';
 import { codexAdapter } from './codex.js';
 import { opencodeAdapter } from './opencode.js';
+import { piAdapter } from './pi.js';
 
 let dir: string;
 
@@ -221,5 +222,68 @@ describe('opencodeAdapter AI-config', () => {
 
   it('readAiConfig returns null when no file exists', async () => {
     expect(await opencodeAdapter.readAiConfig!(dir)).toBeNull();
+  });
+});
+
+describe('piAdapter AI-config', () => {
+  const mcpEnv = { OPENALICE_MCP_URL: 'http://127.0.0.1:47332/mcp', AQ_WS_ID: 'ws-abc' };
+
+  it('composeCommand: fresh is bare; resume uses top-level --continue / --session-id', () => {
+    expect(piAdapter.composeCommand(['ignored'], { cwd: dir, env: mcpEnv })).toEqual(['pi']);
+    expect(piAdapter.composeCommand([], { cwd: dir, env: mcpEnv, resume: 'last' }))
+      .toEqual(['pi', '--continue']);
+    expect(piAdapter.composeCommand([], { cwd: dir, env: mcpEnv, resume: { sessionId: 'sess-1' } }))
+      .toEqual(['pi', '--session-id', 'sess-1']);
+  });
+
+  it('composeEnv sets PI_OFFLINE always; PI_CODING_AGENT_DIR only in override mode', async () => {
+    // No .pi-agent yet → no redirect.
+    const before = piAdapter.composeEnv!({ cwd: dir, env: mcpEnv });
+    expect(before['PI_OFFLINE']).toBe('1');
+    expect(before['PI_CODING_AGENT_DIR']).toBeUndefined();
+    // After writing a provider override, the agent dir is redirected.
+    await piAdapter.writeAiConfig!(dir, { baseUrl: 'https://cn.test/v1', apiKey: 'sk-p', model: 'deepseek-chat' });
+    const after = piAdapter.composeEnv!({ cwd: dir, env: mcpEnv });
+    expect(after['PI_CODING_AGENT_DIR']).toBe(join(dir, '.pi-agent'));
+  });
+
+  it('writes a custom openai-completions provider to .pi-agent/{models,settings}.json', async () => {
+    await piAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://cn.test/v1', apiKey: 'sk-p', model: 'deepseek-chat',
+    });
+    expect(JSON.parse(await read('.pi-agent/models.json'))).toEqual({
+      providers: {
+        workspace: {
+          name: 'OpenAlice workspace provider',
+          api: 'openai-completions',
+          baseUrl: 'https://cn.test/v1',
+          apiKey: 'sk-p',
+          models: [{ id: 'deepseek-chat' }],
+        },
+      },
+    });
+    expect(JSON.parse(await read('.pi-agent/settings.json'))).toEqual({
+      defaultProvider: 'workspace',
+      defaultModel: 'deepseek-chat',
+    });
+  });
+
+  it('reset (empty cred) tears down the entire .pi-agent/ directory', async () => {
+    await piAdapter.writeAiConfig!(dir, { baseUrl: 'u', model: 'm' });
+    await piAdapter.writeAiConfig!(dir, {});
+    expect(existsSync(join(dir, '.pi-agent'))).toBe(false);
+  });
+
+  it('round-trips through readAiConfig', async () => {
+    await piAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://cn.test/v1', apiKey: 'sk-p', model: 'deepseek-chat',
+    });
+    expect(await piAdapter.readAiConfig!(dir)).toEqual({
+      baseUrl: 'https://cn.test/v1', apiKey: 'sk-p', model: 'deepseek-chat',
+    });
+  });
+
+  it('readAiConfig returns null when no file exists', async () => {
+    expect(await piAdapter.readAiConfig!(dir)).toBeNull();
   });
 });

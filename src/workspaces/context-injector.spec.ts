@@ -146,14 +146,15 @@ describe('injectWorkspaceContext — persona', () => {
 });
 
 describe('injectWorkspaceContext — skills', () => {
-  it('copies a bundled skill into both discovery paths', async () => {
+  it('copies a bundled skill into all three CLI discovery paths', async () => {
     await injectWorkspaceContext({
       template: makeTemplate({ bundledSkills: ['scan-value-chain'] }),
       wsId: 'ws-abc',
       dir,
     });
     const expected = await readFile(defaultPath('skills', 'scan-value-chain', 'SKILL.md'), 'utf8');
-    expect(await read('.claude/skills/scan-value-chain/SKILL.md')).toBe(expected);
-    expect(await read('.agents/skills/scan-value-chain/SKILL.md')).toBe(expected);
+    expect(await read('.claude/skills/scan-value-chain/SKILL.md')).toBe(expected);  // Claude Code
+    expect(await read('.agents/skills/scan-value-chain/SKILL.md')).toBe(expected);  // Codex (+ opencode default)
+    expect(await read('.pi/skills/scan-value-chain/SKILL.md')).toBe(expected);      // Pi
   });
 });

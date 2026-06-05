@@ -80,6 +80,8 @@ export function OverviewCard({
   const overrideAgents: string[] = []
   if (w.agentOverride?.claude) overrideAgents.push('claude')
   if (w.agentOverride?.codex) overrideAgents.push('codex')
+  if (w.agentOverride?.opencode) overrideAgents.push('opencode')
+  if (w.agentOverride?.pi) overrideAgents.push('pi')
 
   return (
     <div

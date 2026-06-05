@@ -40,12 +40,15 @@ export interface Workspace {
   readonly sessions: readonly SessionRecord[];
   /**
    * Whether the workspace has UI-saved AI provider overrides for each
-   * agent. claude = `.claude/settings.local.json` exists; codex =
-   * `.codex/` directory exists. Surfaced in the Overview dashboard.
+   * agent. claude = `.claude/settings.local.json` exists; codex = `.codex/`
+   * dir; opencode = `opencode.json`; pi = `.pi-agent/` dir. Surfaced in the
+   * Overview dashboard.
    */
   readonly agentOverride?: {
     readonly claude: boolean;
     readonly codex: boolean;
+    readonly opencode: boolean;
+    readonly pi: boolean;
   };
 }
 
@@ -398,9 +401,10 @@ export interface AgentConfigBundle {
   readonly claude: AgentConfig | null;
   readonly codex: AgentConfig | null;
   readonly opencode: AgentConfig | null;
+  readonly pi: AgentConfig | null;
 }
 
-export type AgentId = 'claude' | 'codex' | 'opencode';
+export type AgentId = 'claude' | 'codex' | 'opencode' | 'pi';
 
 export async function listAgentProfiles(): Promise<AgentProfile[]> {
   const res = await fetch('/api/workspaces/agent-profiles');

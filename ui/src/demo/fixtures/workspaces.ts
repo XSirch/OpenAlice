@@ -34,7 +34,7 @@ export const demoWorkspace: Workspace = {
   upgradeAvailable: null,
   agents: ['claude'],
   sessions: [demoSession],
-  agentOverride: { claude: false, codex: false },
+  agentOverride: { claude: false, codex: false, opencode: false, pi: false },
 }
 
 // Chat workspace — populates the Chat activity sidebar (which filters
@@ -68,7 +68,7 @@ export const demoChatWorkspace: Workspace = {
   upgradeAvailable: null,
   agents: ['claude', 'codex'],
   sessions: [demoChatSession],
-  agentOverride: { claude: false, codex: false },
+  agentOverride: { claude: false, codex: false, opencode: false, pi: false },
 }
 
 export const demoWorkspaces: Workspace[] = [demoWorkspace, demoChatWorkspace]

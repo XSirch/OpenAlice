@@ -106,6 +106,7 @@ describe('chat workspace create: bootstrap → inject → commit', () => {
       '.mcp.json', 'CLAUDE.md', 'AGENTS.md', 'README.md',
       '.claude/skills/scan-value-chain/SKILL.md',
       '.agents/skills/scan-value-chain/SKILL.md',
+      '.pi/skills/scan-value-chain/SKILL.md',
     ]) {
       expect(existsSync(join(dir, rel)), rel).toBe(true);
     }
@@ -183,6 +184,7 @@ describe('chat workspace create in CLI mode (toolAccess=cli)', () => {
     expect(mcp).not.toContain('"openalice"');      // global tool server dropped
     expect(existsSync(join(dir, '.claude/skills/openalice-cli/SKILL.md'))).toBe(true);
     expect(existsSync(join(dir, '.claude/skills/scan-value-chain/SKILL.md'))).toBe(true);
+    expect(existsSync(join(dir, '.pi/skills/openalice-cli/SKILL.md'))).toBe(true);  // Pi discovers .pi/skills
     expect((await run('git', ['-C', dir, 'status', '--porcelain'])).trim()).toBe('');
   });
 });

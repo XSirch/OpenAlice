@@ -109,12 +109,19 @@ export async function injectWorkspaceContext(opts: {
   }
 
   if (template.bundledSkills.length > 0) {
+    // Each agent CLI discovers skills from its own dir: Claude Code reads
+    // `.claude/skills`, Codex reads `.agents/skills`, Pi reads `.pi/skills`.
+    // (opencode reads `.claude/skills` + `.agents/skills` by default via its
+    // Claude-Code compat, so the two below already cover it — no `.opencode`
+    // copy needed unless OPENCODE_DISABLE_CLAUDE_CODE is ever set.)
     await mkdir(join(dir, '.claude/skills'), { recursive: true });
     await mkdir(join(dir, '.agents/skills'), { recursive: true });
+    await mkdir(join(dir, '.pi/skills'), { recursive: true });
     for (const name of template.bundledSkills) {
       const src = defaultPath('skills', name);
       await cp(src, join(dir, '.claude/skills', name), { recursive: true });
       await cp(src, join(dir, '.agents/skills', name), { recursive: true });
+      await cp(src, join(dir, '.pi/skills', name), { recursive: true });
     }
   }
 }
