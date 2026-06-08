@@ -24,6 +24,8 @@ import {
   type MarketClock,
   type BrokerConfigField,
   type TpSlParams,
+  type Bar,
+  type BarParams,
 } from '../types.js'
 import '../../contract-ext.js'
 import type {
@@ -33,8 +35,9 @@ import type {
   AlpacaOrderRaw,
   AlpacaSnapshotRaw,
   AlpacaClockRaw,
+  AlpacaBarRaw,
 } from './alpaca-types.js'
-import { makeContract, resolveSymbol, mapAlpacaOrderStatus, makeOrderState } from './alpaca-contracts.js'
+import { makeContract, resolveSymbol, mapAlpacaOrderStatus, makeOrderState, ALPACA_TIMEFRAME } from './alpaca-contracts.js'
 import { buildPosition } from '../contract-builder.js'
 import { fuzzyRankContracts, type FuzzyRankInput } from '../fuzzy-rank.js'
 
@@ -457,12 +460,46 @@ export class AlpacaBroker implements IBroker {
     }
   }
 
+  /**
+   * Historical OHLCV via Alpaca's market-data v2 `getBarsV2` (an async
+   * generator — drained into an array). `adjustment:'all'` gives split/dividend
+   * -adjusted bars. Free-tier accounts get the IEX feed (partial tape), hence
+   * capability quality 'iex'; full SIP needs a paid data subscription.
+   */
+  async getHistorical(contract: Contract, params: BarParams): Promise<Bar[]> {
+    const symbol = resolveSymbol(contract)
+    if (!symbol) throw new BrokerError('EXCHANGE', 'Cannot resolve contract to Alpaca symbol')
+    const timeframe = ALPACA_TIMEFRAME[params.interval]
+    try {
+      const opts: Record<string, unknown> = { timeframe, adjustment: 'all' }
+      if (params.start) opts.start = params.start.toISOString()
+      if (params.end) opts.end = params.end.toISOString()
+      if (params.limit) opts.limit = params.limit
+      const bars: Bar[] = []
+      const gen = this.client.getBarsV2(symbol, opts) as AsyncGenerator<AlpacaBarRaw>
+      for await (const b of gen) {
+        bars.push({
+          timestamp: new Date(b.Timestamp),
+          open: String(b.OpenPrice),
+          high: String(b.HighPrice),
+          low: String(b.LowPrice),
+          close: String(b.ClosePrice),
+          volume: String(b.Volume),
+        })
+      }
+      return bars
+    } catch (err) {
+      throw BrokerError.from(err)
+    }
+  }
+
   // ---- Capabilities ----
 
   getCapabilities(): AccountCapabilities {
     return {
       supportedSecTypes: ['STK'],
       supportedOrderTypes: ['MKT', 'LMT', 'STP', 'STP LMT', 'TRAIL'],
+      historicalBars: { supported: true, quality: 'iex' },
     }
   }
 

@@ -693,6 +693,41 @@ describe('AlpacaBroker — getQuote()', () => {
   })
 })
 
+// ==================== getHistorical ====================
+
+describe('AlpacaBroker — getHistorical()', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('drains getBarsV2 into string-typed bars (adjusted, IEX free tier)', async () => {
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
+    async function* gen() {
+      yield { Timestamp: '2025-01-01T00:00:00Z', OpenPrice: 100, HighPrice: 102, LowPrice: 99, ClosePrice: 101, Volume: 5000 }
+      yield { Timestamp: '2025-01-02T00:00:00Z', OpenPrice: 101, HighPrice: 103, LowPrice: 100, ClosePrice: 102.5, Volume: 6000 }
+    }
+    const getBarsV2 = vi.fn(() => gen())
+    ;(acc as any).client = { getBarsV2 }
+
+    const contract = new Contract()
+    contract.symbol = 'AAPL'
+
+    const bars = await acc.getHistorical(contract, { interval: '1d', limit: 2 })
+    expect(bars).toEqual([
+      { timestamp: new Date('2025-01-01T00:00:00Z'), open: '100', high: '102', low: '99', close: '101', volume: '5000' },
+      { timestamp: new Date('2025-01-02T00:00:00Z'), open: '101', high: '103', low: '100', close: '102.5', volume: '6000' },
+    ])
+    expect(getBarsV2).toHaveBeenCalledWith('AAPL', expect.objectContaining({ timeframe: '1Day', adjustment: 'all', limit: 2 }))
+    expect(acc.getCapabilities().historicalBars).toEqual({ supported: true, quality: 'iex' })
+  })
+
+  it('throws when contract cannot be resolved', async () => {
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
+    const contract = new Contract()
+    contract.symbol = ''
+    contract.aliceId = ''
+    await expect(acc.getHistorical(contract, { interval: '1d' })).rejects.toThrow('Cannot resolve')
+  })
+})
+
 // ==================== getMarketClock ====================
 
 describe('AlpacaBroker — getMarketClock()', () => {
