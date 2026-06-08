@@ -192,22 +192,20 @@ roughly mirrors that split — `src/` is Alice, `services/uta/` is UTA,
 ```
 src/                           # Alice process — agent runtime
 ├── main.ts                    # Composition root
-├── core/                      # Orchestration primitives. GenerateRouter
-│                              #   (provider selection) + ToolCenter +
+├── core/                      # Orchestration primitives. ToolCenter +
 │                              #   workspace-tool-center + InboxStore +
 │                              #   session store + event-log +
-│                              #   listener/producer + agent-work
-│                              #   (autonomous-task runner: drives
-│                              #   GenerateRouter directly, delivers to
-│                              #   InboxStore) + ai-config (profile/
-│                              #   credential test path).
-├── ai-providers/              # AI backend implementations.
-│   ├── agent-sdk/             # Claude via @anthropic-ai/claude-agent-sdk
-│   ├── codex/                 # OpenAI Codex CLI / API
-│   ├── vercel-ai-sdk/         # Vercel AI SDK (Anthropic/OpenAI/Google)
-│   ├── mock/                  # Test provider
-│   ├── presets.ts             # Preset catalog (profile schemas)
-│   └── sdk-adapters.ts        # Provider → adapter resolution
+│                              #   listener/producer + config (central
+│                              #   credential vault) + credential-inference.
+│                              #   (The in-process AI loop — GenerateRouter,
+│                              #   AgentWork, ai-config — was deleted in
+│                              #   0.40; the model loop runs in the native
+│                              #   workspace CLIs now.)
+├── ai-providers/              # Preset catalog only (suggestions for the
+│                              #   credential vault form — NOT an execution
+│                              #   layer; the in-process providers are gone).
+│                              #   preset-catalog.ts (models + regions×wires)
+│                              #   + presets.ts (zod → JSON Schema).
 ├── domain/                    # Non-broker, non-state domains.
 │   ├── market-data/           # typebb in-process + OpenBB API remote
 │   ├── analysis/              # Indicators / TA / sandbox
@@ -247,7 +245,7 @@ src/                           # Alice process — agent runtime
 │   └── workspaces-ws.ts       # PTY WebSocket upgrade + auth gate
 ├── migrations/                # Versioned data migrations (0001–0007).
 │                              # See `## Migrations` for the rule.
-└── task/                      # cron, heartbeat, metrics
+└── task/                      # cron, metrics
 
 services/uta/                  # UTA process — broker carrier
 ├── src/main.ts                # UTA bootstrap
@@ -351,38 +349,33 @@ jump back into the workspace session and continue there.
 - `tool/inbox-push.ts` — the MCP tool registration, wired through
   `core/workspace-tool-center.ts` so the wsId is bound per workspace
   (the agent never traffics its own identity).
-- The Inbox is the only push surface. AgentWork's autonomous trigger
-  sources (cron / task) deliver here too, appending under a synthetic
-  `automation:<source>` workspace id.
+- The Inbox is the only push surface. Autonomous runs deliver here too:
+  a cron job fires a **headless workspace run** (PR2) and that agent
+  calls `inbox_push` like any workspace.
 
-### Provider routing — GenerateRouter (in flight)
+### AI execution — native CLIs + credential vault
 
-Scope note: the Workspace path runs the model loop **inside** the
-native CLI (`claude` / `codex`), so it does not touch this layer.
-GenerateRouter governs AgentWork (heartbeat / cron autonomous runs),
-the profile/credential test path (`core/ai-config.ts`), and any other
-code that calls Alice's in-process AI machinery directly.
+The model loop runs **inside** the native workspace CLIs (`claude` /
+`codex` / `opencode` / `pi`). Alice has **no in-process AI loop** —
+GenerateRouter, the agent-sdk/codex/vercel-ai-sdk providers, AgentWork,
+and `ai-config` were all deleted in 0.40 (the "World B" collapse). What
+Alice owns now:
 
-> ⚠️ This layer is destined for redesign — the cross-shape assumptions
-> between Anthropic-API-shape and OpenAI-API-shape backends are
-> leaking, and the registry pattern needs rework. Before adding a new
-> provider or changing routing behavior, **check with the user first.**
-> See memory `feedback_no_bandaid_on_shape_mismatch`.
-
-Today:
-
-- **GenerateRouter** (`core/ai-provider-manager.ts`) reads
-  `ai-provider.json` and resolves to the active provider. Four backends
-  registered: `agent-sdk` (Claude), `codex` (OpenAI Codex),
-  `vercel-ai-sdk` (Anthropic / OpenAI / Google), `mock`.
-- **AIProvider interface**: `ask(prompt)` one-shot, `generate(input, opts)`
-  streams `ProviderEvent`s (`tool_use` / `tool_result` / `text` / `done`).
-  Optional `compact()` for provider-native compaction.
-- **StreamableResult**: dual interface — `PromiseLike` (await for
-  result) + `AsyncIterable` (for-await for streaming). Multiple
-  consumers each get independent cursors.
-- Per-request overrides via `AskOptions.provider` and the per-backend
-  option blocks (`AskOptions.vercelAiSdk`, `AskOptions.agentSdk`, etc.).
+- **Central credential vault** (`core/config.ts`
+  `aiProviderSchema.credentials`) — api-key credentials, each declaring
+  its **wire capabilities**: `wires` is a map of wire-shape → endpoint
+  baseUrl, so one key covers every shape its provider exposes. Surfaced
+  in Settings › AI Provider; injected into workspaces via templates
+  (`workspaces/credential-injection.ts`), which picks the shape the
+  target agent speaks (`pickAgentWire` / `AGENT_WIRE_PREFERENCE`:
+  claude→anthropic, codex→openai-responses, opencode/pi→either).
+- **Wire shapes** (`ai-providers/preset-catalog.ts`): `anthropic` /
+  `openai-chat` / `openai-responses`. The preset catalog is suggestions
+  only (models + regions×wires for the form), not an execution layer.
+- **The only in-process AI call left is the lightweight key test**
+  (`workspaces/agent-probe.ts` `probeByWireShape`): a one-shot "Hi" to
+  verify a credential. Both the vault Test and the per-workspace
+  AI-config Test go through it — no streaming, no agent loop.
 
 ### ToolCenter
 
@@ -399,10 +392,11 @@ The pre-Workspace orchestration (AgentCenter, ConnectorCenter,
 NotificationsStore, the `notify_user` tool, `src/connectors/**`, the
 `/chat` SSE surface, and the Telegram / MCP-Ask connectors) was deleted
 in 0.30.0 — see migration 0007 and memory
-`project_agentcenter_retirement`. If you're hunting for where one of
-those symbols went: AgentWork now drives GenerateRouter directly and
-delivers to the InboxStore; the in-process AI loop is gone (the model
-loop runs inside the native workspace CLIs).
+`project_agentcenter_retirement`. The follow-on "World B" collapse in
+0.40 then deleted the in-process AI loop entirely (GenerateRouter, the
+agent-sdk/codex/vercel-ai-sdk providers, AgentWork, heartbeat). The model
+loop runs inside the native workspace CLIs; autonomous runs go through
+headless workspace dispatch (cron → workspace).
 
 ## Conventions
 
