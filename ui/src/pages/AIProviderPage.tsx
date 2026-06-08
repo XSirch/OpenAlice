@@ -253,7 +253,8 @@ function CredentialModal({ mode, cred, presets, onClose, onSaved }: {
     cred?.wireShape ?? (initialPreset ? (wireShapeForBaseUrl(initialPreset, cred?.baseUrl ?? '') ?? defaultWireShape(initialPreset)) : undefined),
   )
   const [baseUrl, setBaseUrl] = useState(cred?.baseUrl ?? '')
-  const [apiKey, setApiKey] = useState('')
+  const [apiKey, setApiKey] = useState(cred?.apiKey ?? '')
+  const [showKey, setShowKey] = useState(false)
   const [model, setModel] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -383,9 +384,15 @@ function CredentialModal({ mode, cred, presets, onClose, onSaved }: {
               </Field>
 
               <Field label="API key">
-                <input className={inputClass} type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={mode === 'edit' ? '(leave empty to keep the stored key)' : 'Enter API key'}
-                  spellCheck={false} autoCapitalize="off" autoCorrect="off" />
+                <div className="flex gap-2">
+                  <input className={inputClass + ' flex-1'} type={showKey ? 'text' : 'password'} value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)} placeholder="Enter API key"
+                    spellCheck={false} autoCapitalize="off" autoCorrect="off" />
+                  <button type="button" onClick={() => setShowKey(!showKey)}
+                    className="px-3 rounded-md border border-border text-text-muted hover:text-text text-[12px]">
+                    {showKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </Field>
 
               <Field label="Test model" description="Used only to verify the key — not stored on the credential (the model is chosen per workspace).">

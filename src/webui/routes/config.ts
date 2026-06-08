@@ -141,7 +141,12 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
   // whether one is set); Test runs the lightweight probe, not the in-process
   // provider stack.
 
-  /** GET /credentials — list central credentials (key redacted). */
+  /**
+   * GET /credentials — list central credentials. Returns the apiKey so the edit
+   * form can round-trip it (same exposure as /api/workspaces/credentials and the
+   * legacy agent-profiles route; all behind the admin-token gate). `hasApiKey`
+   * kept for callers that only need presence.
+   */
   app.get('/credentials', async (c) => {
     try {
       const creds = await readCredentials()
@@ -151,6 +156,7 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
         authType: cred.authType,
         baseUrl: cred.baseUrl ?? null,
         wireShape: cred.wireShape ?? null,
+        apiKey: cred.apiKey ?? null,
         hasApiKey: !!cred.apiKey,
       }))
       return c.json({ credentials: list })

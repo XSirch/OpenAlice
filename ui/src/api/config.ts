@@ -153,5 +153,7 @@ export interface CredentialSummary {
   authType: 'api-key' | 'subscription'
   baseUrl: string | null
   wireShape: WireShape | null
+  /** The stored key (admin-gated; lets the edit form round-trip it). */
+  apiKey: string | null
   hasApiKey: boolean
 }
