@@ -104,7 +104,9 @@ function isFullBar(d: Record<string, unknown>): boolean {
 }
 
 function dateOf(bar: Bar): string {
-  const iso = bar.timestamp.toISOString()
+  // Bar.timestamp is typed Date, but it crosses the Alice↔UTA HTTP wire as an
+  // ISO string (JSON has no Date) — normalize either form before formatting.
+  const iso = new Date(bar.timestamp).toISOString()
   // Daily/weekly bars land at UTC midnight → keep date-only; intraday keeps time.
   return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.slice(0, 19).replace('T', ' ')
 }

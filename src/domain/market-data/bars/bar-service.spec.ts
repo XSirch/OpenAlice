@@ -115,12 +115,15 @@ describe('getBars — barId forms', () => {
 })
 
 describe('getBars — UTA branch', () => {
-  const WIRE: Bar[] = [
-    { timestamp: new Date('2024-02-02T00:00:00.000Z'), open: '2', high: '3', low: '1', close: '2.5', volume: '200' },
-    { timestamp: new Date('2024-02-01T00:00:00.000Z'), open: '1', high: '2', low: '0.5', close: '1.5', volume: '100' },
-  ]
+  // Bar.timestamp is typed Date, but it crosses the Alice↔UTA HTTP wire as an
+  // ISO STRING (JSON has no Date) — the SDK does not revive it. Use the REAL
+  // wire shape here so the conversion is exercised exactly as in production.
+  const WIRE = [
+    { timestamp: '2024-02-02T00:00:00.000Z', open: '2', high: '3', low: '1', close: '2.5', volume: '200' },
+    { timestamp: '2024-02-01T00:00:00.000Z', open: '1', high: '2', low: '0.5', close: '1.5', volume: '100' },
+  ] as unknown as Bar[]
 
-  it('discriminates uta via gateway, converts string→number, tags realtime', async () => {
+  it('discriminates uta via gateway, converts string→number, tags realtime (Date arrives as string over the wire)', async () => {
     const getHistorical = vi.fn(async () => WIRE)
     const utaManager: UtaBarGateway = {
       has: async (id) => id === 'alpaca-paper',
