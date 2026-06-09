@@ -11,13 +11,24 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join, resolve as resolvePath } from 'node:path';
 
-import { probeAnthropic, probeOpenAI } from '../../workspaces/agent-probe.js';
+import { probeByWireShape } from '../../workspaces/agent-probe.js';
+import type { WireShape } from '../../ai-providers/preset-catalog.js';
+
+/** A workspace agent's default wire shape when the credential/form doesn't say. */
+const DEFAULT_WIRE_BY_AGENT: Record<string, WireShape> = {
+  claude: 'anthropic',
+  codex: 'openai-responses',
+  opencode: 'openai-chat',
+  pi: 'openai-chat',
+};
 import { listDir, PathTraversal, readWorkspaceFile } from '../../workspaces/file-service.js';
 import { gitLog, gitStatus } from '../../workspaces/git-service.js';
 import { logger as launcherLogger } from '../../workspaces/logger.js';
 import type { SessionRecord } from '../../workspaces/session-registry.js';
 import { HeadlessCapacityError, resumeFromRecord, type SessionFactoryContext, type WorkspaceService } from '../../workspaces/service.js';
 import type { WorkspaceAiCred } from '../../workspaces/cli-adapter.js';
+import { addCredential, readCredentials, credentialWires, credentialWireShapeEnum, type Credential } from '../../core/config.js';
+import { inferCredentialVendor, resolveAnthropicAuthMode } from '../../core/credential-inference.js';
 
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -799,24 +810,53 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
   // CODEX_HOME. These routes are pure file IO over the launcher's
   // path-traversal guard.
 
-  app.get('/agent-profiles', async (c) => {
+
+  // Central credential store, surfaced to the workspace AI-config modal. The
+  // "Load from saved credential" picker reads this list; the "Save to Alice"
+  // dialog POSTs here so a hand-entered provider becomes reusable. apiKey is
+  // returned so the picker can flash it into the form (same exposure as the
+  // legacy agent-profiles route; both are behind the admin-token gate).
+  app.get('/credentials', async (c) => {
     try {
-      const raw = await readFile(resolvePath('data/config/ai-provider-manager.json'), 'utf8');
-      const parsed = JSON.parse(raw) as { profiles?: Record<string, ProfileShape> };
-      const profiles = parsed.profiles ?? {};
-      const list = Object.entries(profiles).map(([name, p]) => ({
-        name,
-        baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl : null,
-        apiKey: typeof p.apiKey === 'string' ? p.apiKey : null,
-        model: typeof p.model === 'string' ? p.model : null,
-        authMode: p.authMode === 'bearer' ? 'bearer' : p.authMode === 'x-api-key' ? 'x-api-key' : null,
+      const credentials = await readCredentials();
+      const list = Object.entries(credentials).map(([slug, cred]) => ({
+        slug,
+        vendor: cred.vendor,
+        authType: cred.authType,
+        wires: credentialWires(cred), // shape → endpoint; the modal picks one per agent
+        apiKey: cred.apiKey ?? null,
       }));
-      return c.json({ profiles: list });
+      return c.json({ credentials: list });
     } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') return c.json({ profiles: [] });
-      launcherLogger.warn('agent_profiles.read_failed', { err });
-      return c.json({ error: 'profiles_read_failed', message: (err as Error).message }, 500);
+      launcherLogger.warn('credentials.read_failed', { err });
+      return c.json({ error: 'credentials_read_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.post('/credentials', async (c) => {
+    const body = (await safeJson(c)) as
+      | { apiKey?: string; baseUrl?: string; agent?: string; vendor?: string; wireShape?: string }
+      | null;
+    const apiKey = body?.apiKey?.trim();
+    if (!apiKey) return c.json({ error: 'apiKey_required' }, 400);
+    const baseUrl = body?.baseUrl?.trim() || undefined;
+    const wireParse = credentialWireShapeEnum.safeParse(body?.wireShape);
+    // The workspace modal saves a single hand-entered shape; capture it as a
+    // one-entry wires map (the vault can later add more shapes for the same key —
+    // dedup-by-key upgrades in place). Subscriptions never flow through here.
+    const cred: Credential = {
+      vendor: inferCredentialVendor({ agent: body?.agent, baseUrl }),
+      authType: 'api-key',
+      apiKey,
+      ...(wireParse.success ? { wires: { [wireParse.data]: baseUrl ?? '' } } : (baseUrl ? { wires: {} } : {})),
+    };
+    try {
+      const slug = await addCredential(cred);
+      launcherLogger.info('credentials.saved', { slug, vendor: cred.vendor });
+      return c.json({ slug, vendor: cred.vendor }, 201);
+    } catch (err) {
+      launcherLogger.warn('credentials.write_failed', { err });
+      return c.json({ error: 'credentials_write_failed', message: (err as Error).message }, 500);
     }
   });
 
@@ -879,30 +919,25 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     const baseUrl = typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : '';
     const apiKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : '';
     const model = typeof body?.model === 'string' ? body.model.trim() : '';
-    if (!baseUrl || !apiKey || !model) {
-      return c.json({ ok: false, error: 'baseUrl, apiKey, and model are all required' }, 400);
+    // baseUrl may be empty (official endpoint); probeByWireShape defaults it.
+    if (!apiKey || !model) {
+      return c.json({ ok: false, error: 'apiKey and model are required' }, 400);
     }
 
     try {
-      // opencode and pi both drive providers through OpenAI Chat Completions
-      // (opencode via @ai-sdk/openai-compatible, pi via api:"openai-completions")
-      // — so their provider test probes with wireApi 'chat' (not 'responses',
-      // which is codex-only).
-      const result = agent === 'claude'
-        ? await probeAnthropic({
-            baseUrl,
-            apiKey,
-            model,
-            authMode: body?.authMode === 'bearer' ? 'bearer' : 'x-api-key',
-          })
-        : await probeOpenAI({
-            baseUrl,
-            apiKey,
-            model,
-            wireApi: (agent === 'opencode' || agent === 'pi')
-              ? 'chat'
-              : body?.wireApi === 'chat' ? 'chat' : 'responses',
-          });
+      // Same dispatcher as the credential vault — Test means the same thing
+      // everywhere. The shape comes from the credential's wireShape (threaded by
+      // the modal), defaulting to the agent's native shape.
+      const wireShape: WireShape = body?.wireShape ?? DEFAULT_WIRE_BY_AGENT[agent] ?? 'openai-chat';
+      const result = await probeByWireShape(wireShape, {
+        baseUrl,
+        apiKey,
+        model,
+        // Resolve the anthropic auth header by baseUrl (api.minimax.io → bearer),
+        // same as the vault — the modal only sends authMode on the claude tab, so
+        // an anthropic-shape cred on an opencode/pi tab needs the baseUrl heuristic.
+        authMode: resolveAnthropicAuthMode({ authMode: body?.authMode, baseUrl }),
+      });
       return c.json({ ok: true, response: result.text });
     } catch (err) {
       const e = err as { status?: number; message?: string };
@@ -916,13 +951,6 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
 }
 
 // ── Agent config helpers ────────────────────────────────────────────────────
-
-interface ProfileShape {
-  baseUrl?: unknown;
-  apiKey?: unknown;
-  model?: unknown;
-  authMode?: unknown;
-}
 
 // AI-provider config IO moved into the CLI adapters (writeAiConfig /
 // readAiConfig on claudeAdapter / codexAdapter). The routes above dispatch

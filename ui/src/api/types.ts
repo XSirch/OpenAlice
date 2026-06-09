@@ -68,6 +68,15 @@ export interface SdkAdapterInfo {
 
 // ==================== AI Provider Presets ====================
 
+export type WireShape = 'anthropic' | 'openai-chat' | 'openai-responses'
+
+/** A region + the per-wire-shape endpoints it offers. */
+export interface SerializedRegion {
+  id: string
+  label: string
+  wires: Partial<Record<WireShape, string>>
+}
+
 export interface Preset {
   id: string
   label: string
@@ -76,6 +85,9 @@ export interface Preset {
   hint?: string
   defaultName: string
   schema: JsonSchema
+  /** Regions × their per-shape endpoints — the form picks a region; the
+   *  credential captures that region's whole wires map (its capabilities). */
+  regions?: SerializedRegion[]
 }
 
 /** Subset of JSON Schema types we use for form rendering. */
@@ -152,12 +164,6 @@ export interface AppConfig {
   engine: Record<string, unknown>
   agent: { evolutionMode: boolean; claudeCode: Record<string, unknown> }
   compaction: { maxContextTokens: number; maxOutputTokens: number }
-  heartbeat: {
-    enabled: boolean
-    every: string
-    prompt: string
-    activeHours: { start: string; end: string; timezone: string } | null
-  }
   snapshot: {
     enabled: boolean
     every: string
@@ -284,6 +290,10 @@ export interface CronJob {
   enabled: boolean
   schedule: CronSchedule
   payload: string
+  /** Target workspace the job's prompt runs in, headless. */
+  workspaceId?: string
+  /** Which enabled CLI agent runs it — claude / codex / pi / opencode. */
+  agent?: string
   state: CronJobState
   createdAt: number
 }

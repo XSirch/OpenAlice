@@ -4,11 +4,6 @@ import { resolve } from 'path'
 import { newsCollectorSchema } from '../domain/news/config.js'
 import { runMigrations } from '../migrations/runner.js'
 import { dataPath } from '@/core/paths.js'
-import {
-  inferVendor as inferVendorFromProfile,
-  inferAuthType as inferAuthTypeFromProfile,
-  hasExtractableCredential,
-} from './credential-inference.js'
 
 const CONFIG_DIR = dataPath('config')
 
@@ -59,80 +54,59 @@ export type CredentialVendor = z.infer<typeof credentialVendorEnum>
 export const credentialAuthTypeEnum = z.enum(['api-key', 'subscription'])
 export type CredentialAuthType = z.infer<typeof credentialAuthTypeEnum>
 
+/**
+ * The wire protocol the credential's endpoint speaks. Load-bearing, NOT
+ * derivable from baseUrl alone — OpenAI Chat Completions and Responses share
+ * one base URL (api.openai.com/v1), so only this field distinguishes them. Also
+ * tells injection how to configure the consuming adapter. Mirrors the
+ * `WireShape` union in ai-providers/preset-catalog.ts (kept in sync by hand —
+ * 3 stable values; core must not depend on the ai-providers layer).
+ */
+export const credentialWireShapeEnum = z.enum(['anthropic', 'openai-chat', 'openai-responses'])
+export type CredentialWireShape = z.infer<typeof credentialWireShapeEnum>
+
 export const credentialSchema = z.object({
   vendor: credentialVendorEnum,
   authType: credentialAuthTypeEnum,
   /** Present for api-key credentials; absent for subscription credentials. */
   apiKey: z.string().optional(),
-  /** Optional region / custom endpoint. */
-  baseUrl: z.string().optional(),
+  /**
+   * The wire shapes this key can speak, each with its endpoint baseUrl (''/absent
+   * = the shape's official endpoint). A provider exposes the SAME key behind
+   * several incompatible shapes that differ only by endpoint (GLM: anthropic at
+   * /api/anthropic, openai-chat at /api/paas/v4), so one credential declares all
+   * of them — "wire capabilities" — and injection picks the one the target agent
+   * speaks. Fill the key once.
+   */
+  wires: z.partialRecord(credentialWireShapeEnum, z.string()).optional(),
+  /** @deprecated legacy single-endpoint fields — read via `credentialWires()`. */
+  baseUrl: z.string().trim().transform((s) => s || undefined).optional(),
+  /** @deprecated legacy single wire shape — superseded by `wires`. */
+  wireShape: credentialWireShapeEnum.optional(),
 })
 export type Credential = z.infer<typeof credentialSchema>
 
-const baseProfileFields = {
-  /** Preset ID this profile was created from (for constraint enforcement on edit). */
-  preset: z.string().optional(),
-  baseUrl: z.string().optional(),
-  apiKey: z.string().optional(),
-  /**
-   * Anthropic-shape only: which HTTP header carries the key. 'x-api-key' is
-   * Anthropic first-party (default when absent); 'bearer' sends Authorization:
-   * Bearer, required by anthropic-compatible gateways like MiniMax's
-   * international endpoint. Currently consumed by the per-workspace AI config
-   * "Apply from profile" path (surfaced via /agent-profiles); the in-process
-   * GenerateRouter runtime does not yet honor it — see ANG follow-up.
-   */
-  authMode: z.enum(['x-api-key', 'bearer']).optional(),
-  /**
-   * Pointer into aiProviderSchema.credentials. When present, resolveProfile()
-   * joins the credential's apiKey/baseUrl into the resolved shape (profile's
-   * own inline values still win if set — transitional).
-   */
-  credentialSlug: z.string().optional(),
+/**
+ * The wire→baseUrl map for a credential, tolerating legacy creds that still
+ * carry the flat `{baseUrl, wireShape}` instead of `wires`. No migration needed:
+ * old creds are upgraded transparently on read.
+ */
+export function credentialWires(cred: Credential): Partial<Record<CredentialWireShape, string>> {
+  if (cred.wires && Object.keys(cred.wires).length > 0) return cred.wires
+  if (cred.wireShape) return { [cred.wireShape]: cred.baseUrl ?? '' }
+  return {}
 }
-
-export const agentSdkProfileSchema = z.object({
-  ...baseProfileFields,
-  backend: z.literal('agent-sdk'),
-  model: z.string().default('claude-opus-4-7'),
-  loginMethod: z.enum(['api-key', 'claudeai']).default('api-key'),
-})
-
-export const codexProfileSchema = z.object({
-  ...baseProfileFields,
-  backend: z.literal('codex'),
-  model: z.string().default('gpt-5.4'),
-  loginMethod: z.enum(['api-key', 'codex-oauth']).default('codex-oauth'),
-})
-
-export const vercelProfileSchema = z.object({
-  ...baseProfileFields,
-  backend: z.literal('vercel-ai-sdk'),
-  provider: z.string().default('anthropic'),
-  model: z.string().default('claude-opus-4-7'),
-})
-
-export const profileSchema = z.discriminatedUnion('backend', [
-  agentSdkProfileSchema, codexProfileSchema, vercelProfileSchema,
-])
-
-export type Profile = z.infer<typeof profileSchema>
 
 export const aiProviderSchema = z.object({
   apiKeys: apiKeysSchema.default({}),
   /**
-   * Credentials by slug — extracted from profiles by 0002_extract_credentials.
-   * Profile's `credentialSlug` points here. Inline credential fields on the
-   * profile remain as transitional fallback.
+   * The central credential vault: api-key credentials by slug, each declaring
+   * its wire capabilities (`wires`). Injected into workspaces by template; the
+   * model loop itself runs in the native CLI. (The pre-0.40 `profiles` /
+   * `activeProfile` fields — for the deleted in-process provider — are gone;
+   * existing files keep them on disk until rewritten, where they're ignored.)
    */
   credentials: z.record(z.string(), credentialSchema).default({}),
-  profiles: z.record(
-    z.string(),
-    profileSchema,
-  ).default({
-    default: { backend: 'agent-sdk', model: 'claude-opus-4-7', loginMethod: 'claudeai' },
-  }),
-  activeProfile: z.string().default('default'),
 })
 
 export type AIProviderConfig = z.infer<typeof aiProviderSchema>
@@ -239,13 +213,6 @@ const compactionSchema = z.object({
   microcompactKeepRecent: z.number().default(3),
 })
 
-const activeHoursSchema = z.object({
-  start: z.string().regex(/^\d{1,2}:\d{2}$/, 'Expected HH:MM format'),
-  end: z.string().regex(/^\d{1,2}:\d{2}$/, 'Expected HH:MM format'),
-  timezone: z.string().default('local'),
-}).nullable().default(null)
-
-
 /**
  * MCP server config — exposes OpenAlice's ToolCenter to external MCP
  * clients (Claude Desktop, codex inside workspaces, etc.). Lives at the
@@ -270,13 +237,6 @@ const connectorsSchema = z.object({
     botUsername: z.string().optional(),
     chatIds: z.array(z.number()).default([]),
   }).default({ enabled: false, chatIds: [] }),
-})
-
-const heartbeatSchema = z.object({
-  enabled: z.boolean().default(false),
-  every: z.string().default('30m'),
-  prompt: z.string().default('Read data/brain/heartbeat.md (or default/heartbeat.default.md if not found) and follow the instructions inside.'),
-  activeHours: activeHoursSchema,
 })
 
 const snapshotSchema = z.object({
@@ -383,7 +343,6 @@ export type Config = {
   marketData: z.infer<typeof marketDataSchema>
   compaction: z.infer<typeof compactionSchema>
   aiProvider: z.infer<typeof aiProviderSchema>
-  heartbeat: z.infer<typeof heartbeatSchema>
   snapshot: z.infer<typeof snapshotSchema>
   mcp: z.infer<typeof mcpSchema>
   connectors: z.infer<typeof connectorsSchema>
@@ -427,7 +386,7 @@ export async function loadConfig(): Promise<Config> {
   // is pending. See src/migrations/INDEX.md for the full list.
   await runMigrations()
 
-  const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'market-data.json', 'compaction.json', 'ai-provider-manager.json', 'heartbeat.json', 'snapshot.json', 'mcp.json', 'connectors.json', 'news.json', 'tools.json', 'webhook.json'] as const
+  const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'market-data.json', 'compaction.json', 'ai-provider-manager.json', 'snapshot.json', 'mcp.json', 'connectors.json', 'news.json', 'tools.json', 'webhook.json'] as const
   const raws = await Promise.all(files.map((f) => loadJsonFile(f)))
 
   const config: Config = {
@@ -438,13 +397,12 @@ export async function loadConfig(): Promise<Config> {
     marketData:    await parseAndSeed(files[4], marketDataSchema, raws[4]),
     compaction:    await parseAndSeed(files[5], compactionSchema, raws[5]),
     aiProvider:    await parseAndSeed(files[6], aiProviderSchema, raws[6]),
-    heartbeat:     await parseAndSeed(files[7], heartbeatSchema, raws[7]),
-    snapshot:      await parseAndSeed(files[8], snapshotSchema, raws[8]),
-    mcp:           await parseAndSeed(files[9], mcpSchema, raws[9]),
-    connectors:    await parseAndSeed(files[10], connectorsSchema, raws[10]),
-    news:          await parseAndSeed(files[11], newsCollectorSchema, raws[11]),
-    tools:         await parseAndSeed(files[12], toolsSchema, raws[12]),
-    webhook:       await parseAndSeed(files[13], webhookSchema, raws[13]),
+    snapshot:      await parseAndSeed(files[7], snapshotSchema, raws[7]),
+    mcp:           await parseAndSeed(files[8], mcpSchema, raws[8]),
+    connectors:    await parseAndSeed(files[9], connectorsSchema, raws[9]),
+    news:          await parseAndSeed(files[10], newsCollectorSchema, raws[10]),
+    tools:         await parseAndSeed(files[11], toolsSchema, raws[11]),
+    webhook:       await parseAndSeed(files[12], webhookSchema, raws[12]),
   }
 
   // Spawn-time-fixed channel: when guardian (Electron main) spawns the
@@ -732,55 +690,6 @@ export async function readWebhookConfig() {
   }
 }
 
-// ==================== Profile Helpers ====================
-
-/** Resolved profile — all fields needed by providers. */
-export interface ResolvedProfile {
-  backend: AIBackend
-  model: string
-  preset?: string
-  apiKey?: string
-  baseUrl?: string
-  loginMethod?: string
-  provider?: string
-  /** Anthropic-shape only: which header carries the key (x-api-key vs Bearer).
-   *  Consumed via resolveAnthropicAuthMode() at the auth-header construction
-   *  sites (agent-sdk env, vercel anthropic client, test-path adapter). */
-  authMode?: 'x-api-key' | 'bearer'
-  /** Pointer into AIProviderConfig.credentials. Preserved on the resolved
-   *  shape so callers can fetch the credential separately when needed. */
-  credentialSlug?: string
-}
-
-/**
- * Resolve a profile by slug. When the profile carries a `credentialSlug`,
- * the referenced credential's apiKey/baseUrl are joined into the resolved
- * shape — but profile-level inline values still win when present, so the
- * 0002 migration can safely leave inline fields in place as transitional
- * fallback. The returned `ResolvedProfile` shape is unchanged.
- */
-export async function resolveProfile(slug?: string): Promise<ResolvedProfile> {
-  const config = await readAIProviderConfig()
-  const key = slug ?? config.activeProfile
-  const profile = config.profiles[key]
-  if (!profile) throw new Error(`Unknown AI provider profile: "${key}"`)
-
-  if (profile.credentialSlug) {
-    const cred = config.credentials[profile.credentialSlug]
-    if (!cred) {
-      throw new Error(
-        `Profile "${key}" references missing credential "${profile.credentialSlug}"`,
-      )
-    }
-    return {
-      ...profile,
-      apiKey: profile.apiKey ?? cred.apiKey,
-      baseUrl: profile.baseUrl ?? cred.baseUrl,
-    }
-  }
-  return { ...profile }
-}
-
 // ==================== Credential Helpers ====================
 
 /** Read a credential by slug. Throws if missing. */
@@ -806,125 +715,46 @@ export async function writeCredential(slug: string, credential: Credential): Pro
   await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
 }
 
-/** Delete a credential. Errors if any profile still references it. */
-export async function deleteCredential(slug: string): Promise<void> {
-  const config = await readAIProviderConfig()
-  const referencingProfiles = Object.entries(config.profiles)
-    .filter(([, p]) => p.credentialSlug === slug)
-    .map(([slug]) => slug)
-  if (referencingProfiles.length > 0) {
-    throw new Error(
-      `Cannot delete credential "${slug}" — referenced by profile(s): ${referencingProfiles.join(', ')}`,
-    )
-  }
-  delete config.credentials[slug]
-  await mkdir(CONFIG_DIR, { recursive: true })
-  await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
-}
-
-/** Get the active profile slug. */
-export async function getActiveProfileSlug(): Promise<string> {
-  const config = await readAIProviderConfig()
-  return config.activeProfile
-}
-
-/** Set the active profile. */
-export async function setActiveProfile(slug: string): Promise<void> {
-  const config = await readAIProviderConfig()
-  if (!config.profiles[slug]) throw new Error(`Unknown profile: "${slug}"`)
-  const updated = { ...config, activeProfile: slug }
-  await mkdir(CONFIG_DIR, { recursive: true })
-  await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(updated, null, 2) + '\n')
-}
-
 /**
- * Eagerly extract a credential from a profile's inline fields and link
- * the profile to it. Dedupes against existing credentials (same vendor +
- * authType + apiKey + baseUrl reuses the existing slug). Returns the
- * possibly-updated profile and credentials map.
+ * Add a credential to the central store. Dedups by {vendor, authType, apiKey} —
+ * one key is one account, regardless of how many wires/endpoints it can drive —
+ * so re-adding a key you already have (even with a different/newer wire set)
+ * reuses the slug and UPGRADES its wires in place rather than duplicating.
+ * Returns the slug.
  *
- * Used by writeProfile (and the 0003 backfill migration) so new profiles
- * never land with inline-only credentials. Idempotent — profiles already
- * carrying credentialSlug are passed through unchanged.
+ * Standalone counterpart to `extractCredentialFromProfile` for credentials that
+ * don't come from a profile — e.g. the workspace AI-config modal's "save to
+ * Alice" path.
  */
-export function extractCredentialFromProfile(
-  profile: Profile,
-  existing: Record<string, Credential>,
-): { profile: Profile; credentials: Record<string, Credential> } {
-  if (profile.credentialSlug) return { profile, credentials: existing }
-  if (!hasExtractableCredential(profile)) return { profile, credentials: existing }
-
-  const vendor = inferVendorFromProfile(profile)
-  const authType = inferAuthTypeFromProfile(profile)
-  const cred: Credential = { vendor, authType }
-  if (profile.apiKey) cred.apiKey = profile.apiKey
-  if (profile.baseUrl) cred.baseUrl = profile.baseUrl
-
-  // Dedupe against existing — same vendor/auth/apiKey/baseUrl reuses the slug
-  const match = Object.entries(existing).find(([, c]) =>
-    c.vendor === cred.vendor &&
-    c.authType === cred.authType &&
-    c.apiKey === cred.apiKey &&
-    c.baseUrl === cred.baseUrl
+export async function addCredential(credential: Credential): Promise<string> {
+  const config = await readAIProviderConfig()
+  const validated = credentialSchema.parse(credential)
+  const match = Object.entries(config.credentials).find(([, c]) =>
+    c.vendor === validated.vendor &&
+    c.authType === validated.authType &&
+    c.apiKey === validated.apiKey,
   )
   if (match) {
-    return {
-      profile: { ...profile, credentialSlug: match[0] } as Profile,
-      credentials: existing,
-    }
+    // Upgrade the existing record's wires/endpoint in place (don't duplicate).
+    config.credentials[match[0]] = validated
+    await mkdir(CONFIG_DIR, { recursive: true })
+    await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
+    return match[0]
   }
-
-  // Generate a fresh slug
-  const taken = new Set(Object.keys(existing))
+  const taken = new Set(Object.keys(config.credentials))
   let n = 1
-  while (taken.has(`${vendor}-${n}`)) n++
-  const slug = `${vendor}-${n}`
-
-  return {
-    profile: { ...profile, credentialSlug: slug } as Profile,
-    credentials: { ...existing, [slug]: cred },
-  }
-}
-
-/**
- * Write a single profile (create or update). Eagerly extracts inline
- * credential fields into the credentials map and links via
- * credentialSlug — keeps the credentials map complete as new profiles
- * land via the wizard.
- */
-export async function writeProfile(slug: string, profile: Profile): Promise<void> {
-  const config = await readAIProviderConfig()
-  const { profile: extractedProfile, credentials } = extractCredentialFromProfile(
-    profile,
-    config.credentials,
-  )
-  config.profiles[slug] = extractedProfile
-  config.credentials = credentials
+  while (taken.has(`${validated.vendor}-${n}`)) n++
+  const slug = `${validated.vendor}-${n}`
+  config.credentials[slug] = validated
   await mkdir(CONFIG_DIR, { recursive: true })
   await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
+  return slug
 }
 
-/**
- * Delete a profile. Cannot delete the active profile. If the deleted
- * profile was the last one referencing its credential, the credential
- * is garbage-collected too — keeps credentials map free of orphans.
- */
-export async function deleteProfile(slug: string): Promise<void> {
+/** Delete a credential from the vault. */
+export async function deleteCredential(slug: string): Promise<void> {
   const config = await readAIProviderConfig()
-  if (config.activeProfile === slug) throw new Error('Cannot delete the active profile')
-  const removedCredSlug = config.profiles[slug]?.credentialSlug
-  delete config.profiles[slug]
-
-  // GC: if the removed profile's credential is no longer referenced, drop it
-  if (removedCredSlug) {
-    const stillReferenced = Object.values(config.profiles).some(
-      (p) => p.credentialSlug === removedCredSlug,
-    )
-    if (!stillReferenced) {
-      delete config.credentials[removedCredSlug]
-    }
-  }
-
+  delete config.credentials[slug]
   await mkdir(CONFIG_DIR, { recursive: true })
   await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
 }
@@ -941,7 +771,6 @@ const sectionSchemas: Record<ConfigSection, z.ZodTypeAny> = {
   marketData: marketDataSchema,
   compaction: compactionSchema,
   aiProvider: aiProviderSchema,
-  heartbeat: heartbeatSchema,
   snapshot: snapshotSchema,
   mcp: mcpSchema,
   connectors: connectorsSchema,
@@ -958,7 +787,6 @@ const sectionFiles: Record<ConfigSection, string> = {
   marketData: 'market-data.json',
   compaction: 'compaction.json',
   aiProvider: 'ai-provider-manager.json',
-  heartbeat: 'heartbeat.json',
   snapshot: 'snapshot.json',
   mcp: 'mcp.json',
   connectors: 'connectors.json',

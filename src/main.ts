@@ -1,7 +1,8 @@
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { dirname } from 'path'
-// AgentCenter retired — the in-process agent loop now runs inside the
-// native workspace CLIs; Alice drives GenerateRouter directly.
+// The in-process AI loop (AgentCenter, then GenerateRouter + AgentWork) is gone
+// as of 0.40 — the model loop runs inside the native workspace CLIs; autonomous
+// runs go through headless workspace dispatch (cron → workspace).
 import { loadConfig } from './core/config.js'
 import { dataPath, defaultPath } from '@/core/paths.js'
 import type { Plugin, EngineContext } from './core/types.js'
@@ -39,19 +40,12 @@ import { inboxPushFactory } from './tool/inbox-push.js'
 import { createEntityStore } from './core/entity-store.js'
 import { entityUpsertFactory } from './tool/entity-upsert.js'
 import { entitySearchFactory } from './tool/entity-search.js'
-import { AgentWorkRunner } from './core/agent-work.js'
-import { GenerateRouter } from './core/ai-provider-manager.js'
-import { VercelAIProvider } from './ai-providers/vercel-ai-sdk/vercel-provider.js'
-import { AgentSdkProvider } from './ai-providers/agent-sdk/agent-sdk-provider.js'
-import { CodexProvider } from './ai-providers/codex/index.js'
 import { createEventLog } from './core/event-log.js'
 import { createToolCallLog } from './core/tool-call-log.js'
 import { createListenerRegistry } from './core/listener-registry.js'
 import { createEventBus } from './core/event-bus.js'
 import { createCronEngine, createCronListener, createCronTools } from './task/cron/index.js'
-import { createHeartbeat } from './task/heartbeat/index.js'
 import { createMetricsListener } from './task/metrics/index.js'
-import { createAgentWorkListener } from './core/agent-work-listener.js'
 import { NewsCollectorStore, NewsCollector } from './domain/news/index.js'
 import { createNewsArchiveTools } from './tool/news.js'
 
@@ -59,8 +53,6 @@ import { createNewsArchiveTools } from './tool/news.js'
 
 const PERSONA_FILE = dataPath('brain', 'persona.md')
 const PERSONA_DEFAULT = defaultPath('persona.default.md')
-const HEARTBEAT_FILE = dataPath('brain', 'heartbeat.md')
-const HEARTBEAT_DEFAULT = defaultPath('heartbeat.default.md')
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -120,18 +112,9 @@ async function main() {
   const utaManager = new UTAManagerSDK({ client: utaClient })
 
   // ==================== Persona ====================
-  // Persona + heartbeat default files are seeded on first run so the user
-  // has editable overrides to point their config at.
-  await Promise.all([
-    readWithDefault(PERSONA_FILE, PERSONA_DEFAULT),
-    readWithDefault(HEARTBEAT_FILE, HEARTBEAT_DEFAULT),
-  ])
-
-  /** Re-read persona from disk on each request so live edits in the
-   *  Settings UI take effect without a restart. */
-  const getInstructions = async () => {
-    return await readFile(PERSONA_FILE, 'utf-8').catch(() => '')
-  }
+  // The persona file is seeded on first run so the user has an editable
+  // override (consumed by the workspace context-injector).
+  await readWithDefault(PERSONA_FILE, PERSONA_DEFAULT)
 
   // ==================== Cron ====================
 
@@ -228,23 +211,6 @@ async function main() {
 
   console.log(`tool-center: ${toolCenter.list().length} tools registered`)
 
-  // ==================== AI Provider Chain ====================
-
-  const vercelProvider = new VercelAIProvider(
-    () => toolCenter.getVercelTools(),
-    getInstructions,
-    config.agent.maxSteps,
-  )
-  const agentSdkProvider = new AgentSdkProvider(
-    () => toolCenter.getVercelTools(),
-    getInstructions,
-  )
-  const codexProvider = new CodexProvider(
-    () => toolCenter.getVercelTools(),
-    getInstructions,
-  )
-  const router = new GenerateRouter(vercelProvider, agentSdkProvider, codexProvider)
-
   // ==================== Inbox store ====================
 
   const inboxStore = createInboxStore()
@@ -253,64 +219,22 @@ async function main() {
 
   const entityStore = createEntityStore()
 
-  // ==================== AgentWork runner — shared by all autonomous trigger sources ====================
-  //
-  // Drives the AI loop via GenerateRouter directly (no AgentCenter
-  // layer) and delivers replies to the Inbox under a synthetic
-  // `automation:<source>` workspace id.
-
-  const agentWorkRunner = new AgentWorkRunner({ router, inboxStore })
-
-  // ==================== AgentWork Listener (single dispatch point) ====================
-  //
-  // Owns all `agent.work.requested` traffic. Each trigger source
-  // (cron / heartbeat / webhook) registers its source config and
-  // emits the canonical event; the listener routes by source field
-  // and runs the AgentWork pipeline.
-
-  const agentWorkListener = createAgentWorkListener({
-    runner: agentWorkRunner,
-    registry: listenerRegistry,
-  })
-  await agentWorkListener.start()
-
-  // Register the `task` (webhook-triggered) source inline. Unlike
-  // heartbeat and cron, there's no listener-side wrapper — the
-  // webhook ingest endpoint emits agent.work.requested directly
-  // (or translates the legacy task.requested wire format).
-  const taskSession = new SessionStore('task/default')
-  await taskSession.restore()
-  agentWorkListener.registerSource({
-    source: 'task',
-    session: taskSession,
-    preamble: () =>
-      'You are handling an externally-triggered task (session: task/default). Follow the prompt and reply with what the caller needs.',
-    buildDoneMetadata: (req) => ({ prompt: req.prompt }),
-    buildErrorMetadata: (req) => ({ prompt: req.prompt }),
-  })
-
   // ==================== Cron Listener ====================
 
-  const cronSession = new SessionStore('cron/default')
-  await cronSession.restore()
-  const cronListener = createCronListener({ agentWorkListener, registry: listenerRegistry, session: cronSession })
+  // Cross-plugin ref so the cron listener (and McpPlugin) can reach the
+  // WorkspaceService even though WebPlugin — its actual creator — starts later.
+  // `ref.current` is null until the plugin boots; an early cron fire is a loud
+  // skip (see cron listener). Created here so cron dispatch can hold it.
+  const workspaceServiceRef = createWorkspaceServiceRef()
+
+  // Cron fires now dispatch a headless Workspace run (job → workspace+agent),
+  // not the legacy in-process AgentWork path.
+  const cronListener = createCronListener({ registry: listenerRegistry, workspaceServiceRef })
   await cronListener.start()
 
   // Snapshot scheduler lives in UTA after Step 6 — Alice no longer
   // drives the periodic equity-curve writes. The UTA service starts
   // its own scheduler at boot.
-
-  // ==================== Heartbeat (Pump-driven) ====================
-
-  const heartbeat = createHeartbeat({
-    config: config.heartbeat,
-    agentWorkListener, registry: listenerRegistry,
-    session: new SessionStore('heartbeat'),
-  })
-  await heartbeat.start()
-  if (config.heartbeat.enabled) {
-    console.log(`heartbeat: enabled (every ${config.heartbeat.every})`)
-  }
 
   // ==================== Event Metrics (wildcard observer) ====================
 
@@ -343,9 +267,8 @@ async function main() {
   // Core plugins — always-on, not toggleable at runtime
   const corePlugins: Plugin[] = []
 
-  // Cross-plugin ref so McpPlugin can resolve workspaces for `/mcp/:wsId`
-  // even though WebPlugin (the service's actual creator) starts later.
-  const workspaceServiceRef = createWorkspaceServiceRef()
+  // workspaceServiceRef is created earlier (Cron Listener section) so cron
+  // dispatch shares the same box the WebPlugin fills on start.
 
   // MCP Server is always active when a port is set — Claude Code provider depends on it for tools.
   // Lives at top-level config (not under connectors:) because it exports
@@ -378,7 +301,7 @@ async function main() {
   // ==================== Engine Context ====================
 
   const ctx: EngineContext = {
-    config, inboxStore, entityStore, router, eventLog, toolCallLog, heartbeat, cronEngine, toolCenter,
+    config, inboxStore, entityStore, eventLog, toolCallLog, cronEngine, toolCenter,
     listenerRegistry,
     fire: createEventBus(eventLog),
     bbEngine: getSDKExecutor(),
@@ -405,7 +328,6 @@ async function main() {
   const shutdown = async () => {
     stopped = true
     newsCollector?.stop()
-    heartbeat.stop()
     metricsListener.stop()
     cronListener.stop()
     cronEngine.stop()

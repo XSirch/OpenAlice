@@ -4,6 +4,8 @@
  * server from the SessionPool).
  */
 
+import type { WireShape } from '../../api'
+
 export interface Workspace {
   readonly id: string;
   readonly tag: string;
@@ -374,19 +376,12 @@ export async function readWorkspaceFile(id: string, relPath: string): Promise<Re
 
 // ── Agent provider config ───────────────────────────────────────────────────
 
-export interface AgentProfile {
-  readonly name: string;
-  readonly baseUrl: string | null;
-  readonly apiKey: string | null;
-  readonly model: string | null;
-  /** Claude only — which header carries the key, if the profile pins one. */
-  readonly authMode?: 'x-api-key' | 'bearer' | null;
-}
-
 export interface AgentConfig {
   readonly baseUrl: string | null;
   readonly apiKey: string | null;
   readonly model: string | null;
+  /** Wire protocol the endpoint speaks — drives how the adapter is configured. */
+  readonly wireShape?: WireShape | null;
   /** Codex only — wire format for the upstream API. */
   readonly wireApi?: 'chat' | 'responses' | null;
   /**
@@ -406,11 +401,46 @@ export interface AgentConfigBundle {
 
 export type AgentId = 'claude' | 'codex' | 'opencode' | 'pi';
 
-export async function listAgentProfiles(): Promise<AgentProfile[]> {
-  const res = await fetch('/api/workspaces/agent-profiles');
-  if (!res.ok) throw new Error(`list agent profiles failed: ${res.status}`);
-  const body = (await res.json()) as { profiles: AgentProfile[] };
-  return body.profiles;
+// ── Central credential store ──────────────────────────────────────────────
+//
+// Alice's reusable credentials (`data/config/ai-provider-manager.json`). The
+// modal's "Load from saved credential" picker reads these; "Save to Alice"
+// writes a new one. apiKey is returned so a picked credential can be flashed
+// into the form (same exposure as agent-profiles; admin-token gated).
+
+export interface SavedCredential {
+  readonly slug: string;
+  readonly vendor: string;
+  readonly authType: 'api-key' | 'subscription';
+  /** Wire capabilities: each shape this key speaks → its endpoint baseUrl. */
+  readonly wires: Partial<Record<WireShape, string>>;
+  readonly apiKey: string | null;
+}
+
+export async function listCredentials(): Promise<SavedCredential[]> {
+  const res = await fetch('/api/workspaces/credentials');
+  if (!res.ok) throw new Error(`list credentials failed: ${res.status}`);
+  const body = (await res.json()) as { credentials: SavedCredential[] };
+  return body.credentials;
+}
+
+/** Persist a hand-entered provider as a reusable central credential. Returns the slug. */
+export async function saveCredential(input: {
+  apiKey: string;
+  baseUrl?: string;
+  agent?: AgentId;
+  wireShape?: WireShape;
+}): Promise<{ slug: string; vendor: string }> {
+  const res = await fetch('/api/workspaces/credentials', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`save credential failed: ${res.status} ${msg}`);
+  }
+  return (await res.json()) as { slug: string; vendor: string };
 }
 
 export async function getAgentConfig(wsId: string): Promise<AgentConfigBundle> {
@@ -448,6 +478,8 @@ export interface AgentTestInput {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  /** Wire protocol to probe with (shared dispatcher). */
+  readonly wireShape?: WireShape;
   /** Codex only. */
   readonly wireApi?: 'chat' | 'responses';
   /** Claude only. */
