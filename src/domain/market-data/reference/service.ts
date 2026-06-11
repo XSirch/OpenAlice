@@ -18,14 +18,11 @@ import { createHubFetcher, markLocal, type HubConfig } from './hub.js'
 export interface ReferenceDataDeps {
   equityClient: EquityClientLike
   economyClient: EconomyClientLike
-  /** Only on the typebb-sdk backend — the openbb-api client set has no
-   *  derivatives twin. Term structure fails loud without it. */
-  derivativesClient?: DerivativesClientLike
-  /** Only on the typebb-sdk backend (no openbb-api twin). */
-  indexClient?: IndexClientLike
-  /** Configured default equity provider — the meta label. On the SDK backend
-   *  the client routes by its constructed default, so the label is the
-   *  REQUESTED provider (same caveat as the bar layer's vendor meta). */
+  derivativesClient: DerivativesClientLike
+  indexClient: IndexClientLike
+  /** Configured default equity provider — the meta label. The client routes
+   *  by its constructed default, so the label is the REQUESTED provider
+   *  (same caveat as the bar layer's vendor meta). */
   equityProvider: string
   /** Hosted-hub config (marketData.hub). Undefined = local-only. */
   hub?: HubConfig
@@ -141,20 +138,12 @@ export function createReferenceData(deps: ReferenceDataDeps): ReferenceDataServi
 
   const termStructure = cachedBoard(TTL.termStructure, async () => {
     const hub = await viaHub<TermStructureBoard>('term-structure')
-    if (hub) return hub
-    if (!deps.derivativesClient) {
-      throw new Error('Term structure requires the typebb-sdk market-data backend (derivatives client unavailable).')
-    }
-    return markLocal(await fetchTermStructure(deps.derivativesClient))
+    return hub ?? markLocal(await fetchTermStructure(deps.derivativesClient))
   })
 
   const valuation = cachedBoard(TTL.valuation, async () => {
     const hub = await viaHub<ValuationStrip>('valuation')
-    if (hub) return hub
-    if (!deps.indexClient) {
-      throw new Error('Valuation strip requires the typebb-sdk market-data backend (index client unavailable).')
-    }
-    return markLocal(await fetchValuationStrip(deps.indexClient))
+    return hub ?? markLocal(await fetchValuationStrip(deps.indexClient))
   })
 
   return {

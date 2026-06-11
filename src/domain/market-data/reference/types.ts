@@ -118,11 +118,10 @@ export interface ReferenceDataService {
    *  the FRED key is missing. */
   macro(): Promise<MacroBoard>
   /** BTC/ETH futures term structure from Deribit (keyless), with
-   *  annualized basis vs the perpetual. Requires the typebb-sdk backend
-   *  (the derivatives client has no openbb-api twin). */
+   *  annualized basis vs the perpetual. */
   termStructure(): Promise<TermStructureBoard>
   /** S&P 500 valuation strip (PE / CAPE / earnings yield / dividend
-   *  yield) from multpl — keyless. Requires the typebb-sdk backend. */
+   *  yield) from multpl — keyless. */
   valuation(): Promise<ValuationStrip>
   /** Cross-country comparison (CPI YoY / short rate / CLI) from OECD —
    *  keyless. Cell-level failures are annotated, total failure throws. */

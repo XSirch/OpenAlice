@@ -22,11 +22,6 @@ import { withHubCalendars } from './domain/market-data/hub-data.js'
 import { getSDKExecutor, buildRouteMap, SDKEquityClient, SDKCryptoClient, SDKCurrencyClient, SDKEtfClient, SDKIndexClient, SDKDerivativesClient, SDKCommodityClient, SDKEconomyClient } from './domain/market-data/client/typebb/index.js'
 import type { EquityClientLike, CryptoClientLike, CurrencyClientLike, EtfClientLike, IndexClientLike, DerivativesClientLike, CommodityClientLike, EconomyClientLike } from './domain/market-data/client/types.js'
 import { buildSDKCredentials } from './domain/market-data/credential-map.js'
-import { OpenBBEquityClient } from './domain/market-data/client/openbb-api/equity-client.js'
-import { OpenBBCryptoClient } from './domain/market-data/client/openbb-api/crypto-client.js'
-import { OpenBBCurrencyClient } from './domain/market-data/client/openbb-api/currency-client.js'
-import { OpenBBCommodityClient } from './domain/market-data/client/openbb-api/commodity-client.js'
-import { OpenBBEconomyClient } from './domain/market-data/client/openbb-api/economy-client.js'
 import { createMarketSearchTools } from './tool/market.js'
 import { createQuantTools } from './tool/quant.js'
 import { createBarService } from './domain/market-data/bars/index.js'
@@ -139,20 +134,12 @@ async function main() {
   let cryptoClient: CryptoClientLike
   let currencyClient: CurrencyClientLike
   let commodityClient: CommodityClientLike
-  let etfClient: EtfClientLike | undefined
-  let indexClient: IndexClientLike | undefined
-  let derivativesClient: DerivativesClientLike | undefined
+  let etfClient: EtfClientLike
+  let indexClient: IndexClientLike
+  let derivativesClient: DerivativesClientLike
   let economyClient: EconomyClientLike
 
-  if (config.marketData.backend === 'openbb-api') {
-    const url = config.marketData.apiUrl
-    const keys = config.marketData.providerKeys
-    equityClient = new OpenBBEquityClient(url, providers.equity, keys)
-    cryptoClient = new OpenBBCryptoClient(url, providers.crypto, keys)
-    currencyClient = new OpenBBCurrencyClient(url, providers.currency, keys)
-    commodityClient = new OpenBBCommodityClient(url, providers.commodity, keys) as unknown as CommodityClientLike
-    economyClient = new OpenBBEconomyClient(url, 'federal_reserve', keys) as unknown as EconomyClientLike
-  } else {
+  {
     const executor = getSDKExecutor()
     const routeMap = buildRouteMap()
     const credentials = buildSDKCredentials(config.marketData.providerKeys, config.marketData.hub)

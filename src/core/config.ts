@@ -232,7 +232,6 @@ const securitiesSchema = z.object({
 
 const marketDataSchema = z.object({
   enabled: z.boolean().default(true),
-  apiUrl: z.string().default('http://localhost:6900'),
   providers: z.object({
     equity: z.string().default('yfinance'),
     crypto: z.string().default('yfinance'),
@@ -257,7 +256,6 @@ const marketDataSchema = z.object({
     tiingo: z.string().optional(),
     biztoc: z.string().optional(),
   }).default({}),
-  backend: z.enum(['typebb-sdk', 'openbb-api']).default('typebb-sdk'),
   /** Hosted reference-data hub (TraderHub). Enabled by default: anonymous
    *  GETs of public boards, no user data attached; one switch to opt out.
    *  Self-hosters point baseUrl at their own instance. */

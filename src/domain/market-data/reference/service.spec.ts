@@ -26,10 +26,15 @@ function mkEquityClient(overrides: Partial<EquityClientLike>): EquityClientLike 
   } as unknown as EquityClientLike
 }
 
+const DERIVATIVES_STUB = {} as never
+const INDEX_STUB = {} as never
+
 describe('reference service', () => {
   it('movers: one list failing does not kill the board', async () => {
     const ref = createReferenceData({
       economyClient: ECONOMY_STUB,
+      derivativesClient: DERIVATIVES_STUB,
+      indexClient: INDEX_STUB,
       equityClient: mkEquityClient({ getLosers: async () => { throw new Error('boom') } }),
       equityProvider: 'yfinance',
     })
@@ -42,6 +47,8 @@ describe('reference service', () => {
   it('calendar: partial upstream failure is annotated per list, not silent', async () => {
     const ref = createReferenceData({
       economyClient: ECONOMY_STUB,
+      derivativesClient: DERIVATIVES_STUB,
+      indexClient: INDEX_STUB,
       equityClient: mkEquityClient({
         getCalendarIpo: async () => { throw new Error('Unauthorized FMP request -> 403') },
       }),
@@ -58,6 +65,8 @@ describe('reference service', () => {
     const dead = async () => { throw new Error('FMP API key required') }
     const ref = createReferenceData({
       economyClient: ECONOMY_STUB,
+      derivativesClient: DERIVATIVES_STUB,
+      indexClient: INDEX_STUB,
       equityClient: mkEquityClient({
         getCalendarEarnings: dead, getCalendarIpo: dead, getCalendarDividend: dead,
       }),
@@ -68,6 +77,7 @@ describe('reference service', () => {
 
   it('calendar: window defaults to 14 days from today', async () => {
     const ref = createReferenceData({ economyClient: ECONOMY_STUB,
+      derivativesClient: DERIVATIVES_STUB, indexClient: INDEX_STUB,
       equityClient: mkEquityClient({}), equityProvider: 'yfinance' })
     const board = await ref.calendar()
     const start = new Date(board.window.start + 'T00:00:00Z').getTime()
