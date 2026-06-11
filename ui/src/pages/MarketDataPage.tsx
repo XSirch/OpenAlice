@@ -82,8 +82,6 @@ export function MarketDataPage() {
     )
   }
 
-  const dataBackend = (config.backend as string) || 'typebb-sdk'
-  const apiUrl = (config.apiUrl as string) || 'http://localhost:6900'
   const providers = (config.providers ?? { equity: 'yfinance', crypto: 'yfinance', currency: 'yfinance', commodity: 'yfinance' }) as Record<string, string>
   const providerKeys = (config.providerKeys ?? {}) as Record<string, string>
   const hub = (config.hub ?? { enabled: true, baseUrl: 'https://traderhub.openalice.ai' }) as { enabled: boolean; baseUrl: string }
@@ -135,13 +133,6 @@ export function MarketDataPage() {
             onKeyChange={handleKeyChange}
           />
 
-          {/* Advanced — backend switch */}
-          <AdvancedSection
-            backend={dataBackend}
-            apiUrl={apiUrl}
-            onBackendChange={(backend) => updateConfigImmediate({ backend })}
-            onApiUrlChange={(url) => updateConfig({ apiUrl: url })}
-          />
         </div>
         {loadError && <p className="text-[13px] text-red mt-4 max-w-[880px] mx-auto">Failed to load configuration.</p>}
       </div>
@@ -251,79 +242,6 @@ function ApiKeysSection({
         })}
       </div>
     </ConfigSection>
-  )
-}
-
-// ==================== Advanced Section ====================
-
-function AdvancedSection({
-  backend,
-  apiUrl,
-  onBackendChange,
-  onApiUrlChange,
-}: {
-  backend: string
-  apiUrl: string
-  onBackendChange: (backend: string) => void
-  onApiUrlChange: (url: string) => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className="py-6 border-b border-border/60 last:border-b-0">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 cursor-pointer text-left mb-1"
-      >
-        <h3 className="text-[14px] font-semibold text-text">Advanced</h3>
-        <span className="text-[11px] text-text-muted/50">{expanded ? '\u25BC' : '\u25B6'}</span>
-      </button>
-      {!expanded && (
-        <p className="text-[13px] text-text-muted/70">Data backend selection.</p>
-      )}
-      {expanded && (
-        <div className="space-y-6 mt-4">
-          {/* Data Backend */}
-          <div>
-            <p className="text-[13px] font-medium text-text mb-2">Data Backend</p>
-            <div className="flex border border-border rounded-lg overflow-hidden w-fit mb-2">
-              {(['typebb-sdk', 'openbb-api'] as const).map((opt, i) => (
-                <button
-                  key={opt}
-                  onClick={() => onBackendChange(opt)}
-                  className={`px-4 py-1.5 text-[13px] font-medium transition-colors cursor-pointer ${
-                    i > 0 ? 'border-l border-border' : ''
-                  } ${
-                    backend === opt
-                      ? 'bg-bg-tertiary text-text'
-                      : 'text-text-muted hover:text-text'
-                  }`}
-                >
-                  {opt === 'typebb-sdk' ? 'Built-in Engine (TypeBB)' : 'External OpenBB API'}
-                </button>
-              ))}
-            </div>
-            <p className="text-[12px] text-text-muted/70">
-              {backend === 'typebb-sdk'
-                ? 'Uses the built-in TypeBB engine. No external process required.'
-                : 'Connects to an external OpenBB-compatible HTTP endpoint.'}
-            </p>
-            {backend === 'openbb-api' && (
-              <div className="mt-3">
-                <Field label="API URL">
-                  <input
-                    className={inputClass}
-                    value={apiUrl}
-                    onChange={(e) => onApiUrlChange(e.target.value)}
-                    placeholder="http://localhost:6900"
-                  />
-                </Field>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
   )
 }
 

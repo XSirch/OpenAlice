@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildSDKCredentials, buildCredentialsHeader } from '../credential-map.js'
+import { buildSDKCredentials } from '../credential-map.js'
 
 describe('buildSDKCredentials — in-process opentypebb path', () => {
   it('maps fred → federal_reserve_api_key (provider name auto-prefix)', () => {
@@ -46,28 +46,9 @@ describe('buildSDKCredentials — in-process opentypebb path', () => {
   })
 })
 
-describe('buildCredentialsHeader — legacy Python sidecar HTTP path', () => {
-  it('still maps fred → fred_api_key (Python OpenBB contract, intentional divergence from SDK path)', () => {
-    expect(buildCredentialsHeader({ fred: 'k1' })).toBe(JSON.stringify({ fred_api_key: 'k1' }))
-  })
 
-  it('returns undefined when no keys are configured', () => {
-    expect(buildCredentialsHeader(undefined)).toBeUndefined()
-    expect(buildCredentialsHeader({})).toBeUndefined()
-    expect(buildCredentialsHeader({ fred: undefined })).toBeUndefined()
-  })
-
-  it('maps multiple providers into one JSON object', () => {
-    const header = buildCredentialsHeader({ fred: 'k1', fmp: 'k2' })
-    expect(JSON.parse(header!)).toEqual({ fred_api_key: 'k1', fmp_api_key: 'k2' })
-  })
-})
-
-describe('two-table contract — divergence is intentional', () => {
-  it('fred maps to different field names on each path', () => {
-    // HTTP: legacy Python OpenBB sidecar expects `fred_api_key`
-    expect(JSON.parse(buildCredentialsHeader({ fred: 'k' })!)).toEqual({ fred_api_key: 'k' })
-    // SDK: in-process opentypebb expects provider-prefixed `federal_reserve_api_key`
+describe('fred divergence — user key name ≠ SDK provider name', () => {
+  it('fred maps to the provider-prefixed federal_reserve_api_key', () => {
     expect(buildSDKCredentials({ fred: 'k' })).toEqual({ federal_reserve_api_key: 'k' })
   })
 })
