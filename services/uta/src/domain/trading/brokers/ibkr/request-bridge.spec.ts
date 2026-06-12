@@ -16,6 +16,24 @@ function pushUpdate(b: RequestBridge, contract: Contract, qty: number, avgCost =
   b.updatePortfolio(contract, new Decimal(qty), '101', String(qty * 101), avgCost, '1', '0', 'DU1')
 }
 
+describe('RequestBridge — error routing', () => {
+  it('routes 10xxx errors into the pending request (no silent timeout)', async () => {
+    // Regression: `errorCode >= 2000` swallowed 10089 (market data needs
+    // subscription) — the snapshot promise timed out with zero context
+    // instead of carrying the venue's actionable message.
+    const b = new RequestBridge()
+    const promise = b.requestSnapshot(9001, 5000)
+    b.error(9001, 0, 10089, 'Requested market data requires additional subscription for API.')
+    await expect(promise).rejects.toThrow(/subscription/)
+  })
+
+  it('still ignores 21xx farm-status noise', () => {
+    const b = new RequestBridge()
+    // no pending request — must simply not throw
+    expect(() => b.error(-1, 0, 2104, 'Market data farm connection is OK')).not.toThrow()
+  })
+})
+
 /**
  * TWS account-subscription semantics: full download bursts end with
  * accountDownloadEnd; between bursts TWS pushes DELTAS with no end marker

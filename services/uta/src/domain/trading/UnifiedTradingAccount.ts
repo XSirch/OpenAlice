@@ -8,7 +8,7 @@
  */
 
 import Decimal from 'decimal.js'
-import { Contract, Order, ContractDescription, ContractDetails, UNSET_DECIMAL } from '@traderalice/ibkr'
+import { Contract, Order, ContractDescription, ContractDetails, UNSET_DECIMAL, UNSET_INTEGER, UNSET_DOUBLE } from '@traderalice/ibkr'
 import { BrokerError, type IBroker, type AccountInfo, type Position, type OpenOrder, type PlaceOrderResult, type Quote, type MarketClock, type AccountCapabilities, type BrokerHealth, type BrokerHealthInfo, type UTAReach, type UTATier, type TpSlParams, type Bar, type BarParams } from './brokers/types.js'
 
 const REACH_RANK: Record<UTAReach, number> = { down: 0, connected: 1, readable: 2 }
@@ -955,6 +955,13 @@ export class UnifiedTradingAccount {
       const value = src[key]
       if (key === 'aliceId') continue
       if (value === undefined || value === '' || value === null) continue
+      // Numeric defaults are defaults too: `new Contract()` sets conId=0 and
+      // sentinel numbers (UNSET_DOUBLE/UNSET_INTEGER) on numeric fields. A
+      // blanket copy clobbered the expanded conId back to 0 — the broker got
+      // an all-empty contract and TWS rejected with error 321 (the by-conId
+      // quote path was dead in production while direct broker calls worked).
+      // No numeric Contract field carries signal at 0 or at a sentinel.
+      if (typeof value === 'number' && (value === 0 || value === UNSET_INTEGER || value === UNSET_DOUBLE)) continue
       dst[key] = value
     }
     return expanded

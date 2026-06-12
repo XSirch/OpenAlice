@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Decimal from 'decimal.js'
-import { Order, OrderState, UNSET_DOUBLE, UNSET_DECIMAL } from '@traderalice/ibkr'
+import { Contract, Order, OrderState, UNSET_DOUBLE, UNSET_DECIMAL } from '@traderalice/ibkr'
 import { UnifiedTradingAccount } from './UnifiedTradingAccount.js'
 import type { UnifiedTradingAccountOptions } from './UnifiedTradingAccount.js'
 import { MockBroker, makeContract, makePosition, makeOpenOrder } from './brokers/mock/index.js'
@@ -296,6 +296,68 @@ describe('UTA — getAccount PnL invariant', () => {
 
     const account = await uta.getAccount()
     expect(account.unrealizedPnL).toBe('777')
+  })
+})
+
+// ==================== aliceId expansion overlay ====================
+
+describe('UTA — _expandAliceIdIfNeeded overlay (via getQuote)', () => {
+  it('does not clobber resolved fields with Contract numeric defaults (conId=0)', async () => {
+    // Regression (IBKR round 7): the HTTP route wraps the body with
+    // Object.assign(new Contract(), body) — string defaults ('') were
+    // skipped by the overlay, but conId=0 was copied and CLOBBERED the
+    // expanded conId. The broker got an all-empty contract → TWS 321.
+    const broker = new MockBroker()
+    const seen: Contract[] = []
+    broker.resolveNativeKey = (nativeKey: string) => {
+      const c = new Contract()
+      c.conId = 12087792
+      c.symbol = 'EUR'
+      c.secType = 'CASH'
+      c.exchange = 'IDEALPRO'
+      c.currency = 'USD'
+      void nativeKey
+      return c
+    }
+    const origQuote = broker.getQuote.bind(broker)
+    broker.getQuote = async (c: Contract) => {
+      seen.push(c)
+      return origQuote(makeContract({ symbol: 'EUR' }))
+    }
+    const uta = new UnifiedTradingAccount(broker)
+
+    // Route-style stub: aliceId only, every other field at Contract defaults
+    const stub = Object.assign(new Contract(), { aliceId: 'mock-paper|12087792' })
+    await uta.getQuote(stub)
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0].conId).toBe(12087792)
+    expect(seen[0].symbol).toBe('EUR')
+    expect(seen[0].exchange).toBe('IDEALPRO')
+  })
+
+  it('still applies caller overrides that carry real values', async () => {
+    const broker = new MockBroker()
+    const seen: Contract[] = []
+    broker.resolveNativeKey = () => {
+      const c = new Contract()
+      c.conId = 42
+      c.symbol = 'AAPL'
+      c.exchange = 'SMART'
+      return c
+    }
+    const origQuote = broker.getQuote.bind(broker)
+    broker.getQuote = async (c: Contract) => {
+      seen.push(c)
+      return origQuote(makeContract({ symbol: 'AAPL' }))
+    }
+    const uta = new UnifiedTradingAccount(broker)
+
+    const stub = Object.assign(new Contract(), { aliceId: 'mock-paper|42', exchange: 'NASDAQ' })
+    await uta.getQuote(stub)
+
+    expect(seen[0].conId).toBe(42)
+    expect(seen[0].exchange).toBe('NASDAQ') // real override survives
   })
 })
 

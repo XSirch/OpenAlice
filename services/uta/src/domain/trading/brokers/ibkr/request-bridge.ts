@@ -387,8 +387,12 @@ export class RequestBridge extends DefaultEWrapper {
   // ---- Error routing ----
 
   override error(reqId: number, _errorTime: number, errorCode: number, errorString: string): void {
-    // Informational messages (code >= 2000) — data farm status, etc.
-    if (errorCode >= 2000) return
+    // Informational warnings live in the 2100-2200 band (data farm
+    // status etc.). The old `>= 2000` blanket also swallowed the 10xxx
+    // REAL errors (10089 no-subscription, 10197 competing session...) —
+    // pending requests then died as useless timeouts instead of carrying
+    // the venue's actionable message.
+    if (errorCode >= 2100 && errorCode < 2200) return
 
     // System-level errors (reqId === -1) — connectivity events
     if (reqId === NO_VALID_ID) {
