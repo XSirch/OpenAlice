@@ -15,7 +15,7 @@ Discover any command live with `<cli> --help` and `<cli> <group> <verb> --help`
 
 ```bash
 alice market search --query AAPL    # find a symbol → barId
-alice rss grep --pattern BTC        # search the collected-RSS archive
+alice rss grep --pattern BTC        # collected-RSS archive — subscribed feeds only; wider news → the opencli-reader skill
 alice-uta account portfolio --help  # check positions (then `order place --help` to trade)
 alice-workspace inbox push --doc report.md --comments "…"   # surface work to the user
 traderhub board get --board macro   # a finished macro board in one call

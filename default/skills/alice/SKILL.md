@@ -53,9 +53,11 @@ alice rss grep --pattern BTC --meta source=coindesk --meta category=crypto
 Know what `rss` is: an archive of articles Alice's collector pulled from the
 user's **subscribed feeds** — coverage is exactly the feed list, nothing more.
 It is NOT a general news search. Empty results mean "not in the subscribed
-feeds", not "nothing happened". For news beyond the feeds (frontpages,
-breaking, a specific outlet), say what's missing — and if the workspace has
-the `opencli-reader` skill, that's the route to wider sources.
+feeds", not "nothing happened" — so don't stop at "nothing found." For news
+beyond the feeds (frontpages, breaking, a specific outlet, social chatter),
+that's what `opencli` reaches (the `opencli-reader` skill, when this workspace
+has it — it'll ask to install if needed). Say what's missing rather than
+quietly returning thin.
 
 **Technical / quantitative analysis** lives in its own surface — `alice analysis
 search-bars` (find a K-line barId) then `alice analysis quant` (compute). It's a
