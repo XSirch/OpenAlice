@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeTime } from '../../lib/intl';
 import type { ReactElement } from 'react';
-import { Cpu, LayoutGrid, Library, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
+import { Bot, Code2, Cpu, LayoutGrid, Library, Pause, Play, Sparkles, Terminal, X, type LucideIcon } from 'lucide-react';
 
 import { headlessApi, type HeadlessTaskRecord } from '../../api/headless';
 import {
@@ -209,6 +209,8 @@ function agentPrefix(id: string): string {
 const AGENT_ICONS: Record<string, LucideIcon> = {
   claude: Sparkles,
   codex: Cpu,
+  opencode: Code2,
+  pi: Bot,
   shell: Terminal,
 };
 
@@ -487,7 +489,6 @@ export function SessionRow(props: SessionRowProps): ReactElement {
           <AgentBadgeGlyph agentId={s.agent} />
         </span>
         <span className="sidebar-session-name">{s.name}</span>
-        {tidShort && <span className="sidebar-session-tid">{tidShort}</span>}
         {isPaused && <span className="sidebar-session-state">paused</span>}
       </button>
       {isPaused ? (
@@ -495,36 +496,39 @@ export function SessionRow(props: SessionRowProps): ReactElement {
           type="button"
           className="sidebar-session-action sidebar-session-resume"
           title="resume this session"
+          aria-label="resume this session"
           onClick={(e) => {
             e.stopPropagation();
             props.onResume();
           }}
         >
-          ▸
+          <Play size={11} strokeWidth={2.25} fill="currentColor" />
         </button>
       ) : (
         <button
           type="button"
           className="sidebar-session-action sidebar-session-pause"
           title="pause this session"
+          aria-label="pause this session"
           onClick={(e) => {
             e.stopPropagation();
             props.onPause();
           }}
         >
-          ■
+          <Pause size={11} strokeWidth={2.25} fill="currentColor" />
         </button>
       )}
       <button
         type="button"
         className="sidebar-session-action sidebar-session-delete"
         title="delete this session"
+        aria-label="delete this session"
         onClick={(e) => {
           e.stopPropagation();
           props.onDelete();
         }}
       >
-        ×
+        <X size={12} strokeWidth={2.5} />
       </button>
     </li>
   );

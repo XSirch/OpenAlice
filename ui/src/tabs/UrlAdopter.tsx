@@ -26,8 +26,10 @@ export function UrlAdopter() {
   return (
     <>
       <Routes>
-        {/* Root → Inbox (the workspace-anchored landing). */}
-        <Route path="/" element={<Navigate to="/inbox" replace />} />
+        {/* Root → Ask Alice. An AI product should open on how-to-use-it (the
+            chat front door), not an information summary (Inbox is task sync, à
+            la Linear — but Linear's comms live in Slack; ours live here). */}
+        <Route path="/" element={<Navigate to="/chat" replace />} />
 
         {/* Activities */}
         {/* /chat → the "Ask Alice" quick-chat landing (composer). Legacy

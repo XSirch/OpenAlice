@@ -90,13 +90,14 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   // Top — primary nav, always visible (no header, not collapsible).
-  // Mental model: Chat (Ask Alice) is the everyday entry — for most
-  // sessions the chat-template workspace is all you need, so it sits
-  // high. Workspaces (the all-templates index) is the power-user
-  // surface for hands-on session management; the two aren't redundant
-  // (Workspaces = whole set, Chat = chat-shape subset shortcut), but
-  // because day-to-day work rarely leaves Ask Alice, Workspaces sits
-  // at the bottom of this group rather than alongside Chat.
+  // Mental model: Chat (Ask Alice) is THE entry — for an AI product the
+  // chat surface is the front door (how you use the thing), so it sits at
+  // the very top, above Inbox (which is task sync, not the core loop).
+  // Workspaces (the all-templates index) is the power-user surface for
+  // hands-on session management; the two aren't redundant (Workspaces =
+  // whole set, Chat = chat-shape subset shortcut), but because day-to-day
+  // work rarely leaves Ask Alice, Workspaces sits at the bottom of this
+  // group rather than alongside Chat.
   //
   // Market / News are operational tools that work but aren't load-
   // bearing — they live here because they don't need lifecycle
@@ -104,9 +105,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     sectionLabel: '',
     items: [
+      { page: 'chat',       labelKey: 'nav.item.chat',       icon: MessageSquare, defaultTab: { kind: 'chat-landing', params: {} } },
       { page: 'inbox',      labelKey: 'nav.item.inbox',      icon: Inbox, defaultTab: { kind: 'inbox', params: {} } },
       { page: 'tracked',    labelKey: 'nav.item.tracked',    icon: Telescope, defaultTab: { kind: 'tracked', params: {} } },
-      { page: 'chat',       labelKey: 'nav.item.chat',       icon: MessageSquare, defaultTab: { kind: 'chat-landing', params: {} } },
       { page: 'market',     labelKey: 'nav.item.market',     icon: BarChart3 },
       { page: 'news',       labelKey: 'nav.item.news',       icon: Newspaper, defaultTab: { kind: 'news', params: {} } },
       { page: 'workspaces', labelKey: 'nav.item.workspaces', icon: TerminalSquare },
