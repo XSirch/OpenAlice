@@ -105,6 +105,8 @@ export const ja: Resources = {
     deleteWorkspace: 'ワークスペースを削除',
     deleteWorkspaceTitle: 'チャットワークスペースを削除',
     deleteWorkspaceMessage: 'チャットワークスペース {{tag}} を削除しますか？ディスク上のファイルは保持され、ランチャーの登録エントリのみが削除されます。開いているタブはすべて閉じます。',
+    deleteSessionTitle: '会話を削除',
+    deleteSessionMessage: '「{{title}}」を削除しますか？会話とその履歴が削除されます。ワークスペースは残ります。',
     noChatWorkspacesYet: 'チャットワークスペースはまだありません',
   },
   chatLanding: {

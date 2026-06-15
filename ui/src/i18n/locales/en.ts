@@ -116,6 +116,8 @@ export const en = {
     deleteWorkspace: 'Delete workspace',
     deleteWorkspaceTitle: 'Delete chat workspace',
     deleteWorkspaceMessage: "Delete chat workspace {{tag}}? The files on disk are kept; only the launcher's registry entry is removed. Any open tab for it will close.",
+    deleteSessionTitle: 'Delete conversation',
+    deleteSessionMessage: 'Delete "{{title}}"? This removes the conversation and its history. The workspace stays.',
     noChatWorkspacesYet: 'no chat workspaces yet',
   },
   chatLanding: {

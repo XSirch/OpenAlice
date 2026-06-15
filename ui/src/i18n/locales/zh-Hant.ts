@@ -113,6 +113,8 @@ export const zhHant: Resources = {
     deleteWorkspace: '刪除工作區',
     deleteWorkspaceTitle: '刪除對話工作區',
     deleteWorkspaceMessage: '刪除對話工作區 {{tag}}？磁碟上的檔案會保留，只移除發射架的註冊記錄。它任何開啟的分頁都會關閉。',
+    deleteSessionTitle: '刪除對話',
+    deleteSessionMessage: '刪除「{{title}}」？這會移除該對話及其歷史，工作區保留。',
     noChatWorkspacesYet: '尚無對話工作區',
   },
   chatLanding: {

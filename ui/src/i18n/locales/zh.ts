@@ -105,6 +105,8 @@ export const zh: Resources = {
     deleteWorkspace: '删除工作区',
     deleteWorkspaceTitle: '删除对话工作区',
     deleteWorkspaceMessage: '删除对话工作区 {{tag}}？磁盘上的文件会保留，只移除发射架的注册记录。它任何打开的标签页都会关闭。',
+    deleteSessionTitle: '删除对话',
+    deleteSessionMessage: '删除「{{title}}」？这会移除该对话及其历史，工作区保留。',
     noChatWorkspacesYet: '还没有对话工作区',
   },
   chatLanding: {

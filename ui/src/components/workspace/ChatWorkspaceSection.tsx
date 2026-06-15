@@ -178,7 +178,7 @@ export function ChatWorkspaceSection(): ReactElement | null {
             }
             onPauseSession={(sid) => void ctx.pauseSession(w.id, sid)}
             onResumeSession={(sid) => void ctx.resumeSession(w.id, sid)}
-            onDeleteSession={(sid) => void ctx.deleteSession(w.id, sid)}
+            onDeleteSession={(sid) => ctx.requestDeleteSession(w.id, sid)}
             onConfigure={() => ctx.openAgentConfig(w.id)}
             onDelete={() => setPendingDelete(w)}
           />
