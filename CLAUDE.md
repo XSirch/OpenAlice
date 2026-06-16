@@ -537,6 +537,33 @@ flow.
 specific PR ("evaluate #N anyway, I know the author"), not a general
 "go ahead" earlier in the session.
 
+### Recognizing contributors — credit, don't merge
+
+We refuse external code, but the project stays open and community ideas /
+reports / designs genuinely shape it. Recognizing those people is deliberate
+operations (part of the growth flywheel), not a courtesy. It lives in two
+**hand-maintained** files — no script; the volume doesn't justify one:
+
+- **`CONTRIBUTORS.md`** — the credits ledger + a short "how recognition works"
+  guide. Each entry links to the actual change the person influenced, so it's a
+  record, not just a name on a wall.
+- **`README.md` → `## Contributors`** — the avatar wall + a pointer to the ledger.
+- Not to be confused with **`CONTRIBUTING.md`** (the rules doc). Mnemonic:
+  `-ING` = how to contribute; `-ORS` = who contributed.
+
+**To credit someone** (maintainer's call; standouts ⭐ go on top): hand-edit
+`CONTRIBUTORS.md` using the row template in its HTML comment — the avatar is free
+from `https://github.com/<handle>.png` (no token), link the "Shaped" cell to the
+PR / commit / issue they moved, pick a credit emoji from the list at the top of
+the file. Optionally add them to the README wall too.
+
+**IP-clean rule — NEVER `Co-Authored-By:` for a human.** That trailer asserts
+co-authorship (a copyright claim), which breaks the single-owner stance that is
+the whole reason we don't merge external code. Credit humans via the
+`CONTRIBUTORS` page, and — only if you want a git-level record — a non-authorship
+trailer (`Suggested-by:` / `Reported-by:` / `Reviewed-by: @handle`). Claude's
+`Co-Authored-By:` stays as-is (an AI asserts no copyright).
+
 ### Two collaboration modes — pick the right one first
 
 The whole workflow forks on one question:

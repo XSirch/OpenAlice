@@ -512,6 +512,20 @@ Stuck? Here's the recommended path, roughly in order:
 
 [![Star History Chart](https://api.star-history.com/svg?repos=TraderAlice/OpenAlice&type=Date)](https://star-history.com/#TraderAlice/OpenAlice&Date)
 
+## Contributors
+
+We build OpenAlice in-house and [don't merge external PRs](./CONTRIBUTING.md) —
+but the community's ideas, reports, and designs shape it, and we credit every
+one. The people who've left a mark:
+
+<!-- Standouts (⭐) first. Avatars come free from https://github.com/<handle>.png :
+     <a href="https://github.com/HANDLE"><img src="https://github.com/HANDLE.png" width="56" height="56" alt="@HANDLE" /></a> -->
+<p>
+  <em>No one on the wall yet — <a href="https://github.com/TraderAlice/OpenAlice/issues">be the first</a>.</em>
+</p>
+
+**See the full list and what each person shaped** → [CONTRIBUTORS.md](./CONTRIBUTORS.md)
+
 ## License
 
 [AGPL-3.0](LICENSE)
