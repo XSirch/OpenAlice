@@ -170,6 +170,14 @@ export interface AgentInfo {
   readonly id: string;
   readonly displayName: string;
   readonly capabilities: AgentCapabilities;
+  /**
+   * Whether the runtime's CLI was found on the host PATH. Backend-probed per
+   * list call (see src/workspaces/agent-detect.ts). Optional for backward
+   * compat — treat a missing value as installed (don't gate on a stale shape).
+   */
+  readonly installed?: boolean;
+  /** Absolute path the CLI resolved to, when installed. */
+  readonly binPath?: string | null;
 }
 
 export async function listAgents(): Promise<AgentInfo[]> {

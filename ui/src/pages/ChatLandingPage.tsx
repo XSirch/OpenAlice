@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { useWorkspaces } from '../contexts/WorkspacesContext'
+import { installHintFor } from '../components/workspace/agentInstall'
 
 /** Glyph per agent CLI, for the runtime picker (claude/codex/opencode/pi). */
 const AGENT_ICONS: Record<string, LucideIcon> = {
@@ -49,10 +50,28 @@ export function ChatLandingPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const agentBoxRef = useRef<HTMLDivElement>(null)
 
-  // Default to the first installed CLI (claude) until the user picks one.
-  const effectiveAgent = selectedAgent ?? cliAgents[0]?.id ?? null
+  // Backend probes the host PATH and reports `installed` per agent. Treat a
+  // missing value as installed (older backend / don't gate on a stale shape).
+  const isInstalled = (a: { installed?: boolean }) => a.installed !== false
+  const anyInstalled = cliAgents.some(isInstalled)
+  // Whether the `/agents` fetch has actually landed. Before it does, `agents`
+  // is `[]` and `anyInstalled` is falsely false — which would flash the
+  // "nothing installed, go install something" nudge on every page load until
+  // the request resolves. The backend registers claude/codex/opencode/pi/shell
+  // unconditionally, so a loaded list always has ≥1 CLI agent; an empty
+  // `cliAgents` means "still loading" (or the fetch failed) — in both cases we
+  // must NOT assert that the host is missing its runtimes.
+  const agentsKnown = cliAgents.length > 0
+
+  // Default to the first INSTALLED CLI until the user picks one — so a fresh
+  // box that only has, say, codex doesn't silently default to a missing claude.
+  const firstInstalled = cliAgents.find(isInstalled)
+  const effectiveAgent = selectedAgent ?? firstInstalled?.id ?? cliAgents[0]?.id ?? null
   const selectedInfo = cliAgents.find((a) => a.id === effectiveAgent) ?? null
   const SelectedIcon = selectedInfo ? AGENT_ICONS[selectedInfo.id] : undefined
+  // Surface install guidance when the chosen runtime isn't on PATH.
+  const selectedMissing = selectedInfo != null && !isInstalled(selectedInfo)
+  const installHint = selectedInfo ? installHintFor(selectedInfo.id) : undefined
 
   const canSend = value.trim().length > 0 && !launching
 
@@ -159,6 +178,7 @@ export function ChatLandingPage() {
                     {cliAgents.map((a) => {
                       const Icon = AGENT_ICONS[a.id]
                       const active = a.id === effectiveAgent
+                      const missing = !isInstalled(a)
                       return (
                         <button
                           key={a.id}
@@ -168,10 +188,15 @@ export function ChatLandingPage() {
                             setSelectedAgent(a.id)
                             setAgentMenuOpen(false)
                           }}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors hover:bg-bg-tertiary ${active ? 'text-accent' : 'text-text'}`}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors hover:bg-bg-tertiary ${active ? 'text-accent' : missing ? 'text-text-muted/60' : 'text-text'}`}
                         >
                           {Icon ? <Icon className="w-3.5 h-3.5 shrink-0" /> : <span className="w-3.5 shrink-0" />}
                           <span className="flex-1">{a.displayName}</span>
+                          {missing && (
+                            <span className="text-[10px] text-text-muted/70 shrink-0">
+                              {t('chatLanding.agentNotInstalled')}
+                            </span>
+                          )}
                           {active && <Check className="w-3.5 h-3.5 shrink-0" />}
                         </button>
                       )
@@ -205,6 +230,45 @@ export function ChatLandingPage() {
         </div>
 
         {error !== null && <div className="text-[12px] text-red px-1">{error}</div>}
+
+        {/* Runtime install guidance — the conversion nudge. Shows when no agent
+            CLI is installed at all, or the selected one is missing from PATH.
+            Detection is a hint, not a gate, so send stays enabled (PATH probing
+            can be wrong); this just tells the user what to install. Gated on
+            `agentsKnown` so it never flashes during the initial /agents load. */}
+        {agentsKnown && !anyInstalled ? (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-[12px] space-y-1.5">
+            <div className="font-medium text-text">{t('chatLanding.noAgentsTitle')}</div>
+            <p className="text-text-muted">{t('chatLanding.noAgentsBody')}</p>
+            <code className="block font-mono text-[11px] text-text bg-bg-tertiary rounded px-2 py-1 select-all">
+              {installHintFor('claude')!.cmd}
+            </code>
+          </div>
+        ) : selectedMissing && selectedInfo ? (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-[12px] space-y-1.5">
+            <p className="text-text-muted">
+              {t('chatLanding.agentMissing', { name: selectedInfo.displayName })}
+            </p>
+            {installHint?.cmd && (
+              <div className="flex items-center gap-2">
+                <span className="text-text-muted/70">{t('chatLanding.installLabel')}</span>
+                <code className="font-mono text-[11px] text-text bg-bg-tertiary rounded px-2 py-1 select-all">
+                  {installHint.cmd}
+                </code>
+              </div>
+            )}
+            {installHint?.url && (
+              <a
+                href={installHint.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block text-accent hover:underline"
+              >
+                {t('chatLanding.installDocs')} ↗
+              </a>
+            )}
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 px-1">
           <span className="text-[11px] text-text-muted/70">{t('chatLanding.examplesLabel')}</span>

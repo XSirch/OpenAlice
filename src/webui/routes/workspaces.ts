@@ -288,12 +288,20 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
   });
 
   app.get('/agents', (c) => {
+    // Probe the host PATH so the frontend can mark missing runtimes and guide
+    // the user to install them — registration ≠ installed (see agent-detect.ts).
+    const availability = svc.detectAgents();
     return c.json({
-      agents: svc.adapters.list().map((a) => ({
-        id: a.id,
-        displayName: a.displayName,
-        capabilities: a.capabilities,
-      })),
+      agents: svc.adapters.list().map((a) => {
+        const av = availability[a.id];
+        return {
+          id: a.id,
+          displayName: a.displayName,
+          capabilities: a.capabilities,
+          installed: av?.installed ?? true,
+          binPath: av?.path ?? null,
+        };
+      }),
     });
   });
 

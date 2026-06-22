@@ -42,6 +42,7 @@ import { SessionRegistry, type SessionRecord } from './session-registry.js';
 import { buildSpawnEnv } from './spawn-env.js';
 import { readReadmeVersion, TemplateRegistry } from './template-registry.js';
 import { TranscriptWatcher } from './transcript-watcher.js';
+import { detectBinary, type AgentAvailability } from './agent-detect.js';
 import { resolveLaunchCommand } from './win-command.js';
 import { WorkspaceCreator } from './workspace-creator.js';
 import { WorkspaceRegistry, type WorkspaceMeta } from './workspace-registry.js';
@@ -75,6 +76,14 @@ export interface WorkspaceService {
   readonly transcriptWatcher: TranscriptWatcher;
   resolveAdapter(meta: WorkspaceMeta, agentId?: string): CliAdapter;
   publicMeta(w: WorkspaceMeta): Promise<unknown>;
+  /**
+   * Probe the host PATH for each registered adapter's CLI binary. Keyed by
+   * adapter id. Adapters without a `binary` (shell) report installed:true.
+   * A pure filesystem lookup — cheap enough for the `/agents` list call, and
+   * re-run each time so a CLI installed mid-session is picked up on the next
+   * poll.
+   */
+  detectAgents(): Record<string, AgentAvailability>;
   /**
    * Compute what a spawn would do, without actually spawning. The same code
    * path the pool's factory uses internally — dry-run and live can't drift.
@@ -542,6 +551,15 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     transcriptWatcher,
   );
 
+  const detectAgents = (): Record<string, AgentAvailability> => {
+    const out: Record<string, AgentAvailability> = {};
+    for (const a of adapters.list()) {
+      // No declared binary (shell → `$SHELL`) is always available.
+      out[a.id] = a.binary ? detectBinary(a.binary) : { installed: true, path: null };
+    }
+    return out;
+  };
+
   let shuttingDown = false;
 
   const publicMeta = async (w: WorkspaceMeta): Promise<unknown> => {
@@ -626,6 +644,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     transcriptWatcher,
     resolveAdapter,
     publicMeta,
+    detectAgents,
     computeSpawnPlan,
     runHeadlessProbe: runHeadlessProbeMethod,
     runHeadlessTask: runHeadlessTaskMethod,
