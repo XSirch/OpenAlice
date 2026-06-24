@@ -311,6 +311,8 @@ export const en = {
     docExpand: 'Expand',
     docCollapse: 'Collapse',
     docNoPreview: 'No preview available — expand to view.',
+    viewTime: 'Time — newest first',
+    viewWorkspace: 'Group by workspace',
     workspaceNotExists: 'Workspace no longer exists',
     replyInWorkspace: 'Reply in {{label}}…',
     cannotReplyWorkspaceGone: 'Workspace no longer exists — nowhere to reply.',

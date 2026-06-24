@@ -308,6 +308,8 @@ export const zhHant: Resources = {
     docExpand: '展開',
     docCollapse: '收合',
     docNoPreview: '暫無預覽 —— 展開檢視。',
+    viewTime: '時間 —— 最新在前',
+    viewWorkspace: '依工作區分組',
     workspaceNotExists: '工作區已不存在',
     replyInWorkspace: '在 {{label}} 中回覆…',
     cannotReplyWorkspaceGone: '工作區已不存在——無處回覆。',

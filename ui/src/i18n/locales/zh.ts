@@ -300,6 +300,8 @@ export const zh: Resources = {
     docExpand: '展开',
     docCollapse: '收起',
     docNoPreview: '暂无预览 —— 展开查看。',
+    viewTime: '时间 —— 最新在前',
+    viewWorkspace: '按工作区分组',
     workspaceNotExists: '工作区已不存在',
     replyInWorkspace: '在 {{label}} 中回复…',
     cannotReplyWorkspaceGone: '工作区已不存在——无处回复。',

@@ -300,6 +300,8 @@ export const ja: Resources = {
     docExpand: '展開',
     docCollapse: '折りたたむ',
     docNoPreview: 'プレビューなし —— 展開して表示。',
+    viewTime: '時系列 —— 新しい順',
+    viewWorkspace: 'ワークスペース別',
     workspaceNotExists: 'ワークスペースは存在しません',
     replyInWorkspace: '{{label}} で返信…',
     cannotReplyWorkspaceGone: 'ワークスペースが存在しないため、返信先がありません。',

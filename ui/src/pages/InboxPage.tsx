@@ -21,23 +21,18 @@ interface InboxPageProps {
 }
 
 /**
- * Inbox detail pane. Renders the entry's docs (live from workspace) on
- * top as collapsed attachment cards, then the agent's comment (markdown
- * body) below. Docs-on-top is deliberate: collapsed they're compact (a
- * filename + 2-line preview), so they can't flood the pane the way a
- * full auto-rendered file would — and putting them above the comment
- * means a long comment can't push them off-screen and get them missed.
- * Each card shows a short text preview so it reads as openable content,
- * not a bare filename; content is fetched on mount (preview) and the
- * same content renders in full on expand. A comment-less entry (docs
- * ARE the message) defaults its docs expanded.
+ * Inbox detail pane — renders a **single selected push**. The sidebar
+ * clusters pushes by workspace (visual kinship) but each push stays its
+ * own entry, because a workspace's pushes are usually unrelated topics
+ * (we have no Issue layer to make them one thread) — merging them into a
+ * combined timeline read badly. So selection is a single entry, and this
+ * pane shows just that one: its docs (collapsed attachment cards) above
+ * its comment (markdown body), with a reply bar that jumps into the
+ * source workspace.
  *
- * Selection is owned by `useInboxSelection`; the sidebar drives it.
- * Read-state mutation happens in the sidebar at selection time — this
- * pane just renders whatever is selected. Delete is owned here (both
- * the button in the Detail header and the Delete/Backspace shortcut)
- * because it needs access to the full entry list to advance selection
- * to the next entry after removal.
+ * Selection (an entryId) is owned by `useInboxSelection`; the sidebar
+ * drives it and marks the entry read on select. Delete (header trash +
+ * page-level Delete/Backspace) advances selection to the next entry.
  */
 export function InboxPage({ visible }: InboxPageProps) {
   const { t } = useTranslation()
@@ -49,18 +44,15 @@ export function InboxPage({ visible }: InboxPageProps) {
 
   const selected = entries.find((e) => e.id === selectedId) ?? null
 
-  /** Hard-delete an entry. Optimistically removes from local state,
-   *  advances selection to the next-older entry (or previous if last),
-   *  fires the DELETE request, then forces a refresh to reconcile with
-   *  the server. Match Linear's "archive removes from view, focus
-   *  advances" feel — no confirmation dialog. */
+  /** Hard-delete an entry. Optimistically removes it, advances selection
+   *  to the next-older entry (or previous if last), fires the DELETE,
+   *  then refreshes to reconcile with the server. */
   const handleDelete = useCallback(async (id: string) => {
     const idx = entries.findIndex((e) => e.id === id)
     if (idx < 0) return
 
-    // entries is sorted newest-first; "the one after this" is the next
-    // older entry. Fall back to the previous (newer) if we deleted the
-    // tail; null if the list becomes empty.
+    // entries is newest-first; the "next" one is the next older entry.
+    // Fall back to the previous (newer) if we deleted the tail.
     const nextId = entries[idx + 1]?.id ?? entries[idx - 1]?.id ?? null
 
     removeInboxOptimistically(id)
@@ -74,15 +66,13 @@ export function InboxPage({ visible }: InboxPageProps) {
     try {
       await api.inbox.delete(id)
     } catch {
-      // best-effort — refreshInbox below will reconcile if the server
-      // disagreed (e.g. concurrent change re-introduced the entry).
+      // best-effort — refreshInbox below reconciles if the server disagreed.
     }
     refreshInbox()
   }, [entries, select, markRead])
 
-  // Delete / Backspace shortcut. Gated on `visible` so a background
-  // inbox tab doesn't intercept; gated on `selectedId` so the
-  // keypress only fires when there's something to delete.
+  // Delete / Backspace shortcut. Gated on `visible` (background inbox
+  // tabs must not intercept) and on a selected entry existing.
   useEffect(() => {
     if (!visible) return
     if (!selectedId) return
@@ -91,7 +81,6 @@ export function InboxPage({ visible }: InboxPageProps) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
       e.preventDefault()
-      // selectedId is captured by the closure; safe to use.
       void handleDelete(selectedId!)
     }
     window.addEventListener('keydown', onKey)
@@ -114,7 +103,11 @@ export function InboxPage({ visible }: InboxPageProps) {
             {t('inbox.selectFromSidebar')}
           </div>
         ) : (
-          <Detail entry={selected} onDelete={() => handleDelete(selected.id)} />
+          <Detail
+            key={selected.id}
+            entry={selected}
+            onDelete={() => handleDelete(selected.id)}
+          />
         )}
       </div>
     </div>
@@ -136,6 +129,8 @@ function EmptyState() {
     </div>
   )
 }
+
+// ==================== Detail (single push) ====================
 
 function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }) {
   const { t } = useTranslation()
@@ -164,13 +159,7 @@ function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }
 
   return (
     <div className="max-w-[820px] mx-auto py-6 px-4 md:px-8">
-      {/* Header: workspace · timestamp · delete. Plain text label —
-       *  the primary navigation affordance sits at the bottom of the
-       *  comments thread (Linear-style reply input). Trash button is
-       *  always visible, muted by default with accent-red on hover —
-       *  Linear's archive affordance equivalent. Hard delete (no undo
-       *  modal); keyboard parity via Delete / Backspace at the page
-       *  level. */}
+      {/* Header: workspace label · timestamp · delete. */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span
           className={`text-[14px] font-medium ${
@@ -196,11 +185,7 @@ function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }
         </button>
       </div>
 
-      {/* Docs — top, live render from workspace, as collapsed attachment
-       *  cards. Above the comment so a long comment can't push them
-       *  off-screen; collapsed (filename + preview) so they stay compact.
-       *  Expanded by default only when there's no comment (docs ARE the
-       *  message then). */}
+      {/* Docs — collapsed attachment cards above the comment. */}
       {hasDocs && (
         <div>
           <div className="text-[11px] font-medium text-text-muted/60 uppercase tracking-wider mb-3">
@@ -219,9 +204,7 @@ function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }
         </div>
       )}
 
-      {/* Comment — below the docs, the agent's voice and the main body.
-       *  No section label (it IS the body); a divider separates it from
-       *  the docs above when both are present. */}
+      {/* Comment — the agent's voice; divider from the docs above. */}
       {hasComments && (
         <div className={`${hasDocs ? 'mt-6 pt-6 border-t border-border' : ''}`}>
           <MarkdownContent
@@ -231,13 +214,8 @@ function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }
         </div>
       )}
 
-      {/* Reply bar — the navigation entry point. Linear-style: a wide bar
-       *  appended to the comments thread, visually styled like a chat
-       *  input. The action isn't actually sending — clicking opens the
-       *  workspace tab + switches the sidebar so the user can pick a
-       *  session and chat back to the agent there. v2 could pre-fill the
-       *  workspace chat input with whatever the user types here; for v1
-       *  the bar is single-click navigation. */}
+      {/* Reply bar — jumps into the workspace (single-click navigation; a
+       *  v2 could pre-fill the workspace chat input). */}
       <div className="mt-6">
         {wsAlive ? (
           <button
