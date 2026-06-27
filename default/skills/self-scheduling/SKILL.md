@@ -1,32 +1,36 @@
 ---
 name: self-scheduling
 description: >
-  Give THIS workspace a recurring or future task it runs on its own, headless,
-  by writing `.alice/schedule.json` at the workspace root. The launcher scans
-  that file and, when a task is due, spawns a fresh headless run of this
-  workspace with your prompt; the run reports back to the user's Inbox. Use for:
-  "run this every 30 minutes", "every morning before the open do X", "check Y
-  each hour and ping me only if Z", "do this once at 4pm", "self-schedule", "set
-  up a recurring job". Scheduling IS just editing this file — there is no command
-  and no API.
+  Give THIS workspace recurring or future work it runs on its own, headless, by
+  listing issues in `.alice/issue.json` at the workspace root — each issue
+  declares how it wants to be called on a timer. The launcher scans that file
+  and, when an issue is due, spawns a fresh headless run of this workspace with
+  your prompt; the run reports back to the user's Inbox. Use for: "run this
+  every 30 minutes", "every morning before the open do X", "check Y each hour
+  and ping me only if Z", "do this once at 4pm", "self-schedule", "set up a
+  recurring job". Scheduling IS just editing this file — there is no command and
+  no API.
 ---
 
-# Self-scheduling — `.alice/schedule.json`
+# Self-scheduling — `.alice/issue.json`
 
-Declare what this workspace should do on a timer in a file at its own root,
-`.alice/schedule.json`. A launcher scanner reads it (it never interprets the
-work) and fires a **headless run** of this workspace when a task is due.
+List the issues this workspace should work on a timer in a file at its own root,
+`.alice/issue.json`. Each issue declares how it wants to be called on a timer; a
+launcher scanner reads the file (it never interprets the work) and fires a
+**headless run** of this workspace when an issue is due.
 
 ```json
 {
-  "tasks": [
+  "issues": [
     {
       "id": "morning-scan",
+      "issue": "Pre-market brief",
       "when": { "kind": "cron", "cron": "30 8 * * 1-5" },
       "what": "Pull pre-market movers and overnight news for my watchlist, write a short brief to research/premarket.md, then run: alice-workspace inbox push --doc research/premarket.md --comments \"Pre-market brief\"."
     },
     {
       "id": "thesis-watch",
+      "issue": "Thesis invalidation watch",
       "when": { "kind": "every", "every": "1h" },
       "what": "Re-check the thesis in thesis.md against the latest quote. If price has broken the invalidation level, push an alert to the inbox. If not, do nothing and exit — no report."
     }
@@ -42,6 +46,11 @@ that reports only when it has something to say.
 - **`id`** — a stable slug, unique in this file. It keys the scanner's
   "last fired" memory, so don't rename a task you mean to keep (a new id looks
   like a brand-new task and fires right away).
+- **`issue`** — a short, human-readable title of the matter this entry is about
+  (e.g. `"Pre-market brief"`, `"Thesis invalidation watch"`). **Required** —
+  every entry names the issue it serves; scheduling is an ability of an issue,
+  not a standalone object. This is the label the dashboard and Inbox show, while
+  `id` stays the stable machine key.
 - **`when`** — one of:
   - `{ "kind": "every", "every": "30m" }` — repeat on an interval (`30m`, `2h`,
     `1h30m`). Runs on the next scan, then on the interval.
@@ -77,7 +86,7 @@ Put **conditions inside `what`**, not in the schedule — there is no condition
 field. For "ping me only if X", write: "check X; if it holds, push an alert;
 otherwise do nothing and exit."
 
-> **Commit `.alice/schedule.json`.** The scanner reads your working tree, so an
+> **Commit `.alice/issue.json`.** The scanner reads your working tree, so an
 > uncommitted edit still takes effect — but commit it so the schedule travels
 > with the workspace and survives. Treat it like any other source file.
 

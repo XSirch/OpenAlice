@@ -33,26 +33,32 @@ export function AutomationApiSection() {
         <h3 className="font-semibold text-text">1 · Self-scheduled (the workspace declares it)</h3>
         <p className="text-muted">
           A workspace schedules itself by writing{' '}
-          <code className={CODE}>.alice/schedule.json</code> in its own checkout. A
+          <code className={CODE}>.alice/issue.json</code> in its own checkout. A
           launcher scanner reads it and fires each due task as a headless run.
           There is no central registry and no create API — scheduling is a coding
           task (the agent edits the file).
         </p>
         <Block>{`{
-  "tasks": [
+  "issues": [
     {
       "id": "morning-scan",
+      "issue": "Pre-market movers scan",
       "when": { "kind": "cron", "cron": "30 8 * * 1-5" },
       "what": "Pull pre-market movers, write research/premarket.md, then push it to the inbox."
     },
     {
       "id": "thesis-watch",
+      "issue": "Thesis invalidation watch",
       "when": { "kind": "every", "every": "1h" },
       "what": "Re-check thesis.md vs the latest quote; alert only if the invalidation level broke, else exit."
     }
   ]
 }`}</Block>
         <ul className="ml-4 list-disc space-y-1 text-muted">
+          <li>
+            <code className={CODE}>issue</code>: a short title for the matter this entry is about — required, surfaced
+            in the dashboard and Inbox.
+          </li>
           <li>
             <code className={CODE}>when</code>: <code className={CODE}>{`{kind:"every", every:"30m"}`}</code>,{' '}
             <code className={CODE}>{`{kind:"cron", cron:"0 9 * * 1-5"}`}</code>, or{' '}

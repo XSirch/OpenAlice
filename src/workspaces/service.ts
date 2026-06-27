@@ -141,7 +141,7 @@ export interface WorkspaceService {
     prompt: string,
     timeoutMs: number,
   ): Promise<{ taskId: string }>;
-  /** Read-only snapshot of every workspace's declared `.alice/schedule.json` +
+  /** Read-only snapshot of every workspace's declared `.alice/issue.json` +
    *  each task's last-fired marker and computed next-due. Powers GET /api/schedule. */
   scheduleSnapshot(): Promise<ScheduleSnapshot>;
   /** The headless-task management plane (cross-workspace; powers GET /api/headless). */
@@ -481,7 +481,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     return { taskId: rec.taskId };
   };
 
-  // ── Workspace self-scheduling. Scan each workspace's own `.alice/schedule.json`
+  // ── Workspace self-scheduling. Scan each workspace's own `.alice/issue.json`
   // and fire due tasks as headless runs through the SAME dispatch primitive. The
   // scanner owns its own tick (infra periodicity, NOT a scheduled task) and
   // persists only a last-fired marker — never the schedule itself, which lives

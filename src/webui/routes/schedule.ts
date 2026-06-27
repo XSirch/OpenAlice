@@ -1,7 +1,7 @@
 /**
  * /api/schedule — read-only dashboard for workspace self-scheduling.
  *
- * Aggregates every workspace's own `.alice/schedule.json` (the agent writes it;
+ * Aggregates every workspace's own `.alice/issue.json` (the agent writes it;
  * a launcher scanner fires due tasks as headless runs — there is NO central
  * registry) enriched with the scanner's last-fired marker + computed next-due.
  * Creation/edit is NOT a route — scheduling is a coding task (the agent edits

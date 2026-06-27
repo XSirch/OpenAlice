@@ -108,7 +108,8 @@ function UpcomingView({ workspaces }: { workspaces: ScheduleWorkspace[] }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[13px] text-text">{task.id}</span>
+              <span className="text-[13px] font-semibold text-text">{task.issue}</span>
+              <span className="font-mono text-[11px] text-muted/70">{task.id}</span>
               <CadencePill when={task.when} />
               <span className="text-xs text-muted">in {wsTag}</span>
             </div>
@@ -179,7 +180,8 @@ function WorkspaceView({
                 {ws.tasks.map((t) => (
                   <li key={t.id} className={`px-4 py-3 ${t.enabled ? '' : 'opacity-55'}`}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-[13px] text-text">{t.id}</span>
+                      <span className="text-[13px] font-semibold text-text">{t.issue}</span>
+                      <span className="font-mono text-[11px] text-muted/70">{t.id}</span>
                       <CadencePill when={t.when} />
                       {!t.enabled && (
                         <span className="text-[10px] uppercase tracking-wide text-muted/70">paused</span>
@@ -212,7 +214,7 @@ function WorkspaceView({
  * Schedules dashboard — read-only view of GET /api/schedule. Two lenses:
  * "Upcoming" (a time-sorted timeline of what fires next, across all workspaces)
  * and "By workspace" (what each workspace declared). Each workspace owns its
- * `.alice/schedule.json`; the agent writes it, a scanner fires due tasks as
+ * `.alice/issue.json`; the agent writes it, a scanner fires due tasks as
  * headless runs — there is no central registry and nothing to create here.
  */
 export function AutomationSchedulesSection() {
@@ -255,7 +257,7 @@ export function AutomationSchedulesSection() {
           <p className="mt-1 text-xs text-muted/80">
             A workspace schedules itself by writing{' '}
             <code className="rounded bg-bg-tertiary px-1 py-0.5 font-mono text-[11px] text-text/80">
-              .alice/schedule.json
+              .alice/issue.json
             </code>{' '}
             — see the <span className="text-text">API</span> tab for the format.
           </p>

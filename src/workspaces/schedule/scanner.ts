@@ -1,7 +1,7 @@
 /**
  * ScheduleScanner - the dumb external scheduler for workspace self-declared
  * tasks. Each tick it enumerates every workspace, reads that workspace's own
- * `.alice/schedule.json` live, and for every due task fires a headless run via
+ * `.alice/issue.json` live, and for every due task fires a headless run via
  * the workspace's automation interface. It interprets NOTHING about the work -
  * `what` is an opaque prompt handed straight to `dispatchHeadlessTask`.
  *

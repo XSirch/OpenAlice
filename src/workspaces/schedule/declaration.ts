@@ -1,15 +1,18 @@
 /**
- * The workspace self-declared schedule file — `.alice/schedule.json` inside a
- * workspace's own checkout. The agent WRITES it (a coding task; a bundled skill
- * teaches the format); the scanner READS it live each pass. The agent can edit
- * any file in its checkout, so the scanner NEVER trusts it — every read is
- * re-validated and degrades to "no schedule" on missing/oversized/malformed,
- * isolated per workspace.
+ * The workspace self-declared issue file — `.alice/issue.json` inside a
+ * workspace's own checkout. Each entry is an ISSUE that carries its own "how I
+ * want to be called on a timer" capability — scheduling is NOT a standalone
+ * object, it's an ability of the issue. The agent WRITES it (a coding task; a
+ * bundled skill teaches the format); the scanner READS it live each pass. The
+ * agent can edit any file in its checkout, so the scanner NEVER trusts it —
+ * every read is re-validated and degrades to "no schedule" on
+ * missing/oversized/malformed, isolated per workspace.
  *
- * `when` = WHEN to run (reuses the shared Schedule shape: at / every / cron).
- * `what` = an opaque prompt handed verbatim to the workspace's headless
- *          automation interface — the launcher never interprets it. Conditions
- *          ("run only if X") live INSIDE the prompt; the woken agent self-checks.
+ * `issue` = the title of the matter this entry is about (what dashboards show).
+ * `when`  = WHEN to run (reuses the shared Schedule shape: at / every / cron).
+ * `what`  = an opaque prompt handed verbatim to the workspace's headless
+ *           automation interface — the launcher never interprets it. Conditions
+ *           ("run only if X") live INSIDE the prompt; the woken agent self-checks.
  */
 
 import { readFile, stat } from 'node:fs/promises'
@@ -19,7 +22,11 @@ import { z } from 'zod'
 import { computeNextRun, type Schedule } from '../../core/schedule-expr.js'
 
 /** Path of the declaration file, relative to a workspace's `dir`. */
-export const SCHEDULE_FILE_REL = join('.alice', 'schedule.json')
+export const SCHEDULE_FILE_REL = join('.alice', 'issue.json')
+
+/** Former name of the file. Used only to turn a silent "no schedule" into a
+ *  loud, actionable error when an un-migrated workspace still has the old file. */
+const LEGACY_FILE_REL = join('.alice', 'schedule.json')
 
 /** Hard cap — an agent-authored file should be tiny; refuse to parse a blob. */
 const MAX_BYTES = 64 * 1024
@@ -33,6 +40,9 @@ const whenSchema = z.discriminatedUnion('kind', [
 export const scheduleTaskSchema = z.object({
   /** Stable per-workspace id — keys the scanner's last-fired marker. */
   id: z.string().min(1),
+  /** Short title of the issue this entry is about — surfaced in the dashboard
+   *  and Inbox. Required: there is no scheduling without an owning issue. */
+  issue: z.string().min(1),
   when: whenSchema,
   /** The prompt handed to the headless run. */
   what: z.string().min(1),
@@ -44,7 +54,7 @@ export const scheduleTaskSchema = z.object({
 export type ScheduleTask = z.infer<typeof scheduleTaskSchema>
 
 export const scheduleDeclarationSchema = z.object({
-  tasks: z.array(scheduleTaskSchema),
+  issues: z.array(scheduleTaskSchema),
 })
 export type ScheduleDeclaration = z.infer<typeof scheduleDeclarationSchema>
 
@@ -74,7 +84,20 @@ export async function readScheduleDeclaration(wsDir: string): Promise<ReadResult
     }
     raw = await readFile(path, 'utf8')
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ok: false, reason: 'absent' }
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Loud over silent: if the legacy file is still present, say so instead of
+      // reporting a bland "no schedule" that hides a just-needs-renaming file.
+      try {
+        await stat(join(wsDir, LEGACY_FILE_REL))
+        return {
+          ok: false,
+          reason: 'invalid',
+          error: '`.alice/schedule.json` was renamed to `.alice/issue.json` — rename the file',
+        }
+      } catch {
+        return { ok: false, reason: 'absent' }
+      }
+    }
     return { ok: false, reason: 'invalid', error: err instanceof Error ? err.message : String(err) }
   }
 
@@ -90,7 +113,7 @@ export async function readScheduleDeclaration(wsDir: string): Promise<ReadResult
     return { ok: false, reason: 'invalid', error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }
   }
 
-  return { ok: true, tasks: parsed.data.tasks }
+  return { ok: true, tasks: parsed.data.issues }
 }
 
 // ==================== Dashboard snapshot ====================
@@ -99,6 +122,7 @@ export async function readScheduleDeclaration(wsDir: string): Promise<ReadResult
 
 export interface ScheduleSnapshotTask {
   id: string
+  issue: string
   when: Schedule
   what: string
   agent?: string
@@ -152,6 +176,7 @@ export function snapshotTask(
   const next = computeNextRun(when, fireBase(when, lastFiredAtMs, nowMs, lookbackMs))
   return {
     id: task.id,
+    issue: task.issue,
     when,
     what: task.what,
     ...(task.agent ? { agent: task.agent } : {}),
