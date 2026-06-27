@@ -36,6 +36,7 @@ import {
 import {
   annotateNameCollisions,
   detailIssue,
+  inboxReportsForIssue,
   snapshotBoardIssue,
   type IssueDetail,
   type IssueFiringMarkers,
@@ -44,6 +45,7 @@ import {
   type IssuesSnapshotWorkspace,
   type WikilinkIssueRef,
 } from './issues/board.js';
+import type { IInboxStore } from '@/core/inbox-store.js';
 import { HeadlessTaskRegistry, headlessLogPaths } from './headless-task-registry.js';
 
 /** Max concurrent in-flight headless tasks — backstop against unbounded spawn. */
@@ -190,6 +192,11 @@ export interface CreateWorkspaceServiceOptions {
    *  fallback bridge resolves to the live backend (not whatever was the
    *  default in template files). */
   readonly mcpPort: number;
+  /** The global inbox store, so `issueDetail` can join the inbox reports an
+   *  issue produced (entries stamped `origin.issueId`) in the domain layer —
+   *  every surface (HTTP / CLI / MCP) gets the join, not just the route.
+   *  Optional: when absent, `issueDetail` returns `inboxReports: []`. */
+  readonly inboxStore?: IInboxStore;
 }
 
 /**
@@ -210,6 +217,7 @@ export function resumeFromRecord(
 
 export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions): Promise<WorkspaceService> {
   const config = loadConfig({ webPort: opts.webPort });
+  const inboxStore = opts.inboxStore;
 
   const registry = await WorkspaceRegistry.load(
     `${config.launcherRoot}/workspaces.json`,
@@ -669,7 +677,15 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     }
     // Newest-first already (registry.list reverses); filter to this issue's runs.
     const runs = headlessTasks.list({ wsId: ws.id, issueId: issue.id });
-    return { issue: detailIssue(issue, markers), runs };
+    // The issue→inbox cross-link: the reports this issue produced (entries this
+    // workspace pushed whose server-stamped origin.issueId is this issue).
+    // Joined here in the domain so CLI / MCP get it too, not just the HTTP route.
+    let inboxReports: IssueDetail['inboxReports'] = [];
+    if (inboxStore) {
+      const { entries } = await inboxStore.read({ workspaceId: ws.id, limit: 1000 });
+      inboxReports = inboxReportsForIssue(entries, issue.id);
+    }
+    return { issue: detailIssue(issue, markers), runs, inboxReports };
   };
 
   // Resolve a `[[name]]` token to the issues (across ALL workspaces) that claim

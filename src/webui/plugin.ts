@@ -217,12 +217,13 @@ export class WebPlugin implements Plugin {
     this.workspaceService = await createWorkspaceService({
       webPort: this.config.port,
       mcpPort: this.config.mcpPort,
+      inboxStore: ctx.inboxStore,
     })
     if (this.workspaceServiceRef) this.workspaceServiceRef.current = this.workspaceService
     app.route('/api/workspaces', createWorkspaceRoutes(this.workspaceService))
     app.route('/api/headless', createHeadlessRoutes(this.workspaceService))
     app.route('/api/schedule', createScheduleRoutes(this.workspaceService))
-    app.route('/api/issues', createIssuesRoutes(this.workspaceService, ctx.inboxStore))
+    app.route('/api/issues', createIssuesRoutes(this.workspaceService))
     // Tracked entities — read surface for the Tracked tab. Mounted here (not
     // with the other /api/* routes above) because backlink scanning needs the
     // workspace registry, which only exists once workspaceService is created.

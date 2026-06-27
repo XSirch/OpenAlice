@@ -9,7 +9,7 @@
  *
  * Read endpoints:
  *   GET  /api/issues               → list across all workspaces
- *   GET  /api/issues/:wsId/:id      → one issue's detail { issue, runs }
+ *   GET  /api/issues/:wsId/:id      → one issue's detail { issue, runs, inboxReports }
  *
  * Phase 2b adds the human/UI WRITE path (the agent edits the files directly /
  * via its own tools). Both writes go through the shared mutation helper
@@ -24,7 +24,6 @@
  */
 import { Hono } from 'hono'
 
-import type { IInboxStore, InboxEntry } from '../../core/inbox-store.js'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, type IssuePriority, type IssueStatus } from '../../workspaces/issues/declaration.js'
 import { appendIssueComment, updateIssueFields } from '../../workspaces/issues/mutate.js'
 import { logger as launcherLogger } from '../../workspaces/logger.js'
@@ -45,21 +44,8 @@ async function safeJson(c: import('hono').Context): Promise<unknown> {
   }
 }
 
-export function createIssuesRoutes(svc: WorkspaceService, inboxStore?: IInboxStore): Hono {
+export function createIssuesRoutes(svc: WorkspaceService): Hono {
   const app = new Hono()
-
-  /**
-   * The inbox reports this issue produced: every inbox entry from this workspace
-   * whose server-stamped `origin.issueId` is this issue. This is the issue→inbox
-   * direction of the cross-link (the run→issue direction is the Activity feed's
-   * `runs`). Newest-first (inboxStore.read order). Empty when no store is wired
-   * (the older single-arg callers / write-only tests) or no entry matches.
-   */
-  const inboxReportsFor = async (wsId: string, id: string): Promise<InboxEntry[]> => {
-    if (!inboxStore) return []
-    const { entries } = await inboxStore.read({ workspaceId: wsId, limit: 1000 })
-    return entries.filter((e) => e.origin?.issueId === id)
-  }
 
   // GET /api/issues → { workspaces: [{ wsId, tag, status, error?, issues: [...] }] }
   app.get('/', async (c) => {
@@ -67,14 +53,13 @@ export function createIssuesRoutes(svc: WorkspaceService, inboxStore?: IInboxSto
   })
 
   // GET /api/issues/:wsId/:id → { issue: {...incl. body + markers}, runs: [...],
-  // inboxReports: [...] }. 404 when the workspace or the issue id is absent
-  // (mirrors the workspaces route convention: `{ error: 'not_found' }`).
+  // inboxReports: [...] }. The issue→inbox join lives in svc.issueDetail (domain),
+  // so this route is a thin pass-through. 404 when the workspace or the issue id
+  // is absent (mirrors the workspaces route convention: `{ error: 'not_found' }`).
   app.get('/:wsId/:id', async (c) => {
-    const wsId = c.req.param('wsId')
-    const id = c.req.param('id')
-    const detail = await svc.issueDetail(wsId, id)
+    const detail = await svc.issueDetail(c.req.param('wsId'), c.req.param('id'))
     if (!detail) return c.json({ error: 'not_found' }, 404)
-    return c.json({ ...detail, inboxReports: await inboxReportsFor(wsId, id) })
+    return c.json(detail)
   })
 
   // PATCH /api/issues/:wsId/:id — patch board fields { status?, priority?,
@@ -124,8 +109,7 @@ export function createIssuesRoutes(svc: WorkspaceService, inboxStore?: IInboxSto
       }
       launcherLogger.info('issue.updated', { wsId, id, fields: Object.keys(patch) })
       const detail = await svc.issueDetail(wsId, id)
-      const inboxReports = await inboxReportsFor(wsId, id)
-      return c.json({ ...(detail ?? { issue: res.issue, runs: [] }), inboxReports })
+      return c.json(detail ?? { issue: res.issue, runs: [], inboxReports: [] })
     } catch (err) {
       launcherLogger.warn('issue.update_failed', { wsId, id, err })
       return c.json({ error: 'write_failed', message: (err as Error).message }, 500)
@@ -160,8 +144,7 @@ export function createIssuesRoutes(svc: WorkspaceService, inboxStore?: IInboxSto
       }
       launcherLogger.info('issue.comment_added', { wsId, id, author: 'human' })
       const detail = await svc.issueDetail(wsId, id)
-      const inboxReports = await inboxReportsFor(wsId, id)
-      return c.json({ ...(detail ?? { issue: res.issue, runs: [] }), inboxReports })
+      return c.json(detail ?? { issue: res.issue, runs: [], inboxReports: [] })
     } catch (err) {
       launcherLogger.warn('issue.comment_failed', { wsId, id, err })
       return c.json({ error: 'write_failed', message: (err as Error).message }, 500)

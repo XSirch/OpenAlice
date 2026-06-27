@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createIssuesRoutes } from './issues.js'
-import { createMemoryInboxStore, type IInboxStore } from '../../core/inbox-store.js'
+import type { InboxEntry } from '../../core/inbox-store.js'
 import { detailIssue } from '../../workspaces/issues/board.js'
 import { readWorkspaceIssues } from '../../workspaces/issues/declaration.js'
 import { createIssue } from '../../workspaces/issues/mutate.js'
@@ -28,7 +28,10 @@ afterEach(async () => {
   await rm(wsDir, { recursive: true, force: true })
 })
 
-function build(inboxStore?: IInboxStore) {
+// The inbox→issue JOIN now lives in svc.issueDetail (domain) — see board.spec's
+// `inboxReportsForIssue` test. Here the route is a thin pass-through, so the stub
+// just echoes whatever inboxReports it's handed.
+function build(inboxReports: InboxEntry[] = []) {
   const svc = {
     registry: {
       get: (id: string) => (id === 'ws-1' ? { id: 'ws-1', dir: wsDir, tag: 'ws-1', agents: [] } : undefined),
@@ -38,10 +41,10 @@ function build(inboxStore?: IInboxStore) {
       const r = await readWorkspaceIssues(wsDir)
       if (!r.ok) return null
       const issue = r.issues.find((i) => i.id === id)
-      return issue ? { issue: detailIssue(issue, null), runs: [] } : null
+      return issue ? { issue: detailIssue(issue, null), runs: [], inboxReports } : null
     },
   } as unknown as WorkspaceService
-  return createIssuesRoutes(svc, inboxStore)
+  return createIssuesRoutes(svc)
 }
 
 async function req(app: any, method: string, path: string, body?: unknown) {
@@ -108,22 +111,19 @@ describe('PATCH /api/issues/:wsId/:id', () => {
   })
 })
 
-describe('GET /api/issues/:wsId/:id — inboxReports join', () => {
-  it('returns only this issue\'s reports (matched on origin.issueId), newest-first', async () => {
+describe('GET /api/issues/:wsId/:id — inboxReports pass-through', () => {
+  it('surfaces issueDetail.inboxReports verbatim', async () => {
     await createIssue(wsDir, { id: 'i1', title: 'T' })
-    const inbox = createMemoryInboxStore()
-    // Two reports for i1, one for another issue, one for another workspace.
-    await inbox.append({ workspaceId: 'ws-1', comments: 'r1', origin: { kind: 'headless', runId: 'a', issueId: 'i1' } })
-    await inbox.append({ workspaceId: 'ws-1', comments: 'other-issue', origin: { kind: 'headless', runId: 'b', issueId: 'i2' } })
-    await inbox.append({ workspaceId: 'ws-1', comments: 'r2', origin: { kind: 'headless', runId: 'c', issueId: 'i1' } })
-    await inbox.append({ workspaceId: 'ws-other', comments: 'elsewhere', origin: { kind: 'headless', runId: 'd', issueId: 'i1' } })
-    const app = build(inbox)
-    const r = await req(app, 'GET', '/ws-1/i1')
+    const reports = [
+      { id: 'e2', ts: 2, workspaceId: 'ws-1', comments: 'r2', origin: { kind: 'headless', runId: 'c', issueId: 'i1' } },
+      { id: 'e1', ts: 1, workspaceId: 'ws-1', comments: 'r1', origin: { kind: 'headless', runId: 'a', issueId: 'i1' } },
+    ] as unknown as InboxEntry[]
+    const r = await req(build(reports), 'GET', '/ws-1/i1')
     expect(r.status).toBe(200)
     expect(r.body.inboxReports.map((e: any) => e.comments)).toEqual(['r2', 'r1'])
   })
 
-  it('inboxReports is [] when no store is wired', async () => {
+  it('inboxReports defaults to [] when the issue produced none', async () => {
     await createIssue(wsDir, { id: 'i1', title: 'T' })
     const r = await req(build(), 'GET', '/ws-1/i1')
     expect(r.status).toBe(200)

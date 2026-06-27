@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { annotateNameCollisions, type IssuesSnapshotWorkspace } from './board.js'
+import type { InboxEntry } from '../../core/inbox-store.js'
+import { annotateNameCollisions, inboxReportsForIssue, type IssuesSnapshotWorkspace } from './board.js'
 
 function ws(wsId: string, titles: string[]): IssuesSnapshotWorkspace {
   return {
@@ -40,5 +41,23 @@ describe('annotateNameCollisions', () => {
   it('returns an empty list when every name is globally unique', () => {
     const workspaces = [ws('a', ['One']), ws('b', ['Two'])]
     expect(annotateNameCollisions(workspaces)).toEqual([])
+  })
+})
+
+describe('inboxReportsForIssue', () => {
+  // Newest-first, the order inboxStore.read returns.
+  const entries = [
+    { id: 'e3', ts: 3, workspaceId: 'w', comments: 'c3', origin: { kind: 'headless', runId: 'x', issueId: 'i1' } },
+    { id: 'e2', ts: 2, workspaceId: 'w', comments: 'c2', origin: { kind: 'headless', runId: 'y', issueId: 'i2' } },
+    { id: 'e1', ts: 1, workspaceId: 'w', comments: 'c1', origin: { kind: 'headless', runId: 'z', issueId: 'i1' } },
+    { id: 'e0', ts: 0, workspaceId: 'w', comments: 'c0' }, // no origin at all
+  ] as unknown as InboxEntry[]
+
+  it('keeps only entries whose origin.issueId matches, preserving order', () => {
+    expect(inboxReportsForIssue(entries, 'i1').map((e) => e.id)).toEqual(['e3', 'e1'])
+  })
+
+  it('returns [] for a non-matching issue and ignores origin-less entries', () => {
+    expect(inboxReportsForIssue(entries, 'nope')).toEqual([])
   })
 })

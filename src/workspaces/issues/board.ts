@@ -11,6 +11,7 @@
  * Phase 2 detail view loads it. Keeping the body out keeps the poll payload small.
  */
 
+import type { InboxEntry } from '../../core/inbox-store.js'
 import type { Schedule } from '../../core/schedule-expr.js'
 import type { HeadlessTaskRecord } from '../headless-task-registry.js'
 import type { IssuePriority, IssueRecord, IssueStatus } from './declaration.js'
@@ -144,11 +145,24 @@ export interface IssueDetailIssue {
   nextDueAtMs?: number | null
 }
 
-/** GET /api/issues/:wsId/:id — one issue + its run history (Activity feed). */
+/** GET /api/issues/:wsId/:id — one issue + its run history (Activity feed) +
+ *  the inbox reports it produced. */
 export interface IssueDetail {
   issue: IssueDetailIssue
   /** This issue's headless runs (wsId + issueId match), newest first. */
   runs: HeadlessTaskRecord[]
+  /** Inbox reports this issue produced — entries whose server-stamped
+   *  `origin.issueId` is this issue, newest-first. The issue→inbox direction of
+   *  the cross-link (`runs` is the run→issue one). */
+  inboxReports: InboxEntry[]
+}
+
+/** Filter a workspace's inbox entries to the ones a given issue produced
+ *  (`origin.issueId` match). Pure + order-preserving, so the caller's
+ *  newest-first read order carries through. The issue→inbox join, kept in the
+ *  domain (not the HTTP route) so every surface — CLI, MCP — gets it. */
+export function inboxReportsForIssue(entries: readonly InboxEntry[], issueId: string): InboxEntry[] {
+  return entries.filter((e) => e.origin?.issueId === issueId)
 }
 
 /** Map a validated issue (+ its firing markers, iff scheduled) to the detail
