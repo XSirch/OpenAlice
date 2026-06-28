@@ -323,6 +323,14 @@ export interface AccountInfo {
   dayTradesRemaining?: number
 }
 
+/** A sub-account (wallet) within one broker connection. One for ordinary
+ *  brokers; >1 for separate-wallet venues (Binance: spot / derivatives). */
+export interface SubAccountRef {
+  id: string
+  label: string
+  kind: 'spot' | 'derivatives' | 'unified'
+}
+
 export interface Position {
   contract: {
     aliceId?: string
@@ -560,6 +568,8 @@ export interface PlaceOrderRequest {
   ocaGroup?: string
   takeProfit?: { price: string }
   stopLoss?: { price: string; limitPrice?: string }
+  /** Target wallet on multi-wallet venues — required when the account spans >1. */
+  subAccountId?: string
   message: string
 }
 
@@ -567,6 +577,8 @@ export interface ClosePositionRequest {
   aliceId: string
   symbol?: string
   qty?: string
+  /** Target wallet on multi-wallet venues — required when the account spans >1. */
+  subAccountId?: string
   message: string
 }
 

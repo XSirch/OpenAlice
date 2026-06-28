@@ -210,6 +210,37 @@ export interface AccountInfo {
   dayTradesRemaining?: number
 }
 
+// ==================== Sub-accounts ====================
+
+/**
+ * A sub-account (a.k.a. wallet / compartment) WITHIN a single broker
+ * connection. Most brokers have exactly one and never implement
+ * `listSubAccounts` — they are treated as having a single implicit 'default'
+ * sub-account, and the `subAccountId` selector on reads/writes is ignored for
+ * them end-to-end (every broker today except CCXT).
+ *
+ * The asymmetric case is CCXT separate-wallet venues (Binance: spot /
+ * USDⓈ-M / COIN-M live behind distinct endpoints) and, in future, IBKR
+ * linked / FA accounts under one login. There the SAME connection spans
+ * several trading compartments, so a READ can scope to one (or aggregate
+ * across all) and a WRITE must name its target — placing an order is
+ * irreversible, so the ambiguity is resolved up front, never defaulted.
+ *
+ * `kind` is editorial taxonomy for the UI, not a routing key:
+ *   - 'spot'        a cash / spot wallet
+ *   - 'derivatives' a futures / swap / margin wallet
+ *   - 'unified'     a single cross-margin account that IS the whole thing
+ * Funding / earn / staking wallets are deliberately NOT enumerated — Alice
+ * trades; it does not custody-manage them.
+ */
+export interface SubAccountRef {
+  /** Stable id used as the `subAccountId` selector, e.g. 'spot', 'derivatives'. */
+  id: string
+  /** User-facing label, e.g. 'Spot', 'USDⓈ-M Futures'. */
+  label: string
+  kind: 'spot' | 'derivatives' | 'unified'
+}
+
 // ==================== Market data ====================
 
 /**
@@ -417,10 +448,42 @@ export interface IBroker<TMeta = unknown> {
   cancelOrder(orderId: string, orderCancel?: OrderCancel): Promise<PlaceOrderResult>
   closePosition(contract: Contract, quantity?: Decimal): Promise<PlaceOrderResult>
 
+  // ---- Sub-accounts (wallets / compartments within one connection) ----
+
+  /**
+   * Enumerate the sub-accounts this connection spans. OPTIONAL — a broker that
+   * omits it is treated as having a single implicit 'default' sub-account, and
+   * the `subAccountId` selector is ignored for it (every broker today except
+   * CCXT separate-wallet venues). Implementations return >1 ONLY for genuinely
+   * separate-wallet venues (CCXT Binance: spot / USDⓈ-M / COIN-M). Trading
+   * compartments only — funding / earn wallets are never enumerated.
+   */
+  listSubAccounts?(): Promise<SubAccountRef[]>
+
+  /**
+   * Which sub-account id a given contract trades in — derived from the
+   * INSTRUMENT (CCXT: a spot symbol vs a perp symbol route to different
+   * wallets). OPTIONAL — the UTA layer uses it to validate that a write's
+   * declared `subAccountId` is consistent with the instrument, so "place this
+   * on spot" with a perp contract loud-refuses instead of silently landing in
+   * the wrong wallet. Brokers with a single sub-account omit it.
+   */
+  subAccountForContract?(contract: Contract): string | undefined
+
   // ---- Queries ----
 
-  getAccount(): Promise<AccountInfo>
-  getPositions(): Promise<Position[]>
+  /**
+   * Account equity. `subAccountId` OPTIONAL: omitted ⇒ AGGREGATE across every
+   * sub-account (the rolled-up netLiquidation); a specific id ⇒ just that
+   * wallet. Single-sub-account brokers ignore the arg.
+   */
+  getAccount(subAccountId?: string): Promise<AccountInfo>
+  /**
+   * Positions / holdings. `subAccountId` OPTIONAL: omitted ⇒ ALL sub-accounts;
+   * a specific id ⇒ just that wallet's positions. Single-sub-account brokers
+   * ignore the arg.
+   */
+  getPositions(subAccountId?: string): Promise<Position[]>
   getOrders(orderIds: string[]): Promise<OpenOrder[]>
   /**
    * Look up a single order. `symbolHint` is the broker-native localSymbol

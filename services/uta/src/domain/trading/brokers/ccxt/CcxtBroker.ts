@@ -25,9 +25,9 @@ import {
   type TpSlParams,
   type Bar,
   type BarParams,
+  type SubAccountRef,
 } from '../types.js'
 import '../../contract-ext.js'
-import { aggregateAccountFromPositions } from '../../position-math.js'
 import { buildPosition } from '../contract-builder.js'
 import { CCXT_CREDENTIAL_FIELDS, type CcxtBrokerConfig, type CcxtMarket, type FundingRate, type OrderBook, type OrderBookLevel } from './ccxt-types.js'
 import { MAX_INIT_RETRIES, INIT_RETRY_BASE_MS } from './ccxt-types.js'
@@ -42,6 +42,7 @@ import {
 import { fuzzyRankContracts } from '../fuzzy-rank.js'
 import {
   type CcxtExchangeOverrides,
+  type CcxtSubAccountDef,
   exchangeOverrides,
   defaultFetchOrderById,
   defaultCancelOrderById,
@@ -49,6 +50,10 @@ import {
   defaultFetchPositions,
   defaultFetchAllOpenOrders,
 } from './overrides.js'
+
+/** The implicit single wallet a unified-account venue (okx / bybit UTA) exposes
+ *  — one plain fetchBalance() covers everything, so no selector is ever needed. */
+const UNIFIED_SUBACCOUNT: CcxtSubAccountDef = { id: 'default', label: 'Account', kind: 'unified', walletTypes: [] }
 
 // Treated as cash (1:1 to USD) when computing balances and as ineligible
 // for spot-position synthesis. Compared against `coin.toUpperCase()` so
@@ -651,16 +656,59 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     return this.placeOrder(pos.contract, order, undefined, isDerivative ? { reduceOnly: true } : undefined)
   }
 
+  // ---- Sub-accounts ----
+
+  /** The sub-account decomposition for this venue: the override's list for
+   *  separate-wallet venues (binance), else the single unified default. */
+  private resolveSubAccounts(): CcxtSubAccountDef[] {
+    return this.overrides.subAccounts?.length ? this.overrides.subAccounts : [UNIFIED_SUBACCOUNT]
+  }
+
+  async listSubAccounts(): Promise<SubAccountRef[]> {
+    return this.resolveSubAccounts().map(s => ({ id: s.id, label: s.label, kind: s.kind }))
+  }
+
+  /** Which sub-account a contract trades in — derived from the instrument.
+   *  Derivatives (perp/future) → the 'derivatives' sub-account; everything else
+   *  → 'spot'. Single-sub-account venues always answer with that one id. */
+  subAccountForContract(contract: Contract): string | undefined {
+    const subs = this.resolveSubAccounts()
+    if (subs.length <= 1) return subs[0]?.id
+    const isDerivative = contract.secType === 'CRYPTO_PERP' || contract.secType === 'FUT'
+    const wantKind = isDerivative ? 'derivatives' : 'spot'
+    return (subs.find(s => s.kind === wantKind) ?? subs[0])?.id
+  }
+
+  /** Resolve a (possibly absent) selector to the sub-account defs in scope.
+   *  Omitted ⇒ all (aggregate); a known id ⇒ just that one; an unknown id ⇒
+   *  loud CONFIG error listing the valid ids (the agent reads it and retries). */
+  private scopedSubAccounts(subAccountId?: string): CcxtSubAccountDef[] {
+    const subs = this.resolveSubAccounts()
+    if (subAccountId == null) return subs
+    const match = subs.find(s => s.id === subAccountId)
+    if (!match) {
+      throw new BrokerError('CONFIG', `CcxtBroker[${this.id}]: unknown sub-account "${subAccountId}". Valid sub-accounts: ${subs.map(s => s.id).join(', ')}.`)
+    }
+    return [match]
+  }
+
+  /** CCXT balance `type`s to fetch for a scope. Empty array ⇒ undefined ⇒ a
+   *  single unscoped fetchBalance() (unified-default case). */
+  private walletTypesFor(subAccountId?: string): string[] | undefined {
+    const types = [...new Set(this.scopedSubAccounts(subAccountId).flatMap(s => s.walletTypes))]
+    return types.length ? types : undefined
+  }
+
   // ---- Queries ----
 
   /**
-   * Synthesize spot holdings (BTC/ETH/etc balances) into Position records.
+   * Synthesize asset holdings (BTC/ETH/etc balances) into Position records.
    *
    * CCXT's fetchPositions() only returns derivative positions
-   * (SWAP/FUTURES/MARGIN/OPTION); spot assets sit in fetchBalance() as
-   * per-currency entries. Without this synthesis, a UTA user holding only
-   * spot would see an empty positions list and a netLiquidation that
-   * reflects only their stablecoin balance.
+   * (SWAP/FUTURES/MARGIN/OPTION); plain asset balances sit in fetchBalance() as
+   * per-currency entries — and span multiple wallets on separate-wallet venues.
+   * Without this synthesis, a UTA user holding only spot would see an empty
+   * positions list and a netLiquidation that reflects only stablecoin balance.
    *
    * Treated as long positions priced at the current ticker — consistent
    * with how IBKR exposes equity holdings. avgCost is filled with markPrice
@@ -668,24 +716,30 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
    * (and bootstraps any unaccounted qty via `reconcileBalance` at observed
    * markPrice) — the `avgCostSource: 'wallet'` flag signals this.
    */
-  private async fetchSpotHoldings(prefetched?: Awaited<ReturnType<Exchange['fetchBalance']>>): Promise<Position[]> {
-    const balance = prefetched ?? await this.exchange.fetchBalance()
-    const bal = balance as unknown as Record<string, unknown>
+  private async fetchAssetHoldings(subAccountId?: string): Promise<Position[]> {
+    // The SAME fungible asset can sit in multiple wallets (e.g. BTC as a spot
+    // balance AND as futures-wallet collateral) — it's the same asset, so within
+    // the requested scope we aggregate by coin into ONE holding (ANG-111).
+    // Stablecoins are cash (valued in getAccount), not holdings here. The
+    // `subAccountId` selector narrows which wallets contribute: omitted ⇒ every
+    // wallet, 'spot' ⇒ the spot wallet, 'derivatives' ⇒ the futures wallets.
+    const { balances } = await this.gatherWalletBalances(subAccountId)
+
+    const qtyByCoin = new Map<string, Decimal>()
+    for (const b of balances) {
+      for (const [coin, entry] of Object.entries(b)) {
+        if (BALANCE_RESERVED_KEYS.has(coin)) continue
+        if (STABLECOIN_TO_USD.has(coin.toUpperCase())) continue
+        if (typeof entry !== 'object' || entry === null) continue
+        const total = new Decimal(String((entry as Record<string, unknown>)['total'] ?? 0))
+        if (total.lte(0)) continue
+        qtyByCoin.set(coin, (qtyByCoin.get(coin) ?? new Decimal(0)).plus(total))
+      }
+    }
 
     type Holding = { coin: string; quantity: Decimal; ccxtSymbol: string; market: CcxtMarket }
     const holdings: Holding[] = []
-
-    for (const [coin, entry] of Object.entries(bal)) {
-      if (BALANCE_RESERVED_KEYS.has(coin)) continue
-      if (STABLECOIN_TO_USD.has(coin.toUpperCase())) continue
-      if (typeof entry !== 'object' || entry === null) continue
-
-      const e = entry as Record<string, unknown>
-      const free = new Decimal(String(e['free'] ?? 0))
-      const used = new Decimal(String(e['used'] ?? 0))
-      const quantity = free.plus(used)
-      if (quantity.lte(0)) continue
-
+    for (const [coin, quantity] of qtyByCoin) {
       // Find the most preferred quote market for pricing this holding.
       let resolved: { ccxtSymbol: string; market: CcxtMarket } | null = null
       for (const quote of SPOT_QUOTE_PREFERENCE) {
@@ -697,10 +751,9 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
         }
       }
       if (!resolved) {
-        console.warn(`CcxtBroker[${this.id}]: spot holding ${coin} (${quantity.toString()}) — no <COIN>/USDT|USDC|USD spot market, skipping`)
+        console.warn(`CcxtBroker[${this.id}]: holding ${coin} (${quantity.toString()}) — no <COIN>/USDT|USDC|USD spot market, skipping`)
         continue
       }
-
       holdings.push({ coin, quantity, ...resolved })
     }
 
@@ -757,7 +810,40 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     return result
   }
 
-  async getAccount(): Promise<AccountInfo> {
+  /**
+   * Fetch balances across the wallets in scope (ANG-111). Separate-wallet venues
+   * (binance: spot / USDⓈ-M / COIN-M behind distinct endpoints) declare
+   * `subAccounts`, each mapping to one or more CCXT balance `type`s; the
+   * `subAccountId` selector narrows which are fetched (omitted ⇒ every wallet).
+   * Unified venues (okx / bybit UTA — verified: spot/swap/contract all return the
+   * same pool) have no wallet types → one unscoped call. A per-wallet failure
+   * (e.g. an un-activated COIN-M wallet → -2015) is skipped loudly, not fatal.
+   * Also rolls up futures `totalInitialMargin` for the account's margin figure.
+   */
+  private async gatherWalletBalances(subAccountId?: string): Promise<{ balances: Array<Record<string, unknown>>; initMargin: Decimal }> {
+    const walletTypes = this.walletTypesFor(subAccountId)
+    const balances: Array<Record<string, unknown>> = []
+    let initMargin = new Decimal(0)
+    const accrue = (b: Record<string, unknown>) => {
+      balances.push(b)
+      const info = (b['info'] ?? {}) as Record<string, unknown>
+      if (info['totalInitialMargin'] !== undefined) initMargin = initMargin.plus(new Decimal(String(info['totalInitialMargin'])))
+    }
+    if (walletTypes?.length) {
+      for (const type of walletTypes) {
+        try {
+          accrue(await this.exchange.fetchBalance({ type }) as unknown as Record<string, unknown>)
+        } catch (err) {
+          console.warn(`CcxtBroker[${this.id}]: fetchBalance(${type}) skipped — ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`)
+        }
+      }
+    } else {
+      accrue(await this.exchange.fetchBalance() as unknown as Record<string, unknown>)
+    }
+    return { balances, initMargin }
+  }
+
+  async getAccount(subAccountId?: string): Promise<AccountInfo> {
     // Keyless data sources have no account — return a zeroed one rather than
     // calling fetchBalance (which requires credentials). The federation excludes
     // keyless UTAs from equity aggregation, so this never shows as phantom cash.
@@ -766,81 +852,114 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     }
     this.ensureInit()
 
+    // Derivative PnL only belongs to a scope that actually holds derivatives —
+    // a spot-only sub-account read must not fold in perp positions. (Validates
+    // the selector as a side effect: an unknown id throws here.)
+    const scoped = this.scopedSubAccounts(subAccountId)
+    const includesDerivatives = scoped.some(s => s.kind === 'derivatives' || s.kind === 'unified')
+
     try {
-      const [balance, rawPositions] = await Promise.all([
-        this.exchange.fetchBalance(),
-        this.exchange.fetchPositions(),
-      ])
-
-      const bal = balance as unknown as Record<string, unknown>
-
-      // Sum every stablecoin entry — not just USDT — into cash. OKX UTA
-      // and Binance both quote against multiple stablecoins (USDT, USDC,
-      // FDUSD, …) and a user can hold any of them.
-      let free = new Decimal(0)
-      let used = new Decimal(0)
-      for (const [coin, entry] of Object.entries(bal)) {
-        if (BALANCE_RESERVED_KEYS.has(coin)) continue
-        if (!STABLECOIN_TO_USD.has(coin.toUpperCase())) continue
-        if (typeof entry !== 'object' || entry === null) continue
-        const e = entry as Record<string, unknown>
-        free = free.plus(new Decimal(String(e['free'] ?? 0)))
-        used = used.plus(new Decimal(String(e['used'] ?? 0)))
+      // ── 1. Gather balances across the wallets in scope (ANG-111) ───────────
+      const { balances, initMargin } = await this.gatherWalletBalances(subAccountId)
+      if (balances.length === 0) {
+        throw new BrokerError('NETWORK', `CcxtBroker[${this.id}]: no wallet balance readable`)
       }
 
-      // Aggregate P&L and market value from derivative positions.
-      // We use position-level markPrice (which is fresh from the exchange's
-      // websocket feed) rather than balance.total (which is a cached wallet
-      // snapshot that may not update between funding/settlement cycles).
+      // ── 2. netLiquidation = Σ (every asset across every wallet) in USD ─────
+      // Each wallet's per-asset `total` already folds in margin + unrealized
+      // PnL (verified on binance futures: USDT total = walletBalance + uPnL),
+      // so summing wallet assets yields true equity. Positions NEVER enter this
+      // sum — adding their notional was the equity-overstatement bug. Stablecoins
+      // value at $1; everything else at its spot mark price.
+      let cash = new Decimal(0)
+      const qtyByCoin = new Map<string, Decimal>()
+      for (const b of balances) {
+        for (const [coin, entry] of Object.entries(b)) {
+          if (BALANCE_RESERVED_KEYS.has(coin)) continue
+          if (typeof entry !== 'object' || entry === null) continue
+          const total = new Decimal(String((entry as Record<string, unknown>)['total'] ?? 0))
+          if (total.lte(0)) continue
+          if (STABLECOIN_TO_USD.has(coin.toUpperCase())) cash = cash.plus(total)
+          else qtyByCoin.set(coin, (qtyByCoin.get(coin) ?? new Decimal(0)).plus(total))
+        }
+      }
+
+      let assetValue = new Decimal(0)
+      const priced: Array<{ coin: string; qty: Decimal; symbol: string }> = []
+      for (const [coin, qty] of qtyByCoin) {
+        let symbol: string | undefined
+        for (const quote of SPOT_QUOTE_PREFERENCE) {
+          const m = this.markets[`${coin}/${quote}`]
+          if (m && m.active !== false && m.type === 'spot') { symbol = `${coin}/${quote}`; break }
+        }
+        if (!symbol) { console.warn(`CcxtBroker[${this.id}]: balance asset ${coin} (${qty.toString()}) — no spot market to price, excluded from netLiq`); continue }
+        priced.push({ coin, qty, symbol })
+      }
+      if (priced.length) {
+        const symbols = priced.map(p => p.symbol)
+        let tickers: Record<string, { last?: number | null }> = {}
+        try {
+          tickers = await this.exchange.fetchTickers(symbols) as unknown as Record<string, { last?: number | null }>
+        } catch {
+          for (const s of symbols) {
+            try { tickers[s] = await this.exchange.fetchTicker(s) as unknown as { last?: number | null } } catch { /* warned below */ }
+          }
+        }
+        for (const p of priced) {
+          const last = tickers[p.symbol]?.last
+          if (last == null) { console.warn(`CcxtBroker[${this.id}]: no ticker for ${p.symbol} — ${p.coin} excluded from netLiq`); continue }
+          assetValue = assetValue.plus(p.qty.mul(new Decimal(String(last))))
+        }
+      }
+
+      // ── 3. unrealizedPnL: display roll-up of open derivative PnL ───────────
+      // (already baked into the wallet equity above, so NOT re-added to netLiq).
+      // Skipped for a spot-only scope — it has no derivative positions.
       let unrealizedPnL = new Decimal(0)
       let realizedPnL = new Decimal(0)
-      const aggregateInputs: Array<{ side: 'long' | 'short'; marketValue: string }> = []
-      for (const p of rawPositions) {
-        unrealizedPnL = unrealizedPnL.plus(new Decimal(String(p.unrealizedPnl ?? 0)))
-        realizedPnL = realizedPnL.plus(new Decimal(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0)))
-
-        const contracts = new Decimal(String(p.contracts ?? 0)).abs()
-        const contractSize = new Decimal(String(p.contractSize ?? 1))
-        const quantity = contracts.mul(contractSize)
-        const markPrice = new Decimal(String(p.markPrice ?? 0))
-        const side: 'long' | 'short' = p.side === 'short' ? 'short' : 'long'
-        aggregateInputs.push({ side, marketValue: quantity.mul(markPrice).toString() })
+      if (includesDerivatives) {
+        try {
+          const rawPositions = await this.exchange.fetchPositions()
+          for (const p of rawPositions) {
+            unrealizedPnL = unrealizedPnL.plus(new Decimal(String(p.unrealizedPnl ?? 0)))
+            realizedPnL = realizedPnL.plus(new Decimal(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0)))
+          }
+        } catch { /* positions are display-only here — don't fail the account read */ }
       }
-
-      // Fold spot holdings (BTC/ETH/etc balances) into position value.
-      // They behave like long positions — capital converted from cash into
-      // an asset — so they count toward netLiquidation, not totalCashValue.
-      const spotHoldings = await this.fetchSpotHoldings(balance)
-      for (const sp of spotHoldings) {
-        aggregateInputs.push({ side: 'long', marketValue: sp.marketValue })
-      }
-
-      const { netLiquidation } = aggregateAccountFromPositions(free, aggregateInputs)
 
       return {
         baseCurrency: 'USD',
-        netLiquidation: netLiquidation.toString(),
-        totalCashValue: free.toString(),
+        netLiquidation: cash.plus(assetValue).toString(),
+        totalCashValue: cash.toString(),
         unrealizedPnL: unrealizedPnL.toString(),
         realizedPnL: realizedPnL.toString(),
-        initMarginReq: used.toString(),
+        initMarginReq: initMargin.toString(),
       }
     } catch (err) {
       throw BrokerError.from(err)
     }
   }
 
-  async getPositions(): Promise<Position[]> {
+  async getPositions(subAccountId?: string): Promise<Position[]> {
     if (this.keyless) return []
     this.ensureInit()
+
+    // Derivative positions belong only to a scope that holds derivatives; a
+    // spot-only sub-account skips fetchPositions entirely. Asset holdings are
+    // scoped to the requested wallets inside fetchAssetHoldings. (Validates the
+    // selector — an unknown id throws here.)
+    const scoped = this.scopedSubAccounts(subAccountId)
+    const includesDerivatives = scoped.some(s => s.kind === 'derivatives' || s.kind === 'unified')
 
     try {
       const fetchOverride = this.overrides.fetchPositions
       const [raw, spotHoldings] = await Promise.all([
-        fetchOverride
-          ? fetchOverride(this.exchange, defaultFetchPositions)
-          : defaultFetchPositions(this.exchange),
-        this.fetchSpotHoldings(),
+        includesDerivatives
+          ? (fetchOverride
+              ? fetchOverride(this.exchange, defaultFetchPositions)
+              : defaultFetchPositions(this.exchange))
+          : Promise.resolve([] as Awaited<ReturnType<typeof defaultFetchPositions>>),
+        this.fetchAssetHoldings(subAccountId),
       ])
       const result: Position[] = []
 

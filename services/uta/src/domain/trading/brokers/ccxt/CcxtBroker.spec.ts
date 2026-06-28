@@ -830,29 +830,25 @@ describe('CcxtBroker — closePosition reduceOnly', () => {
 // ==================== getAccount ====================
 
 describe('CcxtBroker — getAccount', () => {
-  it('maps CCXT balance to AccountInfo', async () => {
+  it('netLiquidation = wallet equity; open derivative positions do NOT add their notional', async () => {
     const acc = makeAccount()
     setInitialized(acc, {})
 
     ;(acc as any).exchange.fetchBalance = vi.fn().mockResolvedValue({
-      // Real CCXT shape: per-coin entries at top level. The aggregate
-      // free/used/total dicts also exist on real responses but our parser
-      // reads the per-coin form.
-      USDT: { free: 8000, used: 2000, total: 10000 },
+      // Per-coin entries; `total` already folds in margin + uPnL.
+      USDT: { free: 10000, used: 0, total: 10000 },
     })
-    // Positions must include contracts/contractSize/markPrice so the broker
-    // can reconstruct netLiquidation from fresh position market values.
+    // An open perp with a 5000 notional. The OLD model added markPrice*contracts
+    // to netLiq (→ 15000); the wallet-equity model adds NOTHING from positions —
+    // they only contribute uPnL to the display field (ANG-111).
     ;(acc as any).exchange.fetchPositions = vi.fn().mockResolvedValue([
-      { contracts: 1, contractSize: 1, markPrice: 1500, unrealizedPnl: 500, realizedPnl: 100, side: 'long' },
-      { contracts: 1, contractSize: 1, markPrice: 500, unrealizedPnl: -200, realizedPnl: 50, side: 'long' },
+      { contracts: 1, contractSize: 1, markPrice: 5000, unrealizedPnl: 100, realizedPnl: 150, side: 'long' },
     ])
 
     const info = await acc.getAccount()
-    // netLiq = free (8000) + position market values (1500 + 500 = 2000) = 10000
-    expect(info.netLiquidation).toBe('10000')
-    expect(info.totalCashValue).toBe('8000')
-    expect(info.initMarginReq).toBe('2000')
-    expect(info.unrealizedPnL).toBe('300')
+    expect(info.netLiquidation).toBe('10000')   // wallet total — NOT 10000 + 5000 notional
+    expect(info.totalCashValue).toBe('10000')    // stablecoin total
+    expect(info.unrealizedPnL).toBe('100')        // display roll-up only
     expect(info.realizedPnL).toBe('150')
   })
 
@@ -876,9 +872,9 @@ describe('CcxtBroker — getAccount', () => {
     ;(acc as any).exchange.fetchPositions = vi.fn().mockResolvedValue([])
 
     const info = await acc.getAccount()
-    expect(info.totalCashValue).toBe('1800')   // 1000 + 500 + 300
-    expect(info.initMarginReq).toBe('300')     // 200 + 0 + 100
-    expect(info.netLiquidation).toBe('1800')   // no positions, equity = cash
+    expect(info.totalCashValue).toBe('2100')   // stablecoin TOTAL: 1200 + 500 + 400
+    expect(info.netLiquidation).toBe('2100')   // no positions, equity = stablecoin total
+    expect(info.initMarginReq).toBe('0')       // no totalInitialMargin in this wallet's info
   })
 
   it('includes spot holdings value in netLiquidation', async () => {
@@ -900,6 +896,144 @@ describe('CcxtBroker — getAccount', () => {
     // netLiq = cash (1000) + spot value (0.5 * 60000 = 30000) = 31000
     expect(info.totalCashValue).toBe('1000')
     expect(info.netLiquidation).toBe('31000')
+  })
+
+  it('merges every wallet for separate-wallet venues + tolerates an unreachable wallet (binance)', async () => {
+    // Binance keeps spot / USDⓈ-M / COIN-M in separate wallets; getAccount must
+    // read all three and merge. A single fetchBalance() would see only spot and
+    // understate netLiq (the core ANG-111 bug). COIN-M often errors (-2015, not
+    // activated) and must be skipped, not crash the read.
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, {})
+
+    const fb = vi.fn()
+      .mockResolvedValueOnce({ USDT: { total: 5000 } })                                  // spot wallet
+      .mockResolvedValueOnce({ USDT: { total: 4000 }, info: { totalInitialMargin: '7' } }) // USDⓈ-M wallet
+      .mockRejectedValueOnce(new Error('binance {"code":-2015,"msg":"permissions"}'))      // COIN-M: not activated
+    ;(acc as any).exchange.fetchBalance = fb
+    ;(acc as any).exchange.fetchPositions = vi.fn().mockResolvedValue([])
+
+    const info = await acc.getAccount()
+    expect(fb).toHaveBeenCalledTimes(3)            // spot + future + delivery all attempted
+    expect(info.netLiquidation).toBe('9000')        // 5000 spot + 4000 futures (COIN-M skipped)
+    expect(info.totalCashValue).toBe('9000')
+    expect(info.initMarginReq).toBe('7')            // summed from the futures wallet's info
+  })
+})
+
+// ==================== sub-accounts ====================
+
+describe('CcxtBroker — sub-accounts', () => {
+  it('unified venues (bybit) expose a single default sub-account', async () => {
+    const acc = makeAccount()  // bybit — no subAccounts override
+    const subs = await acc.listSubAccounts()
+    expect(subs).toEqual([{ id: 'default', label: 'Account', kind: 'unified' }])
+  })
+
+  it('separate-wallet venues (binance) expose spot + derivatives', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    const subs = await acc.listSubAccounts()
+    expect(subs).toEqual([
+      { id: 'spot', label: 'Spot', kind: 'spot' },
+      { id: 'derivatives', label: 'Futures', kind: 'derivatives' },
+    ])
+  })
+
+  it('subAccountForContract routes spot vs derivative instruments (binance)', () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    const spot = new Contract(); spot.secType = 'CRYPTO'
+    const perp = new Contract(); perp.secType = 'CRYPTO_PERP'
+    expect(acc.subAccountForContract(spot)).toBe('spot')
+    expect(acc.subAccountForContract(perp)).toBe('derivatives')
+  })
+
+  it('subAccountForContract always answers the single id on unified venues', () => {
+    const acc = makeAccount()  // bybit
+    const perp = new Contract(); perp.secType = 'CRYPTO_PERP'
+    expect(acc.subAccountForContract(perp)).toBe('default')
+  })
+
+  it('getAccount(spot) reads ONLY the spot wallet and skips derivative PnL (binance)', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, {})
+
+    const fb = vi.fn().mockResolvedValue({ USDT: { total: 5000 } })
+    ;(acc as any).exchange.fetchBalance = fb
+    const fp = vi.fn().mockResolvedValue([])
+    ;(acc as any).exchange.fetchPositions = fp
+
+    const info = await acc.getAccount('spot')
+    expect(fb).toHaveBeenCalledTimes(1)              // only the spot wallet
+    expect(fb).toHaveBeenCalledWith({ type: 'spot' })
+    expect(fp).not.toHaveBeenCalled()                // spot scope → no derivative positions
+    expect(info.netLiquidation).toBe('5000')
+  })
+
+  it('getAccount(derivatives) reads the futures wallets + folds in perp uPnL (binance)', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, {})
+
+    const fb = vi.fn()
+      .mockResolvedValueOnce({ USDT: { total: 4000 }, info: { totalInitialMargin: '7' } }) // future
+      .mockRejectedValueOnce(new Error('binance {"code":-2015}'))                          // delivery skip
+    ;(acc as any).exchange.fetchBalance = fb
+    const fp = vi.fn().mockResolvedValue([
+      { contracts: 1, contractSize: 1, markPrice: 5000, unrealizedPnl: 120, side: 'long' },
+    ])
+    ;(acc as any).exchange.fetchPositions = fp
+
+    const info = await acc.getAccount('derivatives')
+    expect(fb).toHaveBeenCalledWith({ type: 'future' })
+    expect(fb).toHaveBeenCalledWith({ type: 'delivery' })
+    expect(fb).not.toHaveBeenCalledWith({ type: 'spot' })  // spot wallet NOT in this scope
+    expect(fp).toHaveBeenCalled()
+    expect(info.netLiquidation).toBe('4000')         // wallet equity, perp notional NOT added
+    expect(info.unrealizedPnL).toBe('120')           // display roll-up
+    expect(info.initMarginReq).toBe('7')
+  })
+
+  it('getAccount(unknown sub-account) loud-refuses with the valid ids (binance)', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, {})
+    ;(acc as any).exchange.fetchBalance = vi.fn().mockResolvedValue({ USDT: { total: 1 } })
+
+    await expect(acc.getAccount('funding')).rejects.toThrow(/unknown sub-account "funding".*spot, derivatives/s)
+  })
+
+  it('getPositions(spot) skips fetchPositions and returns only spot holdings (binance)', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, { 'BTC/USDT': makeSpotMarket('BTC', 'USDT', 'BTC/USDT') })
+
+    const fb = vi.fn().mockResolvedValue({ BTC: { total: 0.5 } })
+    ;(acc as any).exchange.fetchBalance = fb
+    const fp = vi.fn().mockResolvedValue([])
+    ;(acc as any).exchange.fetchPositions = fp
+    ;(acc as any).exchange.fetchTickers = vi.fn().mockResolvedValue({ 'BTC/USDT': { last: 60000 } })
+
+    const positions = await acc.getPositions('spot')
+    expect(fp).not.toHaveBeenCalled()                // no derivative positions in spot scope
+    expect(fb).toHaveBeenCalledWith({ type: 'spot' })
+    expect(positions).toHaveLength(1)
+    expect(positions[0].marketValue).toBe('30000')   // 0.5 BTC @ 60000
+  })
+
+  it('getPositions(derivatives) fetches positions, scoped to futures wallets (binance)', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, { 'BTC/USDT:USDT': makeSwapMarket('BTC', 'USDT', 'BTC/USDT:USDT') })
+
+    const fb = vi.fn().mockResolvedValue({})  // no futures-wallet asset collateral
+    ;(acc as any).exchange.fetchBalance = fb
+    const fp = vi.fn().mockResolvedValue([
+      { symbol: 'BTC/USDT:USDT', contracts: 1, contractSize: 1, markPrice: 60000, entryPrice: 59000, unrealizedPnl: 1000, side: 'long' },
+    ])
+    ;(acc as any).exchange.fetchPositions = fp
+
+    const positions = await acc.getPositions('derivatives')
+    expect(fp).toHaveBeenCalled()
+    expect(fb).toHaveBeenCalledWith({ type: 'future' })
+    expect(fb).not.toHaveBeenCalledWith({ type: 'spot' })
+    expect(positions).toHaveLength(1)
+    expect(positions[0].side).toBe('long')
   })
 })
 

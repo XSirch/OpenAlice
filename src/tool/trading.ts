@@ -239,12 +239,13 @@ hitting the broker, which otherwise expects the bare base ticker.`,
 If this tool returns an error with transient=true, wait a few seconds and retry once before reporting to the user.`,
       inputSchema: z.object({
         source: z.string().optional().describe(sourceDesc(false)),
+        subAccountId: z.string().optional().describe('For multi-wallet venues (e.g. Binance: "spot" / "derivatives"), scope to one wallet. Omit for the aggregate across all wallets. Most brokers have a single wallet and ignore this.'),
       }).meta({ examples: [{ source: 'alpaca-paper' }] }),
-      execute: async ({ source }) => {
+      execute: async ({ source, subAccountId }) => {
         const targets = await manager.resolve(source)
         if (targets.length === 0) return await noAccountsError(manager, source)
         try {
-          const results = await Promise.all(targets.map(async (uta) => ({ source: uta.id, ...compactAccountInfo(await uta.getAccount()) })))
+          const results = await Promise.all(targets.map(async (uta) => ({ source: uta.id, ...compactAccountInfo(await uta.getAccount(subAccountId)) })))
           return results.length === 1 ? results[0] : results
         } catch (err) {
           return handleBrokerError(err)
@@ -258,8 +259,9 @@ If this tool returns an error with transient=true, wait a few seconds and retry 
       inputSchema: z.object({
         source: z.string().optional().describe(sourceDesc(false)),
         symbol: z.string().optional().describe('Filter by ticker, or omit for all'),
+        subAccountId: z.string().optional().describe('For multi-wallet venues (e.g. Binance: "spot" / "derivatives"), scope to one wallet. Omit for holdings across all wallets.'),
       }).meta({ examples: [{ source: 'alpaca-paper' }] }),
-      execute: async ({ source, symbol }) => {
+      execute: async ({ source, symbol, subAccountId }) => {
         const targets = await manager.resolve(source)
         if (targets.length === 0) return { positions: [], ...(await noAccountsError(manager, source)) }
         // FX rates table — UTA's /fx-rates collects every currency in
@@ -286,8 +288,8 @@ If this tool returns an error with transient=true, wait a few seconds and retry 
           const allPositions: Array<Record<string, unknown>> = []
           const fxWarnings: string[] = []
           for (const uta of targets) {
-            const positions = await uta.getPositions()
-            const accountInfo = await uta.getAccount()
+            const positions = await uta.getPositions(subAccountId)
+            const accountInfo = await uta.getAccount(subAccountId)
 
             // Convert position market values to USD for cross-currency percentage calculations
             let totalMarketValueUsd = new Decimal(0)
@@ -568,6 +570,7 @@ Optional: attach takeProfit and/or stopLoss for automatic exit orders.`,
           price: z.string().describe('Stop loss trigger price'),
           limitPrice: z.string().optional().describe('Limit price for stop-limit SL (omit for stop-market)'),
         }).optional().describe('Stop loss order (single-level, full quantity)'),
+        subAccountId: z.string().optional().describe('Target wallet on multi-wallet venues (e.g. Binance: "spot" / "derivatives"). REQUIRED when the account spans multiple wallets — staging loud-refuses without it and lists the valid ids. Single-wallet brokers ignore it.'),
         commitMessage: z.string().optional().describe('Stage AND commit in one step with this message (your trading thesis). Push/approval still required.'),
       }).meta({ examples: [{ aliceId: 'alpaca-paper|AAPL', action: 'BUY', orderType: 'MKT', totalQuantity: '1', commitMessage: 'Entry: momentum breakout' }] }),
       execute: async ({ source, commitMessage, ...params }) => {
@@ -604,6 +607,7 @@ Optional: attach takeProfit and/or stopLoss for automatic exit orders.`,
         aliceId: z.string().describe('Contract ID (format: accountId|nativeKey, from searchContracts)'),
         symbol: z.string().optional().describe('Human-readable symbol. Optional.'),
         qty: positiveNumeric.optional().describe('Number of shares to sell. Decimal string. Default: sell all.'),
+        subAccountId: z.string().optional().describe('Target wallet on multi-wallet venues (e.g. Binance: "spot" / "derivatives"). REQUIRED when the account spans multiple wallets. Single-wallet brokers ignore it.'),
         commitMessage: z.string().optional().describe('Stage AND commit in one step with this message. Push/approval still required.'),
       }).meta({ examples: [{ aliceId: 'alpaca-paper|AAPL', commitMessage: 'Exit: thesis invalidated' }] }),
       execute: async ({ source, commitMessage, ...params }) => {

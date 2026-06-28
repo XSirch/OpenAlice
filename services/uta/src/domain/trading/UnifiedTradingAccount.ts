@@ -9,7 +9,7 @@
 
 import Decimal from 'decimal.js'
 import { Contract, Order, ContractDescription, ContractDetails, UNSET_DECIMAL, UNSET_INTEGER, UNSET_DOUBLE } from '@traderalice/ibkr'
-import { BrokerError, type IBroker, type AccountInfo, type Position, type OpenOrder, type PlaceOrderResult, type Quote, type MarketClock, type AccountCapabilities, type BrokerHealth, type BrokerHealthInfo, type UTAReach, type UTATier, type TpSlParams, type Bar, type BarParams, type ExpandContractFilters, type ContractExpansion } from './brokers/types.js'
+import { BrokerError, type IBroker, type AccountInfo, type Position, type OpenOrder, type PlaceOrderResult, type Quote, type MarketClock, type AccountCapabilities, type BrokerHealth, type BrokerHealthInfo, type UTAReach, type UTATier, type TpSlParams, type Bar, type BarParams, type ExpandContractFilters, type ContractExpansion, type SubAccountRef } from './brokers/types.js'
 
 const REACH_RANK: Record<UTAReach, number> = { down: 0, connected: 1, readable: 2 }
 import { TradingGit } from './git/TradingGit.js'
@@ -109,6 +109,16 @@ export class UnifiedTradingAccount {
    *  probe and by live broker-call success/failure. */
   private _currentReach: UTAReach = 'down'
   private _connectPromise: Promise<void>
+  /** Sub-account (wallet) list, cached from the broker once it connects. Null
+   *  until first probed. Static per connection (CCXT derives it from venue
+   *  overrides — network-independent), so caching can't go stale. Drives the
+   *  write-disambiguation guard. */
+  private _subAccounts: SubAccountRef[] | null = null
+  /** Sub-account ids declared by writes staged-but-not-yet-committed, parallel
+   *  to the git staging area. Stamped into the commit message at commit time
+   *  (the ledger records the wallet without touching the Operation schema),
+   *  then cleared. */
+  private _stagedSubAccountIds: string[] = []
 
   constructor(broker: IBroker, options: UnifiedTradingAccountOptions = {}) {
     this.broker = broker
@@ -281,6 +291,12 @@ export class UnifiedTradingAccount {
   /** Initial broker connection — fire-and-forget from constructor. */
   private async _connect(): Promise<void> {
     this._currentReach = await this._attemptReach()
+    // Warm the sub-account cache once the transport is up, so the (sync)
+    // write-disambiguation guard has the list before any staging. Best-effort:
+    // a failure here must not break connection.
+    if (!this._disabled && this._currentReach !== 'down') {
+      try { await this._ensureSubAccounts() } catch { /* guard falls back to single-default */ }
+    }
     if (this._disabled) {
       console.warn(`UTA[${this.id}]: disabled — ${this._lastError}`)
       this._emitHealthChange()
@@ -479,12 +495,68 @@ export class UnifiedTradingAccount {
     }
   }
 
+  // ==================== Sub-accounts ====================
+
+  /** Fetch (and memoize) the broker's sub-account list. Brokers that don't
+   *  implement `listSubAccounts` collapse to a single implicit 'default'. */
+  private async _ensureSubAccounts(): Promise<SubAccountRef[]> {
+    if (this._subAccounts) return this._subAccounts
+    const list = this.broker.listSubAccounts ? await this.broker.listSubAccounts() : null
+    this._subAccounts = list && list.length ? list : [{ id: 'default', label: this.label, kind: 'unified' }]
+    return this._subAccounts
+  }
+
+  /** The sub-accounts (wallets) this connection spans. One element for ordinary
+   *  brokers; >1 only for separate-wallet venues (CCXT Binance: spot / futures). */
+  async listSubAccounts(): Promise<SubAccountRef[]> {
+    return this._ensureSubAccounts()
+  }
+
+  /**
+   * Resolve + validate the target sub-account for a WRITE. When the connection
+   * spans >1 sub-account, an explicit selector is REQUIRED (placing an order is
+   * irreversible — we never guess a wallet). The selector is also checked
+   * against the instrument: "place this on spot" with a perp contract
+   * loud-refuses. Returns the resolved id to stamp into the commit message, or
+   * undefined for single-sub-account brokers (nothing to disambiguate or stamp).
+   */
+  private _resolveWriteSubAccount(contract: Contract, requested?: string): string | undefined {
+    const subs = this._subAccounts ?? []
+    if (subs.length <= 1) return undefined  // single (or not-yet-probed) → nothing to disambiguate
+
+    const valid = subs.map(s => s.id).join(', ')
+    const expected = this.broker.subAccountForContract?.(contract)
+    const instr = contract.secType || 'this instrument'
+
+    if (!requested) {
+      throw new BrokerError('CONFIG',
+        `Account "${this.label}" has multiple sub-accounts (${subs.map(s => `${s.id} [${s.kind}]`).join(', ')}). ` +
+        `Re-issue this write with subAccountId` +
+        (expected ? `="${expected}" (where ${instr} trades).` : ` set to one of: ${valid}.`))
+    }
+    if (!subs.some(s => s.id === requested)) {
+      throw new BrokerError('CONFIG',
+        `Account "${this.label}": unknown sub-account "${requested}". Valid sub-accounts: ${valid}.`)
+    }
+    if (expected && expected !== requested) {
+      throw new BrokerError('CONFIG',
+        `Account "${this.label}": ${instr} trades in sub-account "${expected}", not "${requested}". ` +
+        `Re-issue with subAccountId="${expected}".`)
+    }
+    return requested
+  }
+
+  // ==================== Staging ====================
+
   stagePlaceOrder(params: StagePlaceOrderParams): AddResult {
     this._assertWritable()
     this._validatePlaceOrderParams(params)
     // Resolve aliceId → full contract via broker (fills secType, exchange, currency, conId, etc.)
     const contract = this.contractFromAliceId(params.aliceId)
     if (params.symbol) contract.symbol = params.symbol
+
+    const subAccountId = this._resolveWriteSubAccount(contract, params.subAccountId)
+    if (subAccountId) this._stagedSubAccountIds.push(subAccountId)
 
     const order = new Order()
     order.action = params.action
@@ -530,6 +602,9 @@ export class UnifiedTradingAccount {
     const contract = this.contractFromAliceId(params.aliceId)
     if (params.symbol) contract.symbol = params.symbol
 
+    const subAccountId = this._resolveWriteSubAccount(contract, params.subAccountId)
+    if (subAccountId) this._stagedSubAccountIds.push(subAccountId)
+
     return this.git.add({
       action: 'closePosition',
       contract,
@@ -545,7 +620,20 @@ export class UnifiedTradingAccount {
   // ==================== Git flow ====================
 
   commit(message: string): CommitPrepareResult {
-    return this.git.commit(message)
+    const result = this.git.commit(this._stampSubAccount(message))
+    // Sub-account intent is now baked into the persisted message — clear the
+    // transient tracker so the next staging batch starts clean.
+    this._stagedSubAccountIds = []
+    return result
+  }
+
+  /** Append a `[sub:…]` tag to the commit message recording which wallet(s) the
+   *  staged writes targeted. The ONLY place the sub-account is persisted — the
+   *  Operation / GitCommit schema is deliberately left untouched. No-op when no
+   *  multi-sub-account write was staged. */
+  private _stampSubAccount(message: string): string {
+    const ids = [...new Set(this._stagedSubAccountIds)]
+    return ids.length ? `${message} [sub:${ids.join(',')}]` : message
   }
 
   async push(): Promise<PushResult> {
@@ -562,6 +650,7 @@ export class UnifiedTradingAccount {
 
   async reject(reason?: string): Promise<RejectResult> {
     const result = await this.git.reject(reason)
+    this._stagedSubAccountIds = []
     Promise.resolve(this._onPostReject?.(this.id)).catch(() => {})
     return result
   }
@@ -758,9 +847,9 @@ export class UnifiedTradingAccount {
    * two surfaces agree by construction, at the cost of one extra broker
    * round-trip per account read (a 60s-poll path, not a hot path).
    */
-  async getAccount(): Promise<AccountInfo> {
-    const account = await this._callBroker(() => this.broker.getAccount())
-    const positions = await this.getPositions()
+  async getAccount(subAccountId?: string): Promise<AccountInfo> {
+    const account = await this._callBroker(() => this.broker.getAccount(subAccountId))
+    const positions = await this.getPositions(subAccountId)
     // Currency guard: position PnLs can only be summed when they all share
     // the account's base currency. Mixed-currency books (IBKR holding HKD +
     // USD lines) would otherwise blind-sum different units — the exact bug
@@ -779,8 +868,8 @@ export class UnifiedTradingAccount {
     return account
   }
 
-  async getPositions(): Promise<Position[]> {
-    const positions = await this._callBroker(() => this.broker.getPositions())
+  async getPositions(subAccountId?: string): Promise<Position[]> {
+    const positions = await this._callBroker(() => this.broker.getPositions(subAccountId))
     for (const p of positions) this.stampAliceId(p.contract)
     await this._reconcileWalletPositions(positions)
     return positions

@@ -47,6 +47,74 @@ describe('UTA — read-only / keyless write guard', () => {
   })
 })
 
+// ==================== Multi-sub-account write disambiguation ====================
+
+describe('UTA — sub-account write disambiguation', () => {
+  /** A MockBroker that pretends to be a separate-wallet venue (binance-shaped):
+   *  two sub-accounts, instrument routes by secType. */
+  function multiSubBroker(): MockBroker {
+    const b = new MockBroker()
+    ;(b as unknown as Record<string, unknown>).listSubAccounts = async () => ([
+      { id: 'spot', label: 'Spot', kind: 'spot' },
+      { id: 'derivatives', label: 'Futures', kind: 'derivatives' },
+    ])
+    ;(b as unknown as Record<string, unknown>).subAccountForContract = (c: Contract) =>
+      (c.secType === 'CRYPTO_PERP' || c.secType === 'FUT') ? 'derivatives' : 'spot'
+    return b
+  }
+
+  const placeParams = (subAccountId?: string) =>
+    ({ aliceId: 'mock-paper|AAPL', action: 'BUY', orderType: 'MKT', totalQuantity: '1', subAccountId } as never)
+
+  it('single-sub-account brokers need no selector and stamp nothing', async () => {
+    const { uta } = createUTA()  // plain MockBroker — one implicit default
+    await uta.listSubAccounts()
+    expect(() => uta.stagePlaceOrder(placeParams())).not.toThrow()
+    const res = uta.commit('buy AAPL')
+    expect(res.message).toBe('buy AAPL')  // no [sub:…] tag
+  })
+
+  it('multi-sub-account write WITHOUT a selector loud-refuses with the valid ids', async () => {
+    const { uta } = createUTA(multiSubBroker())
+    await uta.listSubAccounts()  // warm the cache
+    expect(() => uta.stagePlaceOrder(placeParams())).toThrow(/multiple sub-accounts.*spot.*derivatives/s)
+  })
+
+  it('multi-sub-account write WITH a valid, instrument-consistent selector stamps the commit message', async () => {
+    const { uta } = createUTA(multiSubBroker())
+    await uta.listSubAccounts()
+    expect(() => uta.stagePlaceOrder(placeParams('spot'))).not.toThrow()  // AAPL (STK) → spot
+    const res = uta.commit('buy AAPL')
+    expect(res.message).toBe('buy AAPL [sub:spot]')
+  })
+
+  it('rejects an unknown sub-account id', async () => {
+    const { uta } = createUTA(multiSubBroker())
+    await uta.listSubAccounts()
+    expect(() => uta.stagePlaceOrder(placeParams('funding'))).toThrow(/unknown sub-account "funding".*spot, derivatives/s)
+  })
+
+  it('rejects a selector that contradicts the instrument', async () => {
+    const { uta } = createUTA(multiSubBroker())
+    await uta.listSubAccounts()
+    // AAPL (STK) routes to 'spot'; asking for 'derivatives' is a wrong-wallet mistake.
+    expect(() => uta.stagePlaceOrder(placeParams('derivatives'))).toThrow(/trades in sub-account "spot", not "derivatives"/)
+  })
+
+  it('clears the staged sub-account between commits — no stamp bleed-through', async () => {
+    const { uta } = createUTA(multiSubBroker())
+    await uta.listSubAccounts()
+
+    uta.stagePlaceOrder(placeParams('spot'))
+    expect(uta.commit('first').message).toBe('first [sub:spot]')
+
+    // Second cycle: the tracker was cleared by the first commit, so this stamps
+    // only its own sub-account (not 'first's leftover 'spot' duplicated).
+    uta.stagePlaceOrder(placeParams('spot'))
+    expect(uta.commit('second').message).toBe('second [sub:spot]')
+  })
+})
+
 // ==================== Operation dispatch (via push) ====================
 
 describe('UTA — operation dispatch', () => {

@@ -1,9 +1,9 @@
-import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { ViewSpec } from '../tabs/types'
 import { api } from '../api'
 import { getIntlLocale } from '../lib/intl'
-import type { UTAConfig, BrokerPreset, AccountInfo, Position, BrokerHealthInfo, UTASnapshotSummary, EquityCurvePoint, OrderHistoryEntry, OrderHistoryStatus, TradeHistoryEntry } from '../api/types'
+import type { UTAConfig, BrokerPreset, AccountInfo, SubAccountRef, Position, BrokerHealthInfo, UTASnapshotSummary, EquityCurvePoint, OrderHistoryEntry, OrderHistoryStatus, TradeHistoryEntry } from '../api/types'
 import { useTradingConfig } from '../hooks/useTradingConfig'
 import { useAccountHealth } from '../hooks/useAccountHealth'
 import { PageHeader } from '../components/PageHeader'
@@ -35,6 +35,11 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
   const [account, setAccount] = useState<AccountInfo | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [orders, setOrders] = useState<unknown[]>([])
+  // Sub-accounts (wallets). Empty/length-1 for ordinary brokers; >1 for
+  // separate-wallet venues (Binance: spot / derivatives). `selectedSub`
+  // undefined ⇒ the aggregate view across all wallets.
+  const [subAccounts, setSubAccounts] = useState<SubAccountRef[]>([])
+  const [selectedSub, setSelectedSub] = useState<string | undefined>(undefined)
   const [snapshots, setSnapshots] = useState<UTASnapshotSummary[]>([])
   const [editing, setEditing] = useState(false)
   const [orderMode, setOrderMode] = useState<OrderEntryMode | null>(null)
@@ -50,24 +55,49 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
   const preset = useMemo<BrokerPreset | undefined>(() => presets.find(p => p.id === uta?.presetId), [presets, uta])
   const health: BrokerHealthInfo | undefined = id ? healthMap[id] : undefined
 
-  // Live polling — account/positions/orders refresh every 15s.
+  // Sub-account discovery — once per UTA. A failure (or a single-wallet
+  // broker) leaves the list empty, so the selector simply never renders.
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    api.trading.utaSubAccounts(id)
+      .then(r => { if (!cancelled) setSubAccounts(r.subAccounts ?? []) })
+      .catch(() => { if (!cancelled) setSubAccounts([]) })
+    setSelectedSub(undefined)  // reset to aggregate when switching UTAs
+    return () => { cancelled = true }
+  }, [id])
+
+  // Live polling — account/positions/orders refresh every 15s. Account +
+  // positions scope to the selected wallet (undefined ⇒ aggregate); orders
+  // are not wallet-scoped (the venue order list is account-wide).
+  //
+  // Latest-wins guard: scoped CCXT reads are slow (multi-wallet venues do
+  // several round-trips), so switching the sub-account pill twice quickly
+  // leaves two fetches in flight. Without this, the slower (older) response
+  // can land last and paint the WRONG wallet's data under the selected pill.
+  // Each call claims a sequence number; a response only applies if it's still
+  // the newest in flight.
+  const reqSeq = useRef(0)
   const refreshLive = useCallback(async () => {
     if (!id) return
+    const seq = ++reqSeq.current
     setDataError(null)
     try {
       const [acct, pos, ord] = await Promise.all([
-        api.trading.utaAccount(id).catch(() => null),
-        api.trading.utaPositions(id).catch(() => ({ positions: [] as Position[] })),
+        api.trading.utaAccount(id, selectedSub).catch(() => null),
+        api.trading.utaPositions(id, selectedSub).catch(() => ({ positions: [] as Position[] })),
         api.trading.utaOrders(id).catch(() => ({ orders: [] as unknown[] })),
       ])
+      if (seq !== reqSeq.current) return  // superseded by a newer refresh — discard
       setAccount(acct)
       setPositions(pos.positions)
       setOrders(ord.orders)
       setLastUpdated(new Date())
     } catch (err) {
+      if (seq !== reqSeq.current) return
       setDataError(err instanceof Error ? err.message : String(err))
     }
-  }, [id])
+  }, [id, selectedSub])
 
   // Snapshots refresh more slowly (60s); same data feeds the NAV chart and
   // the 24h-delta anchor — no extra fetches needed.
@@ -223,7 +253,21 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
               screens it collapses to one column with the Account panel
               first — it's the summary. */}
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
-            <div className="lg:order-2 lg:sticky lg:top-4 self-start min-w-0">
+            <div className="lg:order-2 lg:sticky lg:top-4 self-start min-w-0 space-y-3">
+              {subAccounts.length > 1 && (
+                <SubAccountSelector
+                  subAccounts={subAccounts}
+                  selected={selectedSub}
+                  onSelect={(sub) => {
+                    // Drop the previous wallet's numbers immediately so the
+                    // panel shows "Loading account info…" during the (slow,
+                    // multi-round-trip) scoped read instead of briefly painting
+                    // the old scope's net-liquidation under the new pill.
+                    setAccount(null)
+                    setSelectedSub(sub)
+                  }}
+                />
+              )}
               <AccountPanel account={account} positions={positions} delta24h={delta24h} clock={clock} />
             </div>
 
@@ -272,6 +316,8 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
         <OrderEntryDialog
           utaId={uta.id}
           mode={orderMode}
+          subAccounts={subAccounts}
+          defaultSubAccountId={selectedSub}
           onClose={() => setOrderMode(null)}
           onPushComplete={() => { void refreshLive() }}
         />
@@ -289,6 +335,32 @@ function Shell({ title, children }: { title: string; children?: React.ReactNode 
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
         <div className="max-w-[720px] mx-auto">{children}</div>
       </div>
+    </div>
+  )
+}
+
+// ==================== Sub-account selector ====================
+
+/** Segmented control for separate-wallet venues (Binance: spot / derivatives).
+ *  "All" is the aggregate (selected = undefined); each pill scopes the account
+ *  + positions view to one wallet. Only rendered when a UTA spans >1 wallet. */
+function SubAccountSelector({ subAccounts, selected, onSelect }: {
+  subAccounts: SubAccountRef[]
+  selected: string | undefined
+  onSelect: (id: string | undefined) => void
+}) {
+  const pill = (active: boolean) =>
+    `px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+      active ? 'bg-accent text-white' : 'text-text-muted hover:text-text hover:bg-surface-hover'
+    }`
+  return (
+    <div className="flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+      <button type="button" className={pill(selected === undefined)} onClick={() => onSelect(undefined)}>All</button>
+      {subAccounts.map(s => (
+        <button key={s.id} type="button" className={pill(selected === s.id)} onClick={() => onSelect(s.id)} title={`${s.kind} wallet`}>
+          {s.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -329,9 +401,18 @@ function AccountPanel({ account, positions, delta24h, clock }: {
   const netLiq = Number(account.netLiquidation)
   const unrealized = Number(account.unrealizedPnL)
 
-  // Positions value = Σ marketValue of what the page already fetched — NOT
-  // netLiq − cash, which would bake in margin / quote-currency noise.
-  const positionsValue = sumFinite(positions.map(p => Number(p.marketValue)))
+  // Positions value = non-cash equity = netLiq − cash, so Cash + Positions
+  // Value ≡ Net Liquidation by construction. netLiq is now the sum of every
+  // wallet asset (stablecoins + priced holdings across spot/futures wallets,
+  // ANG-111); cash is the stablecoin slice, so the remainder is exactly the
+  // value of non-stablecoin holdings. Summing positions[].marketValue does NOT
+  // reconcile — it counts perp NOTIONAL (not equity) and omits non-stablecoin
+  // futures-wallet collateral. Fall back to the row sum only if netLiq/cash are
+  // unavailable.
+  const cashVal = Number(account.totalCashValue)
+  const positionsValue = Number.isFinite(netLiq) && Number.isFinite(cashVal)
+    ? netLiq - cashVal
+    : sumFinite(positions.map(p => Number(p.marketValue)))
   const utilizationPct = Number.isFinite(netLiq) && netLiq > 0
     ? (positionsValue / netLiq) * 100
     : null
