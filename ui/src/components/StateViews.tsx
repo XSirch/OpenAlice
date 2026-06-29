@@ -63,6 +63,25 @@ export function SkeletonText({ lines = 3, className = '' }: { lines?: number; cl
   )
 }
 
+/** Skeleton rows for a secondary sidebar list during cold load — matches
+ *  `SidebarRow`'s `px-3 py-1.5` rhythm so the placeholder sits exactly where the
+ *  real nav rows will. `icon` adds a leading glyph block (for sidebars whose rows
+ *  lead with an icon, e.g. Tracked). Varied widths keep it from looking like a
+ *  barcode. */
+export function SidebarRowsSkeleton({ rows = 5, icon = false }: { rows?: number; icon?: boolean }) {
+  const widths = ['w-32', 'w-24', 'w-28', 'w-20']
+  return (
+    <div aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-1.5 px-3 py-1.5">
+          {icon && <Skeleton className="h-3 w-3 rounded shrink-0" />}
+          <Skeleton className={`h-3 rounded ${widths[i % widths.length]}`} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ==================== EmptyState ====================
 
 interface EmptyStateProps {

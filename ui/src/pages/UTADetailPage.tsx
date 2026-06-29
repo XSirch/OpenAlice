@@ -180,7 +180,7 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
       }))
   }, [snapshots, id])
 
-  if (tc.loading) return <Shell title="Loading…" />
+  if (tc.loading) return <Shell title={id ?? 'UTA'}><UTADetailMainSkeleton /></Shell>
   if (!id) return <Shell title="UTA not specified" />
   if (!uta) {
     return (
