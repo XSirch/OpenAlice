@@ -298,9 +298,14 @@ jobs:
           const find = (pattern) => names().find((name) => pattern.test(name))
           const copyAlias = (source, alias) => {
             if (!source) return null
+            if (source === alias) return alias
             fs.copyFileSync(path.join(outDir, source), path.join(outDir, alias))
             console.log(`Created ${alias} from ${source}`)
             return alias
+          }
+          const parseYamlScalar = (content, key) => {
+            const match = content.match(new RegExp(`(?:^|\\n)${key}:\\s*['"]?([^'"\\n]+)['"]?`))
+            return match?.[1]?.trim() || null
           }
 
           if (version.includes('-')) {
@@ -312,10 +317,20 @@ jobs:
           const macArm64Dmg = find(new RegExp(`^OpenAlice-${versionPattern}-arm64\\.dmg$`))
           const macArm64Zip = find(new RegExp(`^OpenAlice-${versionPattern}-arm64-mac\\.zip$`))
           const windowsX64Exe = find(new RegExp(`^OpenAlice\\.Setup\\.${versionPattern}\\.exe$`))
+          const windowsX64Blockmap = find(new RegExp(`^OpenAlice\\.Setup\\.${versionPattern}\\.exe\\.blockmap$`))
 
           copyAlias(macArm64Dmg, 'mac-arm64.dmg')
           copyAlias(macArm64Zip, 'mac-arm64.zip')
           copyAlias(windowsX64Exe, 'windows-x64.exe')
+
+          const betaYmlPath = path.join(outDir, 'beta.yml')
+          const windowsFeedExe = fs.existsSync(betaYmlPath)
+            ? parseYamlScalar(fs.readFileSync(betaYmlPath, 'utf8'), 'path')
+            : null
+          if (windowsFeedExe?.endsWith('.exe')) {
+            copyAlias(windowsX64Exe, windowsFeedExe)
+            copyAlias(windowsX64Blockmap, `${windowsFeedExe}.blockmap`)
+          }
 
           const manifest = {
             version,
@@ -417,12 +432,35 @@ jobs:
 
           if [ "$CHANNEL" = "latest" ]; then
             MAC_METADATA="latest-mac.yml"
+            WINDOWS_METADATA="latest.yml"
           else
             MAC_METADATA="${CHANNEL}-mac.yml"
+            WINDOWS_METADATA="${CHANNEL}.yml"
           fi
 
           curl -fsSI "${BASE_URL}/${MAC_METADATA}"
+          curl -fsSI "${BASE_URL}/${WINDOWS_METADATA}"
           curl -fsSI "${BASE_URL}/OpenAlice-${VERSION}-arm64.dmg"
           curl -fsSI "${BASE_URL}/mac-arm64.dmg"
           curl -fsSI "${BASE_URL}/windows-x64.exe"
           curl -fsSI "${BASE_URL}/manifest.json"
+
+          WINDOWS_FEED_EXE=$(
+            WINDOWS_METADATA="$WINDOWS_METADATA" node - <<'NODE'
+            const fs = require('fs')
+            const metadata = process.env.WINDOWS_METADATA
+            const content = fs.readFileSync(`dist/r2-upload/${metadata}`, 'utf8')
+            const match = content.match(/(?:^|\n)path:\s*['"]?([^'"\n]+)['"]?/)
+            process.stdout.write(match?.[1]?.trim() || '')
+            NODE
+          )
+
+          if [ -n "$WINDOWS_FEED_EXE" ]; then
+            WINDOWS_FEED_URL=$(
+              WINDOWS_FEED_EXE="$WINDOWS_FEED_EXE" node - <<'NODE'
+              process.stdout.write(encodeURI(process.env.WINDOWS_FEED_EXE))
+              NODE
+            )
+            curl -fsSI "${BASE_URL}/${WINDOWS_FEED_URL}"
+            curl -fsSI "${BASE_URL}/${WINDOWS_FEED_URL}.blockmap"
+          fi
