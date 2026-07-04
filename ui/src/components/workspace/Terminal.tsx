@@ -12,7 +12,6 @@ import {
   type ClientControlMessage,
 } from './protocol';
 import { attachWebglRenderer } from './renderer';
-import { TerminalOutputThemeRewriter } from './terminalAnsiTheme';
 import {
   describeTerminalInput,
   keySignature,
@@ -230,9 +229,6 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
   const { profile: terminalThemeProfile } = useResolvedTerminalTheme();
   const themeRef = useRef(terminalThemeProfile.xtermTheme);
   themeRef.current = terminalThemeProfile.xtermTheme;
-  const themeProfileRef = useRef(terminalThemeProfile);
-  themeProfileRef.current = terminalThemeProfile;
-  const outputThemeRewriterRef = useRef(new TerminalOutputThemeRewriter());
   const appliedThemeVariantRef = useRef(terminalThemeProfile.variant);
   const termRef = useRef<Xterm | null>(null);
 
@@ -243,11 +239,10 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
 
     if (appliedThemeVariantRef.current === terminalThemeProfile.variant) return;
     appliedThemeVariantRef.current = terminalThemeProfile.variant;
-    outputThemeRewriterRef.current.reset();
-    // xterm stores parsed color attributes in its buffer. Switching only the
-    // palette cannot repaint scrollback that was previously light-mode
-    // rewritten, so reattach and let the server replay raw bytes through the
-    // active profile.
+    // Muxy-style terminal theming treats the raw PTY stream as the source of
+    // truth and the active theme as renderer config. Reattach so the server
+    // replays raw scrollback through the current xterm theme/profile, without
+    // mutating the output bytes themselves.
     connectRef.current?.();
   }, [terminalThemeProfile]);
 
@@ -349,16 +344,15 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
     };
 
     const writeToTerm = (data: Uint8Array): void => {
-      const themedData = outputThemeRewriterRef.current.rewrite(data, themeProfileRef.current);
       try {
-        term.write(themedData);
+        term.write(data);
       } catch (err) {
         if (teardown || pendingWriteFrame !== undefined) return;
         pendingWriteFrame = requestAnimationFrame(() => {
           pendingWriteFrame = undefined;
           if (teardown) return;
           try {
-            term.write(themedData);
+            term.write(data);
           } catch (retryErr) {
             console.warn('[openalice:terminal] dropped terminal frame after xterm write failure', retryErr ?? err);
           }
@@ -632,14 +626,14 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
 }
 
 function TerminalThemeControl(): ReactElement {
-  const { preference, variant } = useResolvedTerminalTheme();
+  const { preference, appTheme } = useResolvedTerminalTheme();
   const setPreference = useTerminalThemeStore((s) => s.setPreference);
   const options: Array<{
     preference: TerminalThemePreference;
     label: string;
     icon: LucideIcon;
   }> = [
-    { preference: 'follow', label: `Follow app (${variant})`, icon: Monitor },
+    { preference: 'follow', label: `Follow app (${appTheme})`, icon: Monitor },
     { preference: 'dark', label: 'Dark terminal', icon: Moon },
     { preference: 'light', label: 'Light terminal', icon: Sun },
   ];

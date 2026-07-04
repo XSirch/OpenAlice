@@ -62,6 +62,7 @@ export function resolveTerminalThemeVariant(
 
 export function useResolvedTerminalTheme(): {
   preference: TerminalThemePreference
+  appTheme: TerminalThemeVariant
   variant: TerminalThemeVariant
   profile: TerminalThemeProfile
 } {
@@ -69,7 +70,7 @@ export function useResolvedTerminalTheme(): {
   const preference = useTerminalThemeStore((s) => s.preference)
   const variant = resolveTerminalThemeVariant(preference, appTheme)
   const profile = terminalThemeProfileForVariant(variant)
-  return { preference, variant, profile }
+  return { preference, appTheme, variant, profile }
 }
 
 export function useResolvedTerminalThemeVariant(): TerminalThemeVariant {

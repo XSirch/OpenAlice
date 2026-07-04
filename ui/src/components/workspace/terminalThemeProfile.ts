@@ -1,7 +1,5 @@
 import type { ITheme } from '@xterm/xterm'
 
-import { darkTheme, lightTheme } from './theme'
-
 export type TerminalThemeVariant = 'light' | 'dark'
 export type TerminalThemeRgb = readonly [number, number, number]
 
@@ -13,31 +11,20 @@ export interface TerminalThemeProfile {
   readonly palette: readonly TerminalThemeRgb[]
   readonly cursorColor: TerminalThemeRgb
   readonly cursorText: TerminalThemeRgb
-  readonly selectionBackground: string
+  readonly selectionBackground: TerminalThemeRgb
+  readonly selectionBackgroundAlpha?: number
+  readonly selectionForeground: TerminalThemeRgb
   /**
-   * xterm uses this not just for paint. Its built-in OSC 4/10/11/12 handlers
-   * report colors from the active theme service back to the PTY, which is the
-   * web equivalent of Muxy applying a Ghostty config to a terminal surface.
+   * xterm uses this not just for paint. Its built-in OSC 4/10/11/12 handlers can
+   * report colors from the active theme service back to the PTY, which is the web
+   * equivalent of Muxy applying a client theme config to a terminal surface.
    */
   readonly xtermTheme: ITheme
-  /**
-   * Compatibility layer for web/xterm. A true terminal engine, like Ghostty in
-   * Muxy, owns this at the renderer/config layer. xterm.js still needs help for
-   * TUIs that emit explicit truecolor dark backgrounds in light mode.
-   */
-  readonly ansiRewrite:
-    | { readonly enabled: false }
-    | {
-        readonly enabled: true
-        readonly panelBackground: TerminalThemeRgb
-        readonly textForeground: TerminalThemeRgb
-        readonly darkBackgroundMaxLuma: number
-        readonly brightForegroundMinLuma: number
-        readonly targetForegroundLuma: number
-      }
 }
 
-const lightProfile: TerminalThemeProfile = {
+type TerminalThemeProfileInput = Omit<TerminalThemeProfile, 'xtermTheme'>
+
+const lightProfile = defineTerminalThemeProfile({
   variant: 'light',
   name: 'OpenAlice Light',
   foreground: [28, 42, 65],
@@ -62,19 +49,12 @@ const lightProfile: TerminalThemeProfile = {
   ],
   cursorColor: [47, 98, 176],
   cursorText: [250, 248, 241],
-  selectionBackground: 'rgba(47, 98, 176, 0.22)',
-  xtermTheme: lightTheme,
-  ansiRewrite: {
-    enabled: true,
-    panelBackground: [244, 241, 232],
-    textForeground: [28, 42, 65],
-    darkBackgroundMaxLuma: 170,
-    brightForegroundMinLuma: 175,
-    targetForegroundLuma: 120,
-  },
-}
+  selectionBackground: [47, 98, 176],
+  selectionBackgroundAlpha: 0.22,
+  selectionForeground: [250, 248, 241],
+})
 
-const darkProfile: TerminalThemeProfile = {
+const darkProfile = defineTerminalThemeProfile({
   variant: 'dark',
   name: 'OpenAlice Dark',
   foreground: [230, 237, 243],
@@ -99,10 +79,9 @@ const darkProfile: TerminalThemeProfile = {
   ],
   cursorColor: [126, 231, 135],
   cursorText: [11, 13, 16],
-  selectionBackground: '#264f78',
-  xtermTheme: darkTheme,
-  ansiRewrite: { enabled: false },
-}
+  selectionBackground: [38, 79, 120],
+  selectionForeground: [240, 246, 252],
+})
 
 export function xtermThemeForVariant(variant: TerminalThemeVariant): ITheme {
   return terminalThemeProfileForVariant(variant).xtermTheme
@@ -118,7 +97,8 @@ export interface TerminalClientThemeDTO {
   readonly palette: readonly number[]
   readonly cursorColor: number
   readonly cursorText: number
-  readonly selectionBackground: string
+  readonly selectionBackground: number
+  readonly selectionForeground: number
 }
 
 export function terminalClientThemeDTO(profile: TerminalThemeProfile): TerminalClientThemeDTO {
@@ -128,10 +108,56 @@ export function terminalClientThemeDTO(profile: TerminalThemeProfile): TerminalC
     palette: profile.palette.map(rgbToInt),
     cursorColor: rgbToInt(profile.cursorColor),
     cursorText: rgbToInt(profile.cursorText),
-    selectionBackground: profile.selectionBackground,
+    selectionBackground: rgbToInt(profile.selectionBackground),
+    selectionForeground: rgbToInt(profile.selectionForeground),
+  }
+}
+
+function defineTerminalThemeProfile(input: TerminalThemeProfileInput): TerminalThemeProfile {
+  return {
+    ...input,
+    xtermTheme: xtermThemeFromProfile(input),
+  }
+}
+
+function xtermThemeFromProfile(profile: TerminalThemeProfileInput): ITheme {
+  const palette = profile.palette
+  return {
+    background: rgbToHex(profile.background),
+    foreground: rgbToHex(profile.foreground),
+    cursor: rgbToHex(profile.cursorColor),
+    cursorAccent: rgbToHex(profile.cursorText),
+    selectionBackground: profile.selectionBackgroundAlpha === undefined
+      ? rgbToHex(profile.selectionBackground)
+      : rgbToRgba(profile.selectionBackground, profile.selectionBackgroundAlpha),
+    selectionForeground: rgbToHex(profile.selectionForeground),
+    black: rgbToHex(palette[0]!),
+    red: rgbToHex(palette[1]!),
+    green: rgbToHex(palette[2]!),
+    yellow: rgbToHex(palette[3]!),
+    blue: rgbToHex(palette[4]!),
+    magenta: rgbToHex(palette[5]!),
+    cyan: rgbToHex(palette[6]!),
+    white: rgbToHex(palette[7]!),
+    brightBlack: rgbToHex(palette[8]!),
+    brightRed: rgbToHex(palette[9]!),
+    brightGreen: rgbToHex(palette[10]!),
+    brightYellow: rgbToHex(palette[11]!),
+    brightBlue: rgbToHex(palette[12]!),
+    brightMagenta: rgbToHex(palette[13]!),
+    brightCyan: rgbToHex(palette[14]!),
+    brightWhite: rgbToHex(palette[15]!),
   }
 }
 
 function rgbToInt(rgb: TerminalThemeRgb): number {
   return (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]
+}
+
+function rgbToHex(rgb: TerminalThemeRgb): string {
+  return `#${rgbToInt(rgb).toString(16).padStart(6, '0')}`
+}
+
+function rgbToRgba(rgb: TerminalThemeRgb, alpha: number): string {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`
 }
