@@ -50,6 +50,7 @@ export const ja: Resources = {
       general: '一般',
       aiProvider: 'AI プロバイダー',
       trading: '取引',
+      issues: 'Issues',
       mcpServer: 'MCP サーバー',
       marketData: 'マーケットデータ',
       newsSources: 'ニュースソース',

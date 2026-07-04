@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { basename, delimiter as pathDelimiter, join } from 'node:path';
 
 import { cliBinPath } from '@/core/paths.js';
+import { readIssueDefaultAgent, readWorkspaceDefaultAgent } from '@/core/config.js';
 
 import { claudeAdapter } from './adapters/claude.js';
 import { codexAdapter } from './adapters/codex.js';
@@ -314,6 +315,28 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     }
     return adapters.resolve(null);
   };
+
+  const firstWorkspaceRuntime = (wsMeta: WorkspaceMeta): string | undefined =>
+    wsMeta.agents.find((id) => {
+      const adapter = adapters.get(id);
+      return adapter ? isAgentRuntime(adapter) : false;
+    });
+
+  const validRuntimeForWorkspace = (wsMeta: WorkspaceMeta, agentId: string | null): string | undefined => {
+    if (!agentId || !wsMeta.agents.includes(agentId)) return undefined;
+    const adapter = adapters.get(agentId);
+    return adapter && isAgentRuntime(adapter) ? agentId : undefined;
+  };
+
+  /**
+   * Default for scheduled issues with no frontmatter `agent`: issue-specific
+   * setting first, then the interactive workspace default for backwards
+   * continuity, then the workspace's first enabled runtime.
+   */
+  const resolveIssueDefaultAgentId = async (wsMeta: WorkspaceMeta): Promise<string | undefined> =>
+    validRuntimeForWorkspace(wsMeta, await readIssueDefaultAgent().catch(() => null)) ??
+    validRuntimeForWorkspace(wsMeta, await readWorkspaceDefaultAgent().catch(() => null)) ??
+    firstWorkspaceRuntime(wsMeta);
 
   /**
    * Single source of truth for "given a workspace + adapter + resume intent,
@@ -626,7 +649,10 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
   );
   const scheduleScanner = new ScheduleScanner({
     registry,
-    resolveAdapter,
+    resolveAdapter: async (ws, agentId) => resolveAdapter(
+      ws,
+      agentId ?? await resolveIssueDefaultAgentId(ws),
+    ),
     dispatch: dispatchHeadlessTaskMethod,
     markers: scheduleMarkers,
     logger: launcherLogger.child({ scope: 'schedule' }),

@@ -67,4 +67,15 @@ export const configKeysHandlers = [
     const body = (await request.json().catch(() => ({}))) as { defaults?: unknown }
     return HttpResponse.json({ defaults: body.defaults ?? {} })
   }),
+
+  http.get('/api/config/workspace-default-agent', () => HttpResponse.json({ agent: 'claude' })),
+  http.put('/api/config/workspace-default-agent', async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { agent?: unknown }
+    return HttpResponse.json({ agent: typeof body.agent === 'string' ? body.agent : null })
+  }),
+  http.get('/api/config/issue-default-agent', () => HttpResponse.json({ agent: 'pi' })),
+  http.put('/api/config/issue-default-agent', async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { agent?: unknown }
+    return HttpResponse.json({ agent: typeof body.agent === 'string' ? body.agent : null })
+  }),
 ]

@@ -215,6 +215,27 @@ export async function setWorkspaceDefaultAgent(agent: string | null): Promise<st
   return body.agent ?? null;
 }
 
+export async function getIssueDefaultAgent(): Promise<string | null> {
+  const res = await fetch('/api/config/issue-default-agent');
+  if (!res.ok) return null;
+  const body = (await res.json()) as { agent?: string | null };
+  return body.agent ?? null;
+}
+
+export async function setIssueDefaultAgent(agent: string | null): Promise<string | null> {
+  const res = await fetch('/api/config/issue-default-agent', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ agent }),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`set issue default agent failed: ${res.status} ${msg}`);
+  }
+  const body = (await res.json()) as { agent?: string | null };
+  return body.agent ?? null;
+}
+
 // ── sessions ─────────────────────────────────────────────────────────────────
 //
 // V3.S4 — single SessionRecord type that covers both running PTYs and paused

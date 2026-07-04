@@ -204,6 +204,12 @@ export const aiProviderSchema = z.object({
    * start?" Shell is a utility adapter, not a valid stored default.
    */
   workspaceDefaultAgent: z.string().nullable().default(null),
+  /**
+   * User-level default runtime for issue-triggered headless work. This stays
+   * separate from `workspaceDefaultAgent`: users often want Codex/Claude for
+   * interactive chat, but Pi/opencode for scheduled scans.
+   */
+  issueDefaultAgent: z.string().nullable().default(null),
 })
 
 export type AIProviderConfig = z.infer<typeof aiProviderSchema>
@@ -1005,6 +1011,18 @@ export async function readWorkspaceDefaultAgent(): Promise<string | null> {
 export async function writeWorkspaceDefaultAgent(agentId: string | null): Promise<void> {
   const config = await readAIProviderConfig()
   config.workspaceDefaultAgent = agentId && agentId.trim() ? agentId.trim() : null
+  await mkdir(CONFIG_DIR, { recursive: true })
+  await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
+}
+
+export async function readIssueDefaultAgent(): Promise<string | null> {
+  const config = await readAIProviderConfig()
+  return config.issueDefaultAgent ?? null
+}
+
+export async function writeIssueDefaultAgent(agentId: string | null): Promise<void> {
+  const config = await readAIProviderConfig()
+  config.issueDefaultAgent = agentId && agentId.trim() ? agentId.trim() : null
   await mkdir(CONFIG_DIR, { recursive: true })
   await writeFile(resolve(CONFIG_DIR, 'ai-provider-manager.json'), JSON.stringify(config, null, 2) + '\n')
 }

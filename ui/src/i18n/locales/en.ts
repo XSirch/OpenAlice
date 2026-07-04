@@ -61,6 +61,7 @@ export const en = {
       general: 'General',
       aiProvider: 'AI Provider',
       trading: 'Trading',
+      issues: 'Issues',
       mcpServer: 'MCP Server',
       marketData: 'Market Data',
       newsSources: 'News Sources',

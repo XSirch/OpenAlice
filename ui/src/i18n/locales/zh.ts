@@ -50,6 +50,7 @@ export const zh: Resources = {
       general: '通用',
       aiProvider: 'AI 提供商',
       trading: '交易',
+      issues: 'Issues',
       mcpServer: 'MCP 服务器',
       marketData: '市场数据',
       newsSources: '新闻源',

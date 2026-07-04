@@ -4,6 +4,7 @@ import {
   readCredentials, addCredential, deleteCredential, writeCredential, resolveCredential,
   credentialWires,
   readWorkspaceCredentialDefaults, writeWorkspaceCredentialDefaults,
+  readIssueDefaultAgent, writeIssueDefaultAgent,
   readWorkspaceDefaultAgent, writeWorkspaceDefaultAgent,
   credentialVendorEnum, credentialWireShapeEnum,
   type ConfigSection, type Credential, type CredentialWireShape,
@@ -241,6 +242,27 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
         ? body.agent
         : null
       await writeWorkspaceDefaultAgent(agent)
+      return c.json({ agent })
+    } catch (err) {
+      return c.json({ error: String(err) }, 400)
+    }
+  })
+
+  app.get('/issue-default-agent', async (c) => {
+    try {
+      return c.json({ agent: await readIssueDefaultAgent() })
+    } catch (err) {
+      return c.json({ error: String(err) }, 500)
+    }
+  })
+
+  app.put('/issue-default-agent', async (c) => {
+    try {
+      const body = await c.req.json<{ agent?: string | null }>()
+      const agent = typeof body.agent === 'string' && DEFAULTABLE_AGENTS.includes(body.agent as typeof DEFAULTABLE_AGENTS[number])
+        ? body.agent
+        : null
+      await writeIssueDefaultAgent(agent)
       return c.json({ agent })
     } catch (err) {
       return c.json({ error: String(err) }, 400)

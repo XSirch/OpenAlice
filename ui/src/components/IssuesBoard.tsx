@@ -190,7 +190,7 @@ interface BoardRow {
 interface AgentRuntime {
   id: string
   displayName: string
-  source: 'override' | 'default' | 'workspace'
+  source: 'override' | 'issue-default' | 'workspace-default' | 'workspace'
 }
 
 /** Normalised collision key — title, trimmed + lowercased. Mirrors the server's
@@ -207,6 +207,7 @@ function resolveAgentRuntime(
   issue: IssueListItem,
   workspace: { agents: readonly string[] } | null,
   agents: readonly { id: string; displayName: string; kind?: 'agent' | 'utility' }[],
+  issueDefaultAgent: string | null,
   defaultAgent: string | null,
 ): AgentRuntime | undefined {
   if (issue.agent) {
@@ -217,9 +218,13 @@ function resolveAgentRuntime(
     const agent = agents.find((a) => a.id === id)
     return agent ? agent.kind !== 'utility' : id !== 'shell'
   })
-  const defaultId = defaultAgent && runtimeIds.includes(defaultAgent) ? defaultAgent : null
-  if (defaultId) {
-    return { id: defaultId, displayName: agentName(defaultId, agents), source: 'default' }
+  const issueDefaultId = issueDefaultAgent && runtimeIds.includes(issueDefaultAgent) ? issueDefaultAgent : null
+  if (issueDefaultId) {
+    return { id: issueDefaultId, displayName: agentName(issueDefaultId, agents), source: 'issue-default' }
+  }
+  const workspaceDefaultId = defaultAgent && runtimeIds.includes(defaultAgent) ? defaultAgent : null
+  if (workspaceDefaultId) {
+    return { id: workspaceDefaultId, displayName: agentName(workspaceDefaultId, agents), source: 'workspace-default' }
   }
   const fallbackId = runtimeIds[0]
   return fallbackId
@@ -233,7 +238,9 @@ function AgentRuntimePill({ runtime }: { runtime: AgentRuntime }) {
   const title =
     runtime.source === 'override'
       ? `Agent runtime override: ${runtime.displayName}`
-      : runtime.source === 'default'
+      : runtime.source === 'issue-default'
+        ? `Agent runtime: ${runtime.displayName} (issue default)`
+      : runtime.source === 'workspace-default'
         ? `Agent runtime: ${runtime.displayName} (workspace default)`
         : `Agent runtime: ${runtime.displayName} (workspace fallback)`
   return (
@@ -376,7 +383,7 @@ function InvalidWorkspaces({ workspaces }: { workspaces: IssueWorkspace[] }) {
  */
 export function IssuesBoard() {
   const { data, error, loading } = useIssues()
-  const { agents, defaultAgent, workspaces: workspaceMetas } = useWorkspaces()
+  const { agents, defaultAgent, issueDefaultAgent, workspaces: workspaceMetas } = useWorkspaces()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
   const setSidebar = useWorkspace((s) => s.setSidebar)
   const [collapsed, setCollapsed] = useState<Set<IssueStatus>>(new Set())
@@ -434,6 +441,7 @@ export function IssuesBoard() {
         issue,
         workspaceMetas.find((workspace) => workspace.id === w.wsId) ?? null,
         agents,
+        issueDefaultAgent,
         defaultAgent,
       ),
       dupOthers: issue.nameCollision

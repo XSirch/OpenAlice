@@ -5,6 +5,7 @@ import type { ViewKind, ViewSpec } from './types'
 import { PortfolioPage } from '../pages/PortfolioPage'
 import { TradingAsGitPage } from '../pages/TradingAsGitPage'
 import { IssuePage } from '../pages/IssuePage'
+import { IssueSettingsPage } from '../pages/IssueSettingsPage'
 import { IssueDetailPage } from '../pages/IssueDetailPage'
 import { TrackedIssueDetailPage } from '../pages/TrackedIssueDetailPage'
 import { AutomationPage } from '../pages/AutomationPage'
@@ -245,6 +246,7 @@ const settingsCategoryTitle: Record<
   general: 'Settings',
   'ai-provider': 'AI Provider',
   trading: 'Trading',
+  issues: 'Issues',
   mcp: 'MCP Server',
   'market-data': 'Market Data',
   'news-collector': 'News Sources',
@@ -255,6 +257,7 @@ function SettingsRouter({ spec }: ViewProps<'settings'>) {
     case 'general': return <SettingsPage />
     case 'ai-provider': return <AIProviderPage />
     case 'trading': return <TradingPage />
+    case 'issues': return <IssueSettingsPage />
     case 'mcp': return <MCPPage />
     case 'market-data': return <MarketDataPage />
     case 'news-collector': return <NewsCollectorPage />

@@ -58,6 +58,7 @@ export const zhHant: Resources = {
       general: '一般',
       aiProvider: 'AI 供應商',
       trading: '交易',
+      issues: 'Issues',
       mcpServer: 'MCP 伺服器',
       marketData: '市場資料',
       newsSources: '新聞來源',

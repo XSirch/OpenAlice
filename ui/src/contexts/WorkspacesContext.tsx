@@ -32,6 +32,7 @@ import { WorkspaceAIConfigModal } from '../components/workspace/WorkspaceAIConfi
 import {
   deleteSession as apiDeleteSession,
   type AgentId,
+  getIssueDefaultAgent,
   getWorkspaceDefaultAgent,
   listAgents,
   listTemplates,
@@ -39,6 +40,7 @@ import {
   pauseSession as apiPauseSession,
   quickChat as apiQuickChat,
   resumeSession as apiResumeSession,
+  setIssueDefaultAgent as apiSetIssueDefaultAgent,
   setWorkspaceDefaultAgent as apiSetWorkspaceDefaultAgent,
   spawnSession,
   updateWorkspaceMetadata,
@@ -59,6 +61,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [defaultAgent, setDefaultAgentState] = useState<string | null>(null)
+  const [issueDefaultAgent, setIssueDefaultAgentState] = useState<string | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   // Don't reconcile orphan tabs until we've successfully fetched the
   // workspaces list at least once — otherwise the initial `[]` looks like
@@ -100,6 +103,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
       .finally(() => setTemplatesLoaded(true))
     void listAgents().then(setAgents).catch(() => setAgents([]))
     void getWorkspaceDefaultAgent().then(setDefaultAgentState).catch(() => setDefaultAgentState(null))
+    void getIssueDefaultAgent().then(setIssueDefaultAgentState).catch(() => setIssueDefaultAgentState(null))
   }, [])
 
   // Reconcile tabs against the workspaces list. If a workspace or session
@@ -171,6 +175,11 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   const setDefaultAgent = useCallback(async (agent: string | null): Promise<void> => {
     const saved = await apiSetWorkspaceDefaultAgent(agent)
     setDefaultAgentState(saved)
+  }, [])
+
+  const setIssueDefaultAgent = useCallback(async (agent: string | null): Promise<void> => {
+    const saved = await apiSetIssueDefaultAgent(agent)
+    setIssueDefaultAgentState(saved)
   }, [])
 
   const quickChat = useCallback(
@@ -320,12 +329,14 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
         templates,
         agents,
         defaultAgent,
+        issueDefaultAgent,
         listError,
         hasLoaded,
         templatesLoaded,
         refresh,
         spawn,
         setDefaultAgent,
+        setIssueDefaultAgent,
         quickChat,
         pauseSession,
         resumeSession,

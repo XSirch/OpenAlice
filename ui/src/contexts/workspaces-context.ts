@@ -19,6 +19,7 @@ export interface WorkspacesContextValue {
   readonly templates: readonly TemplateInfo[]
   readonly agents: readonly AgentInfo[]
   readonly defaultAgent: string | null
+  readonly issueDefaultAgent: string | null
   readonly listError: string | null
   /** True once the first workspaces-list fetch has resolved. */
   readonly hasLoaded: boolean
@@ -27,6 +28,7 @@ export interface WorkspacesContextValue {
   refresh(): void
   spawn(wsId: string, opts?: SpawnOpts, source?: WorkspaceSource): Promise<void>
   setDefaultAgent(agent: string | null): Promise<void>
+  setIssueDefaultAgent(agent: string | null): Promise<void>
   quickChat(prompt: string, agent?: string, credentialSlug?: string, targetWsId?: string): Promise<void>
   pauseSession(wsId: string, sessionId: string): Promise<void>
   resumeSession(wsId: string, sessionId: string, source?: WorkspaceSource): Promise<void>

@@ -13,6 +13,7 @@ import type { Credential, WorkspaceCredentialDefault } from '../../core/config.j
 let credStore: Record<string, Credential> = {}
 let defaultsStore: Record<string, WorkspaceCredentialDefault> = {}
 let defaultAgentStore: string | null = null
+let issueDefaultAgentStore: string | null = null
 
 vi.mock('../../core/config.js', async () => {
   const actual = await vi.importActual<typeof import('../../core/config.js')>('../../core/config.js')
@@ -21,6 +22,7 @@ vi.mock('../../core/config.js', async () => {
     readCredentials: vi.fn(async () => ({ ...credStore })),
     readWorkspaceCredentialDefaults: vi.fn(async () => ({ ...defaultsStore })),
     readWorkspaceDefaultAgent: vi.fn(async () => defaultAgentStore),
+    readIssueDefaultAgent: vi.fn(async () => issueDefaultAgentStore),
     writeWorkspaceCredentialDefaults: vi.fn(async (next: Record<string, WorkspaceCredentialDefault>) => {
       // Mirror the real writer: drop empty slugs.
       const cleaned: Record<string, WorkspaceCredentialDefault> = {}
@@ -29,6 +31,9 @@ vi.mock('../../core/config.js', async () => {
     }),
     writeWorkspaceDefaultAgent: vi.fn(async (agent: string | null) => {
       defaultAgentStore = agent
+    }),
+    writeIssueDefaultAgent: vi.fn(async (agent: string | null) => {
+      issueDefaultAgentStore = agent
     }),
     addCredential: vi.fn(async (credential: Credential) => {
       const slug = `${credential.vendor}-${Object.keys(credStore).length + 1}`
@@ -67,6 +72,7 @@ beforeEach(() => {
   }
   defaultsStore = {}
   defaultAgentStore = null
+  issueDefaultAgentStore = null
 })
 
 describe('GET /workspace-credential-defaults', () => {
@@ -131,6 +137,32 @@ describe('GET/PUT /workspace-default-agent', () => {
     const unknown = await req(routes, 'PUT', '/workspace-default-agent', { agent: 'bogus' })
     expect(unknown.body).toEqual({ agent: null })
     expect(defaultAgentStore).toBeNull()
+  })
+})
+
+describe('GET/PUT /issue-default-agent', () => {
+  it('round-trips a valid issue runtime default', async () => {
+    const routes = createConfigRoutes()
+    const put = await req(routes, 'PUT', '/issue-default-agent', { agent: 'pi' })
+    expect(put.status).toBe(200)
+    expect(put.body).toEqual({ agent: 'pi' })
+    expect(issueDefaultAgentStore).toBe('pi')
+
+    const get = await req(routes, 'GET', '/issue-default-agent')
+    expect(get.body).toEqual({ agent: 'pi' })
+  })
+
+  it('does not persist shell or unknown ids as an issue default', async () => {
+    const routes = createConfigRoutes()
+    issueDefaultAgentStore = 'pi'
+
+    const shell = await req(routes, 'PUT', '/issue-default-agent', { agent: 'shell' })
+    expect(shell.body).toEqual({ agent: null })
+    expect(issueDefaultAgentStore).toBeNull()
+
+    const unknown = await req(routes, 'PUT', '/issue-default-agent', { agent: 'bogus' })
+    expect(unknown.body).toEqual({ agent: null })
+    expect(issueDefaultAgentStore).toBeNull()
   })
 })
 

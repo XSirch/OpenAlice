@@ -168,6 +168,7 @@ function AssigneeEditor({
 
 function AgentEditor({
   value,
+  issueDefaultAgent,
   defaultAgent,
   options,
   readiness,
@@ -176,6 +177,7 @@ function AgentEditor({
   onConfigure,
 }: {
   value?: string
+  issueDefaultAgent: string | null
   defaultAgent: string | null
   options: readonly { id: string; displayName: string; installed?: boolean }[]
   readiness: Readonly<Record<string, AgentCredentialReadiness>>
@@ -184,11 +186,14 @@ function AgentEditor({
   onConfigure: (agent: AgentId) => void
 }) {
   const selected = value ?? ''
+  const issueDefaultInOptions = issueDefaultAgent && options.some((a) => a.id === issueDefaultAgent) ? issueDefaultAgent : null
   const defaultInOptions = defaultAgent && options.some((a) => a.id === defaultAgent) ? defaultAgent : null
-  const effectiveAgent = value || defaultInOptions || options[0]?.id || null
+  const effectiveAgent = value || issueDefaultInOptions || defaultInOptions || options[0]?.id || null
   const canConfigure = isConfigurableAgent(effectiveAgent)
-  const defaultLabel = defaultInOptions
-    ? `Default (${options.find((a) => a.id === defaultAgent)?.displayName ?? defaultAgent})`
+  const defaultLabel = issueDefaultInOptions
+    ? `Default (${options.find((a) => a.id === issueDefaultInOptions)?.displayName ?? issueDefaultInOptions})`
+    : defaultInOptions
+    ? `Default (${options.find((a) => a.id === defaultInOptions)?.displayName ?? defaultInOptions}, workspace)`
     : 'Default'
 
   return (
@@ -239,6 +244,7 @@ function PropertiesRail({
   issue,
   wsTag,
   agentOptions,
+  issueDefaultAgent,
   defaultAgent,
   agentReadiness,
   saving,
@@ -249,6 +255,7 @@ function PropertiesRail({
   issue: IssueDetailIssue
   wsTag?: string
   agentOptions: readonly { id: string; displayName: string; installed?: boolean }[]
+  issueDefaultAgent: string | null
   defaultAgent: string | null
   agentReadiness: Readonly<Record<string, AgentCredentialReadiness>>
   saving: boolean
@@ -257,8 +264,9 @@ function PropertiesRail({
   onConfigureAgent: (agent: AgentId) => void
 }) {
   const meta = STATUS_META[issue.status]
+  const issueDefaultInOptions = issueDefaultAgent && agentOptions.some((a) => a.id === issueDefaultAgent) ? issueDefaultAgent : null
   const defaultInOptions = defaultAgent && agentOptions.some((a) => a.id === defaultAgent) ? defaultAgent : null
-  const effectiveAgent = issue.agent || defaultInOptions || agentOptions[0]?.id || null
+  const effectiveAgent = issue.agent || issueDefaultInOptions || defaultInOptions || agentOptions[0]?.id || null
   const selectedReadiness = effectiveAgent ? agentReadiness[effectiveAgent] : undefined
   const agentNeedsCredential = selectedReadiness?.requiresCredential === true && !selectedReadiness.ready
   return (
@@ -309,6 +317,7 @@ function PropertiesRail({
         <EditRow label="Agent">
           <AgentEditor
             value={issue.agent}
+            issueDefaultAgent={issueDefaultAgent}
             defaultAgent={defaultAgent}
             options={agentOptions}
             readiness={agentReadiness}
@@ -628,7 +637,7 @@ export function IssueDetail({
 }: IssueDetailProps) {
   const { data, error, loading, mutate } = useIssueDetail(wsId, id)
   const { data: board } = useIssues()
-  const { agents, defaultAgent, openAgentConfig, workspaces } = useWorkspaces()
+  const { agents, defaultAgent, issueDefaultAgent, openAgentConfig, workspaces } = useWorkspaces()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
   const setSidebar = useWorkspace((s) => s.setSidebar)
   const selectInboxEntry = useInboxSelection((s) => s.select)
@@ -800,6 +809,7 @@ export function IssueDetail({
           issue={issue}
           wsTag={wsTag}
           agentOptions={agentOptions}
+          issueDefaultAgent={issueDefaultAgent}
           defaultAgent={defaultAgent}
           agentReadiness={agentReadiness}
           saving={saving}
