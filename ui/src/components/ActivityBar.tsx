@@ -35,6 +35,8 @@ interface ActivityBarProps {
   onClose: () => void
   /** True once the rail is static (>= md). The compact rail is desktop-only. */
   desktopStatic?: boolean
+  /** Static desktop rail width chosen by App's shell breakpoints. */
+  railMode?: 'compact' | 'narrow' | 'full'
   /** Force the static rail into icon-only mode at narrow desktop widths. */
   compactRailForced?: boolean
 }
@@ -163,6 +165,7 @@ export function ActivityBar({
   open,
   onClose,
   desktopStatic = true,
+  railMode = 'full',
   compactRailForced = false,
 }: ActivityBarProps) {
   const { t } = useTranslation()
@@ -175,9 +178,14 @@ export function ActivityBar({
   const setCollapsed = useActivityBarCollapse((s) => s.setCollapsed)
   const railCollapsed = useActivityBarCollapse((s) => s.railCollapsed)
   const setRailCollapsed = useActivityBarCollapse((s) => s.setRailCollapsed)
-  const compactRail = desktopStatic && (compactRailForced || railCollapsed)
   const shortRailHeight = useMediaQuery('(max-height: 700px)')
-  const denseRail = compactRail && shortRailHeight
+  const veryShortRailHeight = useMediaQuery('(max-height: 520px)')
+  const forcedCompactRail = desktopStatic && (
+    compactRailForced || railMode === 'compact' || veryShortRailHeight
+  )
+  const compactRail = desktopStatic && (forcedCompactRail || railCollapsed)
+  const narrowRail = desktopStatic && railMode === 'narrow' && !compactRail
+  const denseRail = desktopStatic && shortRailHeight
 
   return (
     <>
@@ -193,7 +201,7 @@ export function ActivityBar({
        *  page with backdrop. Desktop: static column flush left. */}
       <aside
         className={`
-          w-[280px] ${compactRail ? 'md:w-[60px]' : 'md:w-[188px]'} h-full flex flex-col shrink-0
+          w-[280px] ${compactRail ? 'md:w-[60px]' : narrowRail ? 'md:w-[152px]' : 'md:w-[188px]'} h-full flex flex-col shrink-0
           bg-bg-tertiary
           border-r border-border/80
           fixed z-50 top-0 left-0 transition-[transform,width] duration-200
@@ -203,7 +211,7 @@ export function ActivityBar({
       >
         {/* Branding — h-10 to line up with the Sidebar header + TabStrip
             (all three top surfaces share the 40px header rhythm). */}
-        <div className={`${denseRail ? 'h-10 mb-2 md:h-7 md:mb-0.5' : 'h-10 mb-2'} flex items-center shrink-0 ${compactRail ? 'pl-[22px] pr-4 gap-2.5 md:gap-0 md:pr-0' : 'pl-[22px] pr-4 gap-2.5'}`}>
+        <div className={`${denseRail ? 'h-10 mb-2 md:h-7 md:mb-0.5' : 'h-10 mb-2'} flex items-center shrink-0 ${compactRail ? 'pl-[22px] pr-4 gap-2.5 md:gap-0 md:pr-0' : narrowRail ? 'pl-[18px] pr-3 gap-2' : 'pl-[22px] pr-4 gap-2.5'}`}>
           <img
             src="/alice.ico"
             alt="Alice"
@@ -214,7 +222,7 @@ export function ActivityBar({
         </div>
 
         {/* Navigation */}
-        <nav className={`flex-1 flex flex-col overflow-x-hidden overflow-y-auto ${denseRail ? 'pb-3 md:pb-0.5' : 'pb-3'} ${compactRail ? 'px-3 md:items-start' : 'px-3'}`}>
+        <nav className={`flex-1 flex flex-col overflow-x-hidden overflow-y-auto ${denseRail ? 'pb-3 md:pb-0.5' : 'pb-3'} ${compactRail ? 'px-3 md:items-start' : narrowRail ? 'px-2.5' : 'px-3'}`}>
           {NAV_SECTIONS.map((section, si) => {
             const labeled = section.sectionLabel.length > 0
             // User toggle wins over default. The collapse store stores
@@ -233,7 +241,7 @@ export function ActivityBar({
                   compactRail && si > 0
                     ? `${denseRail ? 'mt-3 pt-3 md:mt-0.5 md:pt-0.5 md:w-8' : 'mt-3 pt-3 md:w-11'} border-t border-border/70`
                     : si > 0
-                      ? 'mt-4'
+                      ? denseRail ? 'mt-2' : 'mt-4'
                       : compactRail
                         ? denseRail ? 'md:w-8' : 'md:w-11'
                         : ''
@@ -270,12 +278,14 @@ export function ActivityBar({
                           type="button"
                           onClick={handleClick}
                           title={t(item.labelKey)}
-                          className={`relative flex min-h-[34px] items-center rounded-md text-[13px] transition-colors text-left ${
+                          className={`relative flex items-center rounded-md transition-colors text-left ${
                             compactRail
                               ? denseRail
                                 ? 'md:h-[26px] md:w-8 md:min-h-[26px] md:justify-center md:gap-0 md:px-0 md:py-0'
                                 : 'md:h-9 md:w-11 md:min-h-9 md:justify-center md:gap-0 md:px-0 md:py-0'
-                              : 'gap-3 px-3 py-1.5'
+                              : denseRail
+                                ? `min-h-[28px] ${narrowRail ? 'gap-2 px-2' : 'gap-2.5 px-2.5'} py-1 text-[12px]`
+                                : `min-h-[34px] ${narrowRail ? 'gap-2 px-2.5' : 'gap-3 px-3'} py-1.5 text-[13px]`
                           } ${
                             isActive
                               ? 'bg-accent-dim text-text'
@@ -324,9 +334,9 @@ export function ActivityBar({
         </nav>
 
         {/* Footer — global icon controls pinned to the bottom of the rail. */}
-        <div className={`shrink-0 px-4 flex items-center ${compactRail ? `${denseRail ? 'py-2 md:py-0.5 md:gap-px' : 'py-2 md:gap-1'} md:flex-col md:items-start md:px-4` : 'border-t border-border py-1.5 justify-between gap-2'}`}>
+        <div className={`shrink-0 flex items-center ${compactRail ? `${denseRail ? 'py-2 md:py-0.5 md:gap-px' : 'py-2 md:gap-1'} px-4 md:flex-col md:items-start md:px-4` : `${narrowRail ? 'px-3' : 'px-4'} border-t border-border py-1.5 justify-between gap-2`}`}>
           <ThemeToggle compact={denseRail} />
-          {!compactRailForced && (
+          {!forcedCompactRail && (
             <button
               type="button"
               onClick={() => setRailCollapsed(!railCollapsed)}
