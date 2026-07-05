@@ -1,10 +1,10 @@
 /**
  * Guardian — dev entry.
  *
- * Spawns UTA → Alice → Vite. UTA must hit `/__uta/health` 200 before Alice
- * is spawned (Alice fails fast if `OPENALICE_UTA_URL` doesn't respond on
- * boot). Vite comes last because it only needs Alice's port for its dev
- * proxy target.
+ * Spawns UTA + Alice + Vite. UTA is an optional carrier: OPENALICE_LITE_MODE=1
+ * skips it entirely; if a normal UTA boot fails, Alice still starts and
+ * `/api/trading/*` reports UTA unavailable. Vite comes last because it only
+ * needs Alice's port for its dev proxy target.
  *
  * Restart protocol: Guardian watches `data/control/restart-uta.flag`. When
  * Alice touches it (after broker config changes), Guardian SIGTERMs UTA,
@@ -27,6 +27,7 @@ import {
   installCascadeShutdown,
   UTAController,
   startFlagWatcher,
+  isLiteModeEnv,
   type SpawnSpec,
 } from './shared.js'
 
@@ -53,15 +54,18 @@ async function main(): Promise<void> {
     console.warn('[guardian] ──────────────────────────────────────────────────────')
   }
 
+  const liteMode = isLiteModeEnv(process.env)
+
   // env (OPENALICE_*_PORT) > data/config/ports.json > default+probe.
-  const ports = await planPorts(resolvePortConfig(process.env, await readPortsFile(dataHome)))
+  const ports = await planPorts(resolvePortConfig(process.env, await readPortsFile(dataHome)), { skipUta: liteMode })
   const flagPath = resolve(dataHome, 'data/control/restart-uta.flag')
+  const utaUrl = `http://127.0.0.1:${ports.utaPort}`
 
   console.log('')
-  console.log(`[guardian] mode     →  dev (Guardian + UTA + Alice + Vite)`)
+  console.log(`[guardian] mode     →  ${liteMode ? 'dev-lite (Guardian + Alice + Vite)' : 'dev (Guardian + UTA + Alice + Vite)'}`)
   console.log(`[guardian] data     →  ${dataHome}`)
   console.log(`[guardian] app      →  ${process.cwd()}`)
-  console.log(`[guardian] UTA      →  http://127.0.0.1:${ports.utaPort}`)
+  console.log(`[guardian] UTA      →  ${liteMode ? 'disabled (OPENALICE_LITE_MODE)' : utaUrl}`)
   console.log(`[guardian] Alice    →  http://localhost:${ports.webPort}`)
   console.log(`[guardian] Tools    →  http://127.0.0.1:${ports.mcpPort}/cli`)
   console.log(`[guardian] MCP      →  optional on http://127.0.0.1:${ports.mcpPort}/mcp`)
@@ -76,27 +80,28 @@ async function main(): Promise<void> {
     // src/core/paths.ts reads OPENALICE_HOME; never rely on cwd inheritance.
     OPENALICE_HOME: dataHome,
     OPENALICE_LAUNCHER: 'dev',
+    ...(liteMode ? { OPENALICE_LITE_MODE: '1' } : {}),
   }
 
   // ── UTA spec (re-used by Guardian for restart) ────────────
-  const utaSpec: SpawnSpec = {
-    name: 'uta',
-    command: 'tsx',
-    args: ['watch', 'services/uta/src/main.ts'],
-    env: { ...baseEnv, OPENALICE_UTA_PORT: String(ports.utaPort) },
-    prefixLogs: true,
-  }
-  const utaUrl = `http://127.0.0.1:${ports.utaPort}`
+  let uta: UTAController | null = null
+  if (!liteMode) {
+    const utaSpec: SpawnSpec = {
+      name: 'uta',
+      command: 'tsx',
+      args: ['watch', 'services/uta/src/main.ts'],
+      env: { ...baseEnv, OPENALICE_UTA_PORT: String(ports.utaPort) },
+      prefixLogs: true,
+    }
 
-  const utaInitial = spawnChild(utaSpec)
-  const utaReady = await waitForHttp(`${utaUrl}/__uta/health`, { timeoutMs: 15_000 })
-  if (!utaReady) {
-    console.error(`[guardian] UTA failed to come up within 15s — aborting`)
-    try { utaInitial.kill('SIGTERM') } catch { /* noop */ }
-    process.exit(1)
+    const utaInitial = spawnChild(utaSpec)
+    void waitForHttp(`${utaUrl}/__uta/health`, { timeoutMs: 15_000 })
+      .then((ready) => {
+        if (ready) console.log(`[guardian] UTA ready`)
+        else console.warn(`[guardian] UTA did not become ready within 15s — continuing with trading offline`)
+      })
+    uta = new UTAController(utaSpec, `${utaUrl}/__uta/health`, utaInitial)
   }
-  console.log(`[guardian] UTA ready`)
-  const uta = new UTAController(utaSpec, `${utaUrl}/__uta/health`, utaInitial)
 
   // ── Alice ─────────────────────────────────────────────────
   const alice: ChildProcess = spawnChild({
@@ -111,7 +116,7 @@ async function main(): Promise<void> {
       // Where the UI actually lives — consumed by the workspace WS-origin
       // allowlist (src/workspaces/config.ts buildDefaultOrigins).
       OPENALICE_UI_PORT: String(ports.uiPort),
-      OPENALICE_UTA_URL: utaUrl,
+      ...(liteMode ? {} : { OPENALICE_UTA_URL: utaUrl }),
     },
     prefixLogs: true,
   })
@@ -121,7 +126,7 @@ async function main(): Promise<void> {
     console.error(`[guardian] Alice failed to come up within 20s — aborting before Vite starts`)
     console.error(`[guardian] If another OpenAlice/Electron instance is running on the same data root, stop it or run dev with an isolated OPENALICE_HOME/AQ_LAUNCHER_ROOT.`)
     try { alice.kill('SIGTERM') } catch { /* noop */ }
-    try { uta.process.kill('SIGTERM') } catch { /* noop */ }
+    try { uta?.process.kill('SIGTERM') } catch { /* noop */ }
     process.exit(1)
   }
   console.log(`[guardian] Alice ready`)
@@ -141,25 +146,30 @@ async function main(): Promise<void> {
   })
 
   const cascade = installCascadeShutdown({
-    children: [uta.process, alice, vite],
+    children: [...(uta ? [uta.process] : []), alice, vite],
+    ...(uta ? { nonCriticalChildren: new Set([uta.process]) } : {}),
   })
 
   // UTA restart cooperates with cascade — old SIGTERM is "expected", new
   // child is tracked for unexpected exit + signal forwarding.
-  uta.cascade = {
-    expectExit: cascade.expectExit,
-    trackReplacement: cascade.trackReplacement,
+  if (uta) {
+    uta.cascade = {
+      expectExit: cascade.expectExit,
+      trackReplacement: cascade.trackReplacement,
+    }
   }
 
   // ── Flag watch ────────────────────────────────────────────
   // Triggered by Alice after `accounts.json` mutations. Guardian restarts
   // UTA — Alice and Vite untouched.
-  await startFlagWatcher({
-    flagPath,
-    onTrigger: () => {
-      void uta.restart()
-    },
-  })
+  if (uta) {
+    await startFlagWatcher({
+      flagPath,
+      onTrigger: () => {
+        void uta?.restart()
+      },
+    })
+  }
 }
 
 main().catch((err: unknown) => {

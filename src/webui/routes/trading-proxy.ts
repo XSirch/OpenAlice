@@ -19,6 +19,7 @@ import { Hono } from 'hono'
 // (broker queries, contract searches) hanging Alice forever. 30s is
 // well above the typical broker-API SLA without being a footgun.
 const PROXY_TIMEOUT_MS = 30_000
+const STATUS_TIMEOUT_MS = 1_000
 
 /** Methods Hono's `app.all` actually dispatches. Empty body methods get a
  *  null body forwarded. */
@@ -29,11 +30,75 @@ const PASSTHROUGH_HEADERS: readonly string[] = [
   'user-agent', 'cache-control', 'pragma', 'x-request-id',
 ]
 
-export function createTradingProxyRoutes(opts: { utaBaseUrl: string }): Hono {
+export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledReason?: 'lite_mode' }): Hono {
   const app = new Hono()
-  const base = opts.utaBaseUrl.replace(/\/$/, '')
+  const base = opts.utaBaseUrl?.replace(/\/$/, '')
+  const disabledReason = opts.disabledReason
+
+  app.get('/status', async (c) => {
+    if (disabledReason === 'lite_mode') {
+      return c.json({
+        available: false,
+        state: 'unavailable',
+        reason: 'lite_mode',
+        hint: 'Trading service is disabled by OPENALICE_LITE_MODE. Alice is running in lite mode.',
+      })
+    }
+    if (!base) {
+      return c.json({
+        available: false,
+        state: 'unavailable',
+        reason: 'not_configured',
+        hint: 'Trading service is not configured. Alice is running in lite mode.',
+      })
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), STATUS_TIMEOUT_MS)
+    try {
+      const res = await fetch(`${base}/__uta/health`, { signal: controller.signal })
+      if (!res.ok) {
+        return c.json({
+          available: false,
+          state: 'unavailable',
+          reason: `health_${res.status}`,
+          hint: 'Trading service is not healthy. Alice is running in lite mode.',
+        })
+      }
+      const health = await res.json() as { startedAt?: string; utas?: number }
+      return c.json({
+        available: true,
+        state: 'available',
+        startedAt: health.startedAt,
+        utas: health.utas ?? 0,
+      })
+    } catch (err) {
+      return c.json({
+        available: false,
+        state: 'unavailable',
+        reason: err instanceof Error ? err.message : String(err),
+        hint: 'Trading service is not reachable. Alice is running in lite mode.',
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+  })
 
   app.all('*', async (c) => {
+    if (disabledReason === 'lite_mode') {
+      return c.json({
+        error: 'UTA disabled',
+        detail: 'OPENALICE_LITE_MODE is enabled',
+        hint: 'Trading service is disabled. Alice is running in lite mode.',
+      }, 503)
+    }
+    if (!base) {
+      return c.json({
+        error: 'UTA unavailable',
+        detail: 'UTA URL is not configured',
+        hint: 'Trading service is not reachable. Alice is running in lite mode.',
+      }, 503)
+    }
     const incoming = c.req.raw
     // Reconstruct target URL: Hono's `c.req.path` is the *full* path
     // including the mount prefix (`/api/trading/uta`, not `/uta`), so
@@ -67,7 +132,7 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl: string }): Hono {
       return c.json({
         error: 'UTA unavailable',
         detail: msg,
-        hint: 'Trading service is not reachable. Check Guardian / UTA process.',
+        hint: 'Trading service is not reachable. Alice is running in lite mode.',
       }, 502)
     } finally {
       clearTimeout(connectTimer)

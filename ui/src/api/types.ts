@@ -164,6 +164,10 @@ export interface AppConfig {
   engine: Record<string, unknown>
   agent: { allowAiTrading: boolean; claudeCode: Record<string, unknown> }
   compaction: { maxContextTokens: number; maxOutputTokens: number }
+  trading: {
+    observeExternalOrdersEvery: string
+    keylessDataSources: Array<'binance' | 'okx' | 'bybit'>
+  }
   snapshot: {
     enabled: boolean
     every: string

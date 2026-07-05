@@ -33,6 +33,16 @@ export interface GuardianPorts {
   uiPort: number
 }
 
+export function isLiteModeEnv(env: NodeJS.ProcessEnv): boolean {
+  return truthyEnv(env['OPENALICE_LITE_MODE']) || truthyEnv(env['OPENALICE_UTA_DISABLED'])
+}
+
+function truthyEnv(raw: string | undefined): boolean {
+  if (raw === undefined || raw === '') return false
+  const normalized = raw.toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+}
+
 // ── Port configuration (L1 → L2) ────────────────────────────
 //
 // Ports are spawn-time-fixed: Guardian (L2) resolves them once and injects
@@ -133,7 +143,7 @@ export function resolvePortConfig(
  * (not left to Vite's own auto-increment) so Guardian can print the real
  * URL and inject the value into Alice for the WS-origin allowlist.
  */
-export async function planPorts(cfg: PortConfig): Promise<GuardianPorts> {
+export async function planPorts(cfg: PortConfig, opts?: { skipUta?: boolean }): Promise<GuardianPorts> {
   const claim = async (name: PortName, choice: PortChoice, probeStart: number): Promise<number> => {
     if (choice.source === 'default') return probeFreePort(probeStart)
     try {
@@ -146,7 +156,9 @@ export async function planPorts(cfg: PortConfig): Promise<GuardianPorts> {
   }
   const webPort = await claim('web', cfg.web, PORT_DEFAULTS.web)
   const mcpPort = await claim('mcp', cfg.mcp, webPort + 1)
-  const utaPort = await claim('uta', cfg.uta, Math.max(PORT_DEFAULTS.uta, mcpPort + 1))
+  const utaPort = opts?.skipUta === true
+    ? cfg.uta.value
+    : await claim('uta', cfg.uta, Math.max(PORT_DEFAULTS.uta, mcpPort + 1))
   const uiPort = await claim('ui', cfg.ui, PORT_DEFAULTS.ui)
   return { webPort, mcpPort, utaPort, uiPort }
 }
@@ -287,6 +299,9 @@ export interface CascadeOpts {
   children: ChildProcess[]
   /** Grace period before SIGKILL fallback. */
   graceMs?: number
+  /** Children whose crash should not bring the whole app down. They are still
+   *  killed during Guardian shutdown. UTA uses this path in lite/offline mode. */
+  nonCriticalChildren?: Set<ChildProcess>
   /** Set true on children whose exit should NOT cascade — UTA during a
    *  Guardian-initiated restart. */
   expectedExits?: Set<ChildProcess>
@@ -305,6 +320,7 @@ export function installCascadeShutdown(opts: CascadeOpts): CascadeControl {
   let stopping = false
   const graceMs = opts.graceMs ?? 5_000
   const expected = opts.expectedExits ?? new Set<ChildProcess>()
+  const nonCritical = opts.nonCriticalChildren ?? new Set<ChildProcess>()
   const children = [...opts.children]
 
   const shutdown = (): void => {
@@ -332,6 +348,10 @@ export function installCascadeShutdown(opts: CascadeOpts): CascadeControl {
         expected.delete(child)
         return
       }
+      if (nonCritical.has(child)) {
+        console.warn(`[guardian] ${childTag(child, children)} exited (code=${code}, signal=${signal}) — optional service offline, continuing`)
+        return
+      }
       console.log(`[guardian] ${childTag(child, children)} exited (code=${code}, signal=${signal}) — cascading shutdown`)
       shutdown()
     })
@@ -349,6 +369,10 @@ export function installCascadeShutdown(opts: CascadeOpts): CascadeControl {
       const idx = children.indexOf(old)
       if (idx >= 0) children[idx] = next
       else children.push(next)
+      if (nonCritical.has(old)) {
+        nonCritical.delete(old)
+        nonCritical.add(next)
+      }
       attachExitListener(next)
     },
   }

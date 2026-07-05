@@ -15,6 +15,7 @@ import { createThinkingTools } from './tool/thinking.js'
 import { createUTAClient } from '@traderalice/uta-protocol'
 import { UTAManagerSDK } from './services/uta-client/index.js'
 import { waitForUTAReady } from './services/uta-supervisor/health.js'
+import { isUTADisabled, resolveUTAUrl } from './services/uta-supervisor/url.js'
 import { createTradingTools } from './tool/trading.js'
 import { SymbolIndex } from './domain/market-data/equity/index.js'
 import { CommodityCatalog } from './domain/market-data/commodity/index.js'
@@ -107,23 +108,29 @@ async function main() {
 
   // ==================== UTA SDK (HTTP boundary) ====================
   //
-  // Trading domain lives in the co-located UTA service spawned by
-  // Guardian (`scripts/guardian/dev.ts` in dev / Docker `tini` supervisor
-  // in prod). Alice talks to it through the SDK — broker init, snapshot
-  // scheduling, FX, and ephemeral-UTA purges all live in UTA's
-  // `services/uta/src/main.ts`.
+  // Trading domain lives in the UTA carrier. Guardian normally spawns it
+  // beside Alice, but UTA is optional: Alice can boot in lite mode while the
+  // proxy reports trading unavailable. Explicit OPENALICE_LITE_MODE disables
+  // SDK carrier calls locally; ordinary offline mode can recover when the
+  // carrier appears at the resolved URL.
 
-  const utaUrl = process.env['OPENALICE_UTA_URL']
-  if (!utaUrl) {
-    throw new Error('OPENALICE_UTA_URL not set — Guardian must spawn the UTA service before Alice boots')
-  }
+  const utaDisabled = isUTADisabled()
+  const utaUrl = resolveUTAUrl()
   const utaClient = createUTAClient({ baseUrl: utaUrl })
-  const utaHealth = await waitForUTAReady({ baseUrl: utaUrl, timeoutMs: 15_000 })
-  if (!utaHealth) {
-    throw new Error(`UTA service at ${utaUrl} did not become ready within 15s`)
+  if (utaDisabled) {
+    console.warn('uta: disabled by lite mode — continuing without trading carrier')
+  } else {
+    const utaHealth = await waitForUTAReady({ baseUrl: utaUrl, timeoutMs: 750 })
+    if (utaHealth) {
+      console.log(`uta: ready (${utaHealth.utas} accounts, startedAt=${utaHealth.startedAt})`)
+    } else {
+      console.warn(`uta: unavailable at ${utaUrl} — continuing in lite mode`)
+    }
   }
-  console.log(`uta: ready (${utaHealth.utas} accounts, startedAt=${utaHealth.startedAt})`)
-  const utaManager = new UTAManagerSDK({ client: utaClient })
+  const utaManager = new UTAManagerSDK({
+    client: utaClient,
+    ...(utaDisabled ? { unavailableReason: 'UTA disabled by OPENALICE_LITE_MODE' } : {}),
+  })
 
   // ==================== Persona ====================
   // The persona file is seeded on first run so the user has an editable

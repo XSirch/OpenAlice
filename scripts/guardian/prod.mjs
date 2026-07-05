@@ -10,13 +10,16 @@
  *   2. Alice main   (dist/main.js,             bind 0.0.0.0:47331)
  *
  * Lifecycle:
- *   - spawn UTA, poll /__uta/health until 200 (≤ 15s) or abort
- *   - spawn Alice with OPENALICE_UTA_URL pointing at the local UTA
+ *   - spawn UTA, poll /__uta/health for observability (Alice still boots if
+ *     UTA is offline). OPENALICE_LITE_MODE=1 skips UTA entirely.
+ *   - spawn Alice with OPENALICE_UTA_URL pointing at the local UTA, or
+ *     OPENALICE_LITE_MODE=1 when the carrier is intentionally disabled
  *   - watch `${OPENALICE_HOME}/data/control/restart-uta.flag`
  *     for UI-triggered broker config changes; SIGTERM + respawn UTA
  *     when it changes (debounced 100ms)
  *   - SIGTERM/SIGINT from tini cascades to both children, then exit
- *   - any child exiting non-zero unintentionally cascades shutdown
+ *   - Alice exiting unintentionally cascades shutdown; UTA exiting marks
+ *     trading offline but does not take down the app
  *
  * Mirrors `scripts/guardian/dev.ts` minus the Vite child and watch-mode
  * spawns. Kept as `.mjs` so the runtime image needs no TS tooling.
@@ -44,6 +47,16 @@ function parsePort(raw, origin) {
     throw new Error(`[guardian/prod] invalid port ${JSON.stringify(raw)} from ${origin} — expected an integer in 1..65535`)
   }
   return n
+}
+
+function truthyEnv(raw) {
+  if (raw === undefined || raw === '') return false
+  const normalized = String(raw).toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+}
+
+function isLiteModeEnv(env) {
+  return truthyEnv(env.OPENALICE_LITE_MODE) || truthyEnv(env.OPENALICE_UTA_DISABLED)
 }
 
 async function readPortsFile(userDataHome) {
@@ -81,6 +94,7 @@ const MCP_PORT = pickPort('OPENALICE_MCP_PORT', portsFile.mcp, 47332)
 const UTA_PORT = pickPort('OPENALICE_UTA_PORT', portsFile.uta, 47333)
 const FLAG_PATH = resolve(DATA_HOME, 'data/control/restart-uta.flag')
 const UTA_URL = `http://127.0.0.1:${UTA_PORT}`
+const LITE_MODE = isLiteModeEnv(process.env)
 
 let stopping = false
 let utaChild = null
@@ -88,9 +102,9 @@ let aliceChild = null
 let restartingUTA = false
 
 console.log('[guardian/prod] starting')
-console.log('[guardian/prod] mode  → docker/prod')
+console.log(`[guardian/prod] mode  → ${LITE_MODE ? 'docker/prod-lite' : 'docker/prod'}`)
 console.log(`[guardian/prod] data  → ${DATA_HOME}`)
-console.log(`[guardian/prod] UTA   → ${UTA_URL}`)
+console.log(`[guardian/prod] UTA   → ${LITE_MODE ? 'disabled (OPENALICE_LITE_MODE)' : UTA_URL}`)
 console.log(`[guardian/prod] Alice → http://0.0.0.0:${WEB_PORT}`)
 console.log(`[guardian/prod] Tools → http://127.0.0.1:${MCP_PORT}/cli`)
 console.log(`[guardian/prod] MCP   → optional on http://127.0.0.1:${MCP_PORT}/mcp`)
@@ -114,8 +128,7 @@ function spawnUTA() {
   const child = spawn(spec.cmd, spec.args, { env: spec.env, stdio: 'inherit' })
   child.once('exit', (code, signal) => {
     if (stopping || restartingUTA) return
-    console.error(`[guardian/prod] UTA exited unexpectedly (code=${code}, signal=${signal})`)
-    shutdown()
+    console.error(`[guardian/prod] UTA exited unexpectedly (code=${code}, signal=${signal}) — trading offline, Alice stays up`)
   })
   return child
 }
@@ -127,7 +140,7 @@ function spawnAlice() {
       OPENALICE_WEB_PORT: String(WEB_PORT),
       OPENALICE_MCP_PORT: String(MCP_PORT),
       OPENALICE_TOOL_BASE_URL: `http://127.0.0.1:${MCP_PORT}/cli`,
-      OPENALICE_UTA_URL: UTA_URL,
+      ...(LITE_MODE ? { OPENALICE_LITE_MODE: '1' } : { OPENALICE_UTA_URL: UTA_URL }),
       OPENALICE_HOME: DATA_HOME,
       OPENALICE_LAUNCHER: 'docker',
     },
@@ -155,6 +168,10 @@ async function waitForUTA() {
 }
 
 async function restartUTA() {
+  if (LITE_MODE) {
+    console.warn('[guardian/prod] restart-uta.flag ignored — OPENALICE_LITE_MODE disables UTA')
+    return
+  }
   if (restartingUTA) return
   restartingUTA = true
   try {
@@ -230,17 +247,16 @@ async function startFlagWatcher() {
 }
 
 async function main() {
-  utaChild = spawnUTA()
-  const utaReady = await waitForUTA()
-  if (!utaReady) {
-    console.error('[guardian/prod] UTA failed to come up within 15s — aborting')
-    shutdown()
-    return
+  if (!LITE_MODE) {
+    utaChild = spawnUTA()
+    void waitForUTA().then((ready) => {
+      if (ready) console.log('[guardian/prod] UTA ready')
+      else console.warn('[guardian/prod] UTA did not become ready within 15s — continuing with trading offline')
+    })
   }
-  console.log('[guardian/prod] UTA ready')
 
   aliceChild = spawnAlice()
-  await startFlagWatcher()
+  if (!LITE_MODE) await startFlagWatcher()
 }
 
 main().catch((err) => {

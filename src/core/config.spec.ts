@@ -276,6 +276,28 @@ describe('writeUTAsConfig', () => {
   })
 })
 
+describe('writeConfigSection(trading)', () => {
+  it('defaults keylessDataSources to empty', async () => {
+    const trading = await writeConfigSection('trading', {}) as {
+      observeExternalOrdersEvery: string
+      keylessDataSources: string[]
+    }
+    expect(trading.observeExternalOrdersEvery).toBe('15m')
+    expect(trading.keylessDataSources).toEqual([])
+  })
+
+  it('persists explicit keyless data-source choices', async () => {
+    const trading = await writeConfigSection('trading', {
+      observeExternalOrdersEvery: 'off',
+      keylessDataSources: ['binance', 'okx'],
+    }) as {
+      observeExternalOrdersEvery: string
+      keylessDataSources: string[]
+    }
+    expect(trading.keylessDataSources).toEqual(['binance', 'okx'])
+  })
+})
+
 // ==================== aiProviderSchema (Zod schema validation) ====================
 
 describe('aiProviderSchema (credential vault)', () => {
@@ -364,4 +386,3 @@ describe('deleteCredential', () => {
     expect(mockWriteFile).toHaveBeenCalled()
   })
 })
-

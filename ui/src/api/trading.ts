@@ -33,9 +33,22 @@ export interface ContractSearchResponse {
   utasConfigured?: number
 }
 
+export interface TradingServiceStatus {
+  available: boolean
+  state: 'available' | 'unavailable'
+  reason?: string
+  hint?: string
+  startedAt?: string
+  utas?: number
+}
+
 // ==================== Unified Trading API ====================
 
 export const tradingApi = {
+  async status(): Promise<TradingServiceStatus> {
+    return fetchJson('/api/trading/status')
+  },
+
   // ==================== UTAs (listing + per-UTA reads) ====================
 
   async listUTAs(): Promise<{ utas: TradingAccount[] }> {

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { readPortsFile, resolvePortConfig, resolveWindowsBin } from './shared.js'
+import { isLiteModeEnv, readPortsFile, resolvePortConfig, resolveWindowsBin } from './shared.js'
 
 let home: string
 
@@ -88,6 +88,25 @@ describe('resolvePortConfig', () => {
 
   it('fails loud on a malformed env value', () => {
     expect(() => resolvePortConfig({ OPENALICE_MCP_PORT: 'banana' }, {})).toThrow(/invalid port/)
+  })
+})
+
+describe('isLiteModeEnv', () => {
+  it('accepts explicit truthy lite-mode values', () => {
+    expect(isLiteModeEnv({ OPENALICE_LITE_MODE: '1' })).toBe(true)
+    expect(isLiteModeEnv({ OPENALICE_LITE_MODE: 'true' })).toBe(true)
+    expect(isLiteModeEnv({ OPENALICE_LITE_MODE: 'yes' })).toBe(true)
+    expect(isLiteModeEnv({ OPENALICE_LITE_MODE: 'on' })).toBe(true)
+  })
+
+  it('accepts OPENALICE_UTA_DISABLED as a direct alias', () => {
+    expect(isLiteModeEnv({ OPENALICE_UTA_DISABLED: '1' })).toBe(true)
+  })
+
+  it('treats unset and falsey values as normal mode', () => {
+    expect(isLiteModeEnv({})).toBe(false)
+    expect(isLiteModeEnv({ OPENALICE_LITE_MODE: '' })).toBe(false)
+    expect(isLiteModeEnv({ OPENALICE_LITE_MODE: '0', OPENALICE_UTA_DISABLED: 'false' })).toBe(false)
   })
 })
 

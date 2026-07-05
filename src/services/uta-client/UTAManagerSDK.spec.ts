@@ -55,3 +55,25 @@ describe('UTAManagerSDK.resolve — tier filter (#390)', () => {
     expect(ids).toEqual(['alpaca-paper'])
   })
 })
+
+describe('UTAManagerSDK — unavailable carrier', () => {
+  it('degrades local reads without touching the UTA HTTP client', async () => {
+    const disabledReason = 'UTA disabled by OPENALICE_LITE_MODE'
+    const client = {
+      get: async (path: string) => {
+        throw new Error(`unexpected GET ${path}`)
+      },
+    } as never
+    const m = new UTAManagerSDK({ client, unavailableReason: disabledReason })
+
+    await expect(m.listUTAs()).resolves.toEqual([])
+    await expect(m.resolve()).resolves.toEqual([])
+    await expect(m.getBarCapabilities()).resolves.toEqual({})
+    await expect(m.getFxRates()).resolves.toEqual([])
+    await expect(m.searchContracts('BTC')).resolves.toEqual([])
+    await expect(m.reconnectUTA('alpaca-paper')).resolves.toEqual({ success: false, error: disabledReason })
+    await expect(m.removeUTA('alpaca-paper')).resolves.toBeUndefined()
+    await expect(m.getAggregatedEquity()).rejects.toThrow(disabledReason)
+    await expect(m.getContractDetails('alpaca-paper', {} as never)).rejects.toThrow(disabledReason)
+  })
+})

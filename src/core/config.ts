@@ -365,6 +365,9 @@ const snapshotSchema = z.object({
   every: z.string().default('15m'),
 })
 
+export const keylessDataSourceSchema = z.enum(['binance', 'okx', 'bybit'])
+export type KeylessDataSource = z.infer<typeof keylessDataSourceSchema>
+
 const tradingSchema = z.object({
   /**
    * External-order observation cadence — how often UTA lists the broker's
@@ -376,6 +379,13 @@ const tradingSchema = z.object({
    * (10s fast lane) and unaffected by this knob.
    */
   observeExternalOrdersEvery: z.string().default('15m'),
+  /**
+   * Optional keyless crypto exchanges exposed as public-data-only UTA sources
+   * (e.g. `binance-readonly|BTC/USDT`). Default empty: data sources should be
+   * an explicit user choice, not startup side effects that make every install
+   * connect to public crypto venues.
+   */
+  keylessDataSources: z.array(keylessDataSourceSchema).default([]),
 })
 
 export const toolsSchema = z.object({
@@ -455,7 +465,7 @@ export const utaConfigSchema = z.object({
   /** Read-only — write operations (stage/commit/push of orders) are refused.
    *  Implied by keyless; can also be set on a keyed account for a watch-only view. */
   readOnly: z.boolean().default(false),
-  /** Whether this UTA can be edited/removed via the config UI. The built-in
+  /** Whether this UTA can be edited/removed via the config UI. Optional
    *  keyless data UTAs (binance/okx/bybit-readonly) are non-editable. */
   editable: z.boolean().default(true),
 }).refine((u) => u.ephemeral !== true || u.presetId === 'mock-simulator', {
