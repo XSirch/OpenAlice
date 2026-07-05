@@ -367,8 +367,14 @@ const snapshotSchema = z.object({
 
 export const keylessDataSourceSchema = z.enum(['binance', 'okx', 'bybit'])
 export type KeylessDataSource = z.infer<typeof keylessDataSourceSchema>
+export const tradingModeSchema = z.enum(['lite', 'readonly', 'pro'])
+export type TradingMode = z.infer<typeof tradingModeSchema>
 
 const tradingSchema = z.object({
+  /** Product-level trading capability mode. Undefined means auto:
+   *  existing UTA config -> pro; no UTA config -> lite. Env
+   *  OPENALICE_TRADING_MODE wins over this persisted preference. */
+  mode: tradingModeSchema.optional(),
   /**
    * External-order observation cadence — how often UTA lists the broker's
    * open orders to catch ones placed outside Alice (exchange app, direct

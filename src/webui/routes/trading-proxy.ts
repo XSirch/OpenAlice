@@ -13,6 +13,7 @@
  */
 
 import { Hono } from 'hono'
+import { describeTradingMode, type TradingModePolicy } from '../../services/trading-mode.js'
 
 // Total request timeout. UTA is on the loopback interface so connect is
 // instant — this guards against handlers that legitimately take seconds
@@ -30,18 +31,33 @@ const PASSTHROUGH_HEADERS: readonly string[] = [
   'user-agent', 'cache-control', 'pragma', 'x-request-id',
 ]
 
-export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledReason?: 'lite_mode' }): Hono {
+export function createTradingProxyRoutes(opts: {
+  utaBaseUrl?: string
+  disabledReason?: 'lite_mode'
+  getPolicy?: () => TradingModePolicy
+}): Hono {
   const app = new Hono()
   const base = opts.utaBaseUrl?.replace(/\/$/, '')
   const disabledReason = opts.disabledReason
+  const getPolicy = opts.getPolicy ?? (() => ({
+    mode: disabledReason === 'lite_mode' ? 'lite' : 'pro',
+    source: disabledReason === 'lite_mode' ? 'env' : 'auto',
+    envLocked: disabledReason === 'lite_mode',
+    hasUTAConfig: false,
+  }))
 
   app.get('/status', async (c) => {
-    if (disabledReason === 'lite_mode') {
+    const policy = getPolicy()
+    if (policy.mode === 'lite') {
       return c.json({
         available: false,
         state: 'unavailable',
         reason: 'lite_mode',
-        hint: 'Trading service is disabled by OPENALICE_LITE_MODE. Alice is running in lite mode.',
+        mode: policy.mode,
+        modeSource: policy.source,
+        envLocked: policy.envLocked,
+        hasUTAConfig: policy.hasUTAConfig,
+        hint: describeTradingMode('lite'),
       })
     }
     if (!base) {
@@ -49,7 +65,11 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledRe
         available: false,
         state: 'unavailable',
         reason: 'not_configured',
-        hint: 'Trading service is not configured. Alice is running in lite mode.',
+        mode: policy.mode,
+        modeSource: policy.source,
+        envLocked: policy.envLocked,
+        hasUTAConfig: policy.hasUTAConfig,
+        hint: 'Trading service is not configured.',
       })
     }
 
@@ -62,13 +82,22 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledRe
           available: false,
           state: 'unavailable',
           reason: `health_${res.status}`,
-          hint: 'Trading service is not healthy. Alice is running in lite mode.',
+          mode: policy.mode,
+          modeSource: policy.source,
+          envLocked: policy.envLocked,
+          hasUTAConfig: policy.hasUTAConfig,
+          hint: 'Trading service is not healthy.',
         })
       }
       const health = await res.json() as { startedAt?: string; utas?: number }
       return c.json({
         available: true,
         state: 'available',
+        mode: policy.mode,
+        modeSource: policy.source,
+        envLocked: policy.envLocked,
+        hasUTAConfig: policy.hasUTAConfig,
+        hint: describeTradingMode(policy.mode),
         startedAt: health.startedAt,
         utas: health.utas ?? 0,
       })
@@ -77,7 +106,11 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledRe
         available: false,
         state: 'unavailable',
         reason: err instanceof Error ? err.message : String(err),
-        hint: 'Trading service is not reachable. Alice is running in lite mode.',
+        mode: policy.mode,
+        modeSource: policy.source,
+        envLocked: policy.envLocked,
+        hasUTAConfig: policy.hasUTAConfig,
+        hint: 'Trading service is not reachable.',
       })
     } finally {
       clearTimeout(timer)
@@ -85,12 +118,20 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledRe
   })
 
   app.all('*', async (c) => {
-    if (disabledReason === 'lite_mode') {
+    const policy = getPolicy()
+    if (policy.mode === 'lite') {
       return c.json({
         error: 'UTA disabled',
-        detail: 'OPENALICE_LITE_MODE is enabled',
-        hint: 'Trading service is disabled. Alice is running in lite mode.',
+        detail: 'Trading mode is lite',
+        hint: describeTradingMode('lite'),
       }, 503)
+    }
+    if (policy.mode === 'readonly' && isVenueMutation(c.req.method, c.req.path)) {
+      return c.json({
+        error: 'Trading mode is readonly',
+        detail: 'Venue-mutating broker writes are disabled in readonly mode',
+        hint: describeTradingMode('readonly'),
+      }, 403)
     }
     if (!base) {
       return c.json({
@@ -152,6 +193,21 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl?: string; disabledRe
   })
 
   return app
+}
+
+function isVenueMutation(method: string, path: string): boolean {
+  const m = method.toUpperCase()
+  if (m === 'GET' || m === 'HEAD') return false
+  const normalized = path.toLowerCase()
+  return (
+    normalized.includes('/wallet/push') ||
+    normalized.includes('/wallet/place-order') ||
+    normalized.includes('/wallet/close-position') ||
+    normalized.includes('/wallet/cancel-order') ||
+    normalized.includes('/simulate-price') ||
+    normalized.startsWith('/api/simulator') ||
+    normalized.startsWith('/simulator')
+  )
 }
 
 function url(req: Request): URL {

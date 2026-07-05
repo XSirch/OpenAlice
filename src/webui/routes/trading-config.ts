@@ -11,7 +11,8 @@ import {
   mintInstanceId,
 } from '@traderalice/uta-protocol'
 import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
-import { isUTADisabled, resolveUTAUrl } from '../../services/uta-supervisor/url.js'
+import { resolveUTAUrl } from '../../services/uta-supervisor/url.js'
+import { describeTradingMode } from '../../services/trading-mode.js'
 
 /** Fire-and-forget UTA restart after a config mutation. Logs but doesn't
  *  block the HTTP response — UI returns immediately and Guardian flips
@@ -248,8 +249,9 @@ export function createTradingConfigRoutes(ctx: EngineContext) {
   // (it owns broker code). Alice forwards the wizard's payload over.
 
   app.post('/test-connection', async (c) => {
-    if (isUTADisabled()) {
-      return c.json({ success: false, error: 'UTA disabled by OPENALICE_LITE_MODE' }, 503)
+    const policy = ctx.tradingModePolicy()
+    if (policy.mode === 'lite') {
+      return c.json({ success: false, error: describeTradingMode('lite') }, 503)
     }
     const utaUrl = resolveUTAUrl()
     try {

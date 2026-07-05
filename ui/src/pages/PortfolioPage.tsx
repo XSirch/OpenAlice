@@ -13,6 +13,8 @@ import { Sparkline } from '../components/Sparkline'
 import { fmt, fmtPnl, fmtNum, fmtPctSigned } from '../lib/format'
 import { contractPrimary } from '../lib/contract-display'
 import { displayProviderForUTA, filterAccountTierUTAs } from '../lib/uta-account-filter'
+import { TradingModeGate } from '../components/TradingModeGate'
+import { ensureTradingModePolling, useTradingMode } from '../live/trading-mode'
 
 // ==================== Types ====================
 
@@ -106,6 +108,8 @@ function summarizeAggregateCurve(points: EquityCurvePoint[]): CurveSummary {
 // ==================== Page ====================
 
 export function PortfolioPage() {
+  const tradingMode = useTradingMode((s) => s.status.mode)
+  const tradingModeLoading = useTradingMode((s) => s.loading)
   const healthMap = useAccountHealth()
   const [data, setData] = useState<PortfolioData>(EMPTY)
   const [loading, setLoading] = useState(true)
@@ -148,6 +152,17 @@ export function PortfolioPage() {
   }, [])
 
   const refresh = useCallback(async () => {
+    if (tradingModeLoading) return
+    if (tradingMode === 'lite') {
+      setData(EMPTY)
+      setAggregateCurve(null)
+      setCurvePoints([])
+      setSelectedSnapshot(null)
+      setSelectedTimestamp(null)
+      setLoading(false)
+      setLastRefresh(new Date())
+      return
+    }
     setLoading(true)
     const [result, configResult, aggregateResult] = await Promise.all([
       fetchPortfolioData(),
@@ -169,8 +184,9 @@ export function PortfolioPage() {
 
     setLastRefresh(new Date())
     setLoading(false)
-  }, [curveAccountId, fetchCurveData])
+  }, [curveAccountId, fetchCurveData, tradingMode, tradingModeLoading])
 
+  useEffect(() => { ensureTradingModePolling() }, [])
   useEffect(() => { refresh() }, [refresh])
 
   // Auto-refresh every 30s
@@ -240,6 +256,12 @@ export function PortfolioPage() {
           {/* Main column */}
           <div className="flex-1 min-w-0 space-y-5">
             {!lastRefresh ? <PortfolioSkeleton /> : <>
+            {!tradingModeLoading && tradingMode === 'lite' ? (
+              <TradingModeGate
+                title="Portfolio is unavailable in Lite mode."
+                description="Lite mode keeps UTA disconnected, so there are no broker accounts, positions, or equity snapshots to show. Switch to Readonly or Pro to connect UTA."
+              />
+            ) : <>
             <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />
 
             {curvePoints.length > 0 && (
@@ -290,6 +312,7 @@ export function PortfolioPage() {
             {allWalletLogs.length > 0 && (
               <TradeLog commits={allWalletLogs} />
             )}
+            </>}
             </>}
           </div>
 
@@ -435,7 +458,7 @@ function PortfolioSkeleton() {
       <div className="rounded-lg border border-border bg-bg-secondary p-5">
         <Skeleton className="h-3 w-24" />
         <Skeleton className="h-9 w-48 mt-3" />
-        <div className="flex gap-8 mt-5">
+        <div className="flex flex-wrap gap-5 sm:gap-8 mt-5">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="space-y-2">
               <Skeleton className="h-2.5 w-16" />
@@ -468,9 +491,9 @@ function PortfolioSkeleton() {
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 px-4 py-3.5">
               <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-12" />
+              <Skeleton className="hidden sm:block h-4 w-12" />
               <Skeleton className="h-4 w-16 ml-auto" />
-              <Skeleton className="h-4 w-24" />
+              <Skeleton className="hidden md:block h-4 w-24" />
             </div>
           ))}
         </div>

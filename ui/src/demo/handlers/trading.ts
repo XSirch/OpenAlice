@@ -44,6 +44,18 @@ function utaId(params: { id?: string | readonly string[] }): string {
 }
 
 export const tradingHandlers = [
+  http.get('/api/trading/status', () =>
+    HttpResponse.json({
+      available: true,
+      state: 'available',
+      mode: 'pro',
+      modeSource: 'auto',
+      envLocked: false,
+      hasUTAConfig: true,
+      hint: 'Demo trading service is available.',
+      utas: demoUTASummaries.length,
+    }),
+  ),
   http.get('/api/trading/uta', () =>
     HttpResponse.json({ utas: demoUTASummaries, summaries: demoUTASummaries }),
   ),

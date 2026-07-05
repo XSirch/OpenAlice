@@ -153,6 +153,9 @@ export type ChatHistoryItem =
 
 // ==================== Config ====================
 
+export type TradingMode = 'lite' | 'readonly' | 'pro'
+export type TradingModeSource = 'env' | 'config' | 'auto'
+
 export interface AIProviderConfig {
   apiKeys: { anthropic?: string; openai?: string; google?: string }
   profiles: Record<string, Profile>
@@ -165,6 +168,7 @@ export interface AppConfig {
   agent: { allowAiTrading: boolean; claudeCode: Record<string, unknown> }
   compaction: { maxContextTokens: number; maxOutputTokens: number }
   trading: {
+    mode?: TradingMode
     observeExternalOrdersEvery: string
     keylessDataSources: Array<'binance' | 'okx' | 'bybit'>
   }

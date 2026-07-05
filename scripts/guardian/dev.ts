@@ -27,7 +27,7 @@ import {
   installCascadeShutdown,
   UTAController,
   startFlagWatcher,
-  isLiteModeEnv,
+  resolveGuardianTradingMode,
   type SpawnSpec,
 } from './shared.js'
 
@@ -54,7 +54,8 @@ async function main(): Promise<void> {
     console.warn('[guardian] ──────────────────────────────────────────────────────')
   }
 
-  const liteMode = isLiteModeEnv(process.env)
+  const initialMode = await resolveGuardianTradingMode(process.env, dataHome)
+  const liteMode = initialMode.mode === 'lite'
 
   // env (OPENALICE_*_PORT) > data/config/ports.json > default+probe.
   const ports = await planPorts(resolvePortConfig(process.env, await readPortsFile(dataHome)), { skipUta: liteMode })
@@ -62,10 +63,10 @@ async function main(): Promise<void> {
   const utaUrl = `http://127.0.0.1:${ports.utaPort}`
 
   console.log('')
-  console.log(`[guardian] mode     →  ${liteMode ? 'dev-lite (Guardian + Alice + Vite)' : 'dev (Guardian + UTA + Alice + Vite)'}`)
+  console.log(`[guardian] mode     →  ${initialMode.mode} (${initialMode.source}${initialMode.envLocked ? ', env-locked' : ''})`)
   console.log(`[guardian] data     →  ${dataHome}`)
   console.log(`[guardian] app      →  ${process.cwd()}`)
-  console.log(`[guardian] UTA      →  ${liteMode ? 'disabled (OPENALICE_LITE_MODE)' : utaUrl}`)
+  console.log(`[guardian] UTA      →  ${liteMode ? 'disabled (trading mode lite)' : utaUrl}`)
   console.log(`[guardian] Alice    →  http://localhost:${ports.webPort}`)
   console.log(`[guardian] Tools    →  http://127.0.0.1:${ports.mcpPort}/cli`)
   console.log(`[guardian] MCP      →  optional on http://127.0.0.1:${ports.mcpPort}/mcp`)
@@ -80,27 +81,29 @@ async function main(): Promise<void> {
     // src/core/paths.ts reads OPENALICE_HOME; never rely on cwd inheritance.
     OPENALICE_HOME: dataHome,
     OPENALICE_LAUNCHER: 'dev',
-    ...(liteMode ? { OPENALICE_LITE_MODE: '1' } : {}),
   }
 
   // ── UTA spec (re-used by Guardian for restart) ────────────
-  let uta: UTAController | null = null
-  if (!liteMode) {
-    const utaSpec: SpawnSpec = {
-      name: 'uta',
-      command: 'tsx',
-      args: ['watch', 'services/uta/src/main.ts'],
-      env: { ...baseEnv, OPENALICE_UTA_PORT: String(ports.utaPort) },
-      prefixLogs: true,
-    }
+  const utaSpec: SpawnSpec = {
+    name: 'uta',
+    command: 'tsx',
+    args: ['watch', 'services/uta/src/main.ts'],
+    env: { ...baseEnv, OPENALICE_UTA_PORT: String(ports.utaPort) },
+    prefixLogs: true,
+  }
 
+  let uta: UTAController | null = null
+  const spawnUTAController = () => {
     const utaInitial = spawnChild(utaSpec)
     void waitForHttp(`${utaUrl}/__uta/health`, { timeoutMs: 15_000 })
       .then((ready) => {
         if (ready) console.log(`[guardian] UTA ready`)
         else console.warn(`[guardian] UTA did not become ready within 15s — continuing with trading offline`)
       })
-    uta = new UTAController(utaSpec, `${utaUrl}/__uta/health`, utaInitial)
+    return new UTAController(utaSpec, `${utaUrl}/__uta/health`, utaInitial)
+  }
+  if (!liteMode) {
+    uta = spawnUTAController()
   }
 
   // ── Alice ─────────────────────────────────────────────────
@@ -116,7 +119,7 @@ async function main(): Promise<void> {
       // Where the UI actually lives — consumed by the workspace WS-origin
       // allowlist (src/workspaces/config.ts buildDefaultOrigins).
       OPENALICE_UI_PORT: String(ports.uiPort),
-      ...(liteMode ? {} : { OPENALICE_UTA_URL: utaUrl }),
+      OPENALICE_UTA_URL: utaUrl,
     },
     prefixLogs: true,
   })
@@ -152,24 +155,42 @@ async function main(): Promise<void> {
 
   // UTA restart cooperates with cascade — old SIGTERM is "expected", new
   // child is tracked for unexpected exit + signal forwarding.
-  if (uta) {
-    uta.cascade = {
+  const attachUtaCascade = (controller: UTAController) => {
+    controller.cascade = {
       expectExit: cascade.expectExit,
       trackReplacement: cascade.trackReplacement,
     }
   }
+  if (uta) attachUtaCascade(uta)
 
   // ── Flag watch ────────────────────────────────────────────
   // Triggered by Alice after `accounts.json` mutations. Guardian restarts
   // UTA — Alice and Vite untouched.
-  if (uta) {
-    await startFlagWatcher({
-      flagPath,
-      onTrigger: () => {
-        void uta?.restart()
-      },
-    })
-  }
+  await startFlagWatcher({
+    flagPath,
+    onTrigger: () => {
+      void (async () => {
+        const mode = await resolveGuardianTradingMode(process.env, dataHome)
+        if (mode.mode === 'lite') {
+          if (uta) {
+            console.log('[guardian] trading mode lite — stopping UTA')
+            cascade.expectExit(uta.process)
+            try { uta.process.kill('SIGTERM') } catch { /* noop */ }
+            uta = null
+          }
+          return
+        }
+        if (!uta) {
+          console.log(`[guardian] trading mode ${mode.mode} — starting UTA`)
+          uta = spawnUTAController()
+          cascade.trackChild(uta.process, { nonCritical: true })
+          attachUtaCascade(uta)
+          return
+        }
+        void uta.restart()
+      })()
+    },
+  })
 }
 
 main().catch((err: unknown) => {

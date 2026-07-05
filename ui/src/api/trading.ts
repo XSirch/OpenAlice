@@ -36,6 +36,10 @@ export interface ContractSearchResponse {
 export interface TradingServiceStatus {
   available: boolean
   state: 'available' | 'unavailable'
+  mode: 'lite' | 'readonly' | 'pro'
+  modeSource: 'env' | 'config' | 'auto'
+  envLocked: boolean
+  hasUTAConfig: boolean
   reason?: string
   hint?: string
   startedAt?: string

@@ -23,8 +23,45 @@ describe('createTradingProxyRoutes — UTA optional carrier', () => {
     expect(res.status).toBe(503)
     await expect(res.json()).resolves.toMatchObject({
       error: 'UTA disabled',
-      detail: 'OPENALICE_LITE_MODE is enabled',
+      detail: 'Trading mode is lite',
     })
+  })
+
+  it('reports the effective mode in status', async () => {
+    const app = createTradingProxyRoutes({ disabledReason: 'lite_mode' })
+    const res = await app.request('/status')
+    await expect(res.json()).resolves.toMatchObject({
+      mode: 'lite',
+      modeSource: 'env',
+      envLocked: true,
+    })
+  })
+
+  it('blocks venue-mutating writes in readonly mode', async () => {
+    const app = createTradingProxyRoutes({
+      utaBaseUrl: 'http://127.0.0.1:47333',
+      getPolicy: () => ({ mode: 'readonly', source: 'config', envLocked: false, hasUTAConfig: true }),
+    })
+    const res = await app.request('/api/trading/uta/alpaca/wallet/push', { method: 'POST' })
+    expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'Trading mode is readonly',
+    })
+  })
+
+  it('allows local proposal writes in readonly mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ))
+    const app = createTradingProxyRoutes({
+      utaBaseUrl: 'http://127.0.0.1:47333',
+      getPolicy: () => ({ mode: 'readonly', source: 'config', envLocked: false, hasUTAConfig: true }),
+    })
+    const res = await app.request('/api/trading/uta/alpaca/wallet/stage-place-order', { method: 'POST', body: '{}' })
+    expect(res.status).toBe(200)
   })
 
   it('reports unavailable status when no carrier URL is configured', async () => {

@@ -280,9 +280,11 @@ describe('writeUTAsConfig', () => {
 describe('writeConfigSection(trading)', () => {
   it('defaults keylessDataSources to empty', async () => {
     const trading = await writeConfigSection('trading', {}) as {
+      mode?: string
       observeExternalOrdersEvery: string
       keylessDataSources: string[]
     }
+    expect(trading.mode).toBeUndefined()
     expect(trading.observeExternalOrdersEvery).toBe('15m')
     expect(trading.keylessDataSources).toEqual([])
   })
@@ -290,11 +292,14 @@ describe('writeConfigSection(trading)', () => {
   it('persists explicit keyless data-source choices', async () => {
     const trading = await writeConfigSection('trading', {
       observeExternalOrdersEvery: 'off',
+      mode: 'readonly',
       keylessDataSources: ['binance', 'okx'],
     }) as {
+      mode?: string
       observeExternalOrdersEvery: string
       keylessDataSources: string[]
     }
+    expect(trading.mode).toBe('readonly')
     expect(trading.keylessDataSources).toEqual(['binance', 'okx'])
   })
 })

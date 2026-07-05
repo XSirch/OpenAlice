@@ -59,6 +59,9 @@ export interface UTAAccountSDKDeps {
    *  constructs accounts via `resolve()` it fills this in; standalone
    *  `new UTAAccountSDK({client, id})` defaults to the id. */
   label?: string
+  /** Dynamic product-mode guard. When present, venue-mutating broker writes
+   *  are refused before they cross the UTA HTTP boundary. */
+  readonlyMutationReason?: () => string | undefined
 }
 
 /**
@@ -72,11 +75,13 @@ export class UTAAccountSDK {
    *  outside of `UTAManagerSDK.resolve()`. */
   readonly label: string
   private readonly client: UTAClient
+  private readonly readonlyMutationReason?: () => string | undefined
 
   constructor(deps: UTAAccountSDKDeps) {
     this.id = deps.id
     this.label = deps.label ?? deps.id
     this.client = deps.client
+    this.readonlyMutationReason = deps.readonlyMutationReason
   }
 
   // ==================== Health / state readouts ====================
@@ -266,7 +271,8 @@ export class UTAAccountSDK {
 
   // ==================== Write / lifecycle (existing routes) ====================
 
-  push(): Promise<PushResult> {
+  async push(): Promise<PushResult> {
+    this.assertVenueWritable()
     return this.client.post<PushResult>(`/api/trading/uta/${encodeURIComponent(this.id)}/wallet/push`)
   }
 
@@ -328,7 +334,8 @@ export class UTAAccountSDK {
     )
   }
 
-  simulatePriceChange(priceChanges: PriceChangeInput[]): Promise<SimulatePriceChangeResult> {
+  async simulatePriceChange(priceChanges: PriceChangeInput[]): Promise<SimulatePriceChangeResult> {
+    this.assertVenueWritable()
     return this.client.post<SimulatePriceChangeResult>(
       `/api/trading/uta/${encodeURIComponent(this.id)}/simulate-price`,
       { changes: priceChanges },
@@ -367,5 +374,10 @@ export class UTAAccountSDK {
 
   async close(): Promise<void> {
     // No local state to close.
+  }
+
+  private assertVenueWritable(): void {
+    const reason = this.readonlyMutationReason?.()
+    if (reason) throw new Error(reason)
   }
 }

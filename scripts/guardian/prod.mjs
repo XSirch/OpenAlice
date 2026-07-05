@@ -26,6 +26,7 @@
  */
 
 import { spawn } from 'node:child_process'
+import { createDecipheriv } from 'node:crypto'
 import { mkdir, readFile, watch } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -57,6 +58,62 @@ function truthyEnv(raw) {
 
 function isLiteModeEnv(env) {
   return truthyEnv(env.OPENALICE_LITE_MODE) || truthyEnv(env.OPENALICE_UTA_DISABLED)
+}
+
+function parseTradingModeEnv(env) {
+  const raw = String(env.OPENALICE_TRADING_MODE ?? '').trim().toLowerCase()
+  if (raw === 'lite' || raw === 'readonly' || raw === 'pro') return raw
+  return isLiteModeEnv(env) ? 'lite' : null
+}
+
+async function readPersistedTradingMode(userDataHome) {
+  try {
+    const raw = JSON.parse(await readFile(resolve(userDataHome, 'data', 'config', 'trading.json'), 'utf8'))
+    return raw.mode === 'lite' || raw.mode === 'readonly' || raw.mode === 'pro' ? raw.mode : null
+  } catch {
+    return null
+  }
+}
+
+function isSealedEnvelope(value) {
+  return (
+    typeof value === 'object' && value !== null &&
+    value.$sealed === 1 &&
+    typeof value.iv === 'string' &&
+    typeof value.tag === 'string' &&
+    typeof value.data === 'string'
+  )
+}
+
+async function unsealAccounts(userDataHome, envelope) {
+  if (envelope.alg !== 'aes-256-gcm') return []
+  const keyRaw = (await readFile(resolve(userDataHome, 'sealing.key'), 'utf8')).trim()
+  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(keyRaw, 'base64'), Buffer.from(envelope.iv, 'base64'))
+  decipher.setAuthTag(Buffer.from(envelope.tag, 'base64'))
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(envelope.data, 'base64')),
+    decipher.final(),
+  ])
+  return JSON.parse(plaintext.toString('utf8'))
+}
+
+async function hasPersistedUTAs(userDataHome) {
+  try {
+    const raw = JSON.parse(await readFile(resolve(userDataHome, 'data', 'config', 'accounts.json'), 'utf8'))
+    const accounts = isSealedEnvelope(raw) ? await unsealAccounts(userDataHome, raw) : raw
+    return Array.isArray(accounts) && accounts.length > 0
+  } catch {
+    return false
+  }
+}
+
+async function resolveTradingMode(env, userDataHome) {
+  const envMode = parseTradingModeEnv(env)
+  const configuredMode = await readPersistedTradingMode(userDataHome)
+  const hasUTAConfig = await hasPersistedUTAs(userDataHome)
+  if (envMode) return { mode: envMode, source: 'env', envLocked: true, hasUTAConfig }
+  if (configuredMode) return { mode: configuredMode, source: 'config', envLocked: false, hasUTAConfig }
+  return { mode: hasUTAConfig ? 'pro' : 'lite', source: 'auto', envLocked: false, hasUTAConfig }
 }
 
 async function readPortsFile(userDataHome) {
@@ -94,7 +151,8 @@ const MCP_PORT = pickPort('OPENALICE_MCP_PORT', portsFile.mcp, 47332)
 const UTA_PORT = pickPort('OPENALICE_UTA_PORT', portsFile.uta, 47333)
 const FLAG_PATH = resolve(DATA_HOME, 'data/control/restart-uta.flag')
 const UTA_URL = `http://127.0.0.1:${UTA_PORT}`
-const LITE_MODE = isLiteModeEnv(process.env)
+let TRADING_MODE = await resolveTradingMode(process.env, DATA_HOME)
+const LITE_MODE = TRADING_MODE.mode === 'lite'
 
 let stopping = false
 let utaChild = null
@@ -102,9 +160,9 @@ let aliceChild = null
 let restartingUTA = false
 
 console.log('[guardian/prod] starting')
-console.log(`[guardian/prod] mode  → ${LITE_MODE ? 'docker/prod-lite' : 'docker/prod'}`)
+console.log(`[guardian/prod] mode  → ${TRADING_MODE.mode} (${TRADING_MODE.source}${TRADING_MODE.envLocked ? ', env-locked' : ''})`)
 console.log(`[guardian/prod] data  → ${DATA_HOME}`)
-console.log(`[guardian/prod] UTA   → ${LITE_MODE ? 'disabled (OPENALICE_LITE_MODE)' : UTA_URL}`)
+console.log(`[guardian/prod] UTA   → ${LITE_MODE ? 'disabled (trading mode lite)' : UTA_URL}`)
 console.log(`[guardian/prod] Alice → http://0.0.0.0:${WEB_PORT}`)
 console.log(`[guardian/prod] Tools → http://127.0.0.1:${MCP_PORT}/cli`)
 console.log(`[guardian/prod] MCP   → optional on http://127.0.0.1:${MCP_PORT}/mcp`)
@@ -140,7 +198,7 @@ function spawnAlice() {
       OPENALICE_WEB_PORT: String(WEB_PORT),
       OPENALICE_MCP_PORT: String(MCP_PORT),
       OPENALICE_TOOL_BASE_URL: `http://127.0.0.1:${MCP_PORT}/cli`,
-      ...(LITE_MODE ? { OPENALICE_LITE_MODE: '1' } : { OPENALICE_UTA_URL: UTA_URL }),
+      OPENALICE_UTA_URL: UTA_URL,
       OPENALICE_HOME: DATA_HOME,
       OPENALICE_LAUNCHER: 'docker',
     },
@@ -168,13 +226,30 @@ async function waitForUTA() {
 }
 
 async function restartUTA() {
-  if (LITE_MODE) {
-    console.warn('[guardian/prod] restart-uta.flag ignored — OPENALICE_LITE_MODE disables UTA')
+  TRADING_MODE = await resolveTradingMode(process.env, DATA_HOME)
+  if (TRADING_MODE.mode === 'lite') {
+    if (utaChild && utaChild.exitCode === null) {
+      console.log('[guardian/prod] trading mode lite — stopping UTA')
+      restartingUTA = true
+      try { utaChild.kill('SIGTERM') } catch { /* noop */ }
+      restartingUTA = false
+      utaChild = null
+    } else {
+      console.warn('[guardian/prod] restart-uta.flag ignored — trading mode lite disables UTA')
+    }
     return
   }
   if (restartingUTA) return
   restartingUTA = true
   try {
+    if (!utaChild) {
+      console.log(`[guardian/prod] trading mode ${TRADING_MODE.mode} — starting UTA`)
+      utaChild = spawnUTA()
+      const ready = await waitForUTA()
+      if (!ready) console.error('[guardian/prod] UTA did not come up')
+      else console.log('[guardian/prod] UTA ready')
+      return
+    }
     console.log('[guardian/prod] restart-uta.flag triggered — restarting UTA')
     const old = utaChild
     if (old && old.exitCode === null) {
@@ -247,7 +322,7 @@ async function startFlagWatcher() {
 }
 
 async function main() {
-  if (!LITE_MODE) {
+  if (TRADING_MODE.mode !== 'lite') {
     utaChild = spawnUTA()
     void waitForUTA().then((ready) => {
       if (ready) console.log('[guardian/prod] UTA ready')
@@ -256,7 +331,7 @@ async function main() {
   }
 
   aliceChild = spawnAlice()
-  if (!LITE_MODE) await startFlagWatcher()
+  await startFlagWatcher()
 }
 
 main().catch((err) => {

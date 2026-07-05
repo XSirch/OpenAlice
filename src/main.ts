@@ -15,7 +15,13 @@ import { createThinkingTools } from './tool/thinking.js'
 import { createUTAClient } from '@traderalice/uta-protocol'
 import { UTAManagerSDK } from './services/uta-client/index.js'
 import { waitForUTAReady } from './services/uta-supervisor/health.js'
-import { isUTADisabled, resolveUTAUrl } from './services/uta-supervisor/url.js'
+import { resolveUTAUrl } from './services/uta-supervisor/url.js'
+import {
+  liteUnavailableReason,
+  readonlyMutationReason,
+  resolveTradingModePolicy,
+  type TradingModePolicy,
+} from './services/trading-mode.js'
 import { createTradingTools } from './tool/trading.js'
 import { SymbolIndex } from './domain/market-data/equity/index.js'
 import { CommodityCatalog } from './domain/market-data/commodity/index.js'
@@ -114,11 +120,22 @@ async function main() {
   // SDK carrier calls locally; ordinary offline mode can recover when the
   // carrier appears at the resolved URL.
 
-  const utaDisabled = isUTADisabled()
+  const initialTradingMode = await resolveTradingModePolicy(config)
+  const currentTradingModePolicy = (): TradingModePolicy => {
+    const envLockedMode = initialTradingMode.source === 'env' ? initialTradingMode.mode : null
+    if (envLockedMode) return { ...initialTradingMode, mode: envLockedMode, source: 'env', envLocked: true }
+    return {
+      ...initialTradingMode,
+      mode: config.trading.mode ?? initialTradingMode.mode,
+      source: config.trading.mode ? 'config' : initialTradingMode.source,
+      envLocked: false,
+    }
+  }
+  const utaDisabled = currentTradingModePolicy().mode === 'lite'
   const utaUrl = resolveUTAUrl()
   const utaClient = createUTAClient({ baseUrl: utaUrl })
   if (utaDisabled) {
-    console.warn('uta: disabled by lite mode — continuing without trading carrier')
+    console.warn('uta: disabled by trading mode lite — continuing without trading carrier')
   } else {
     const utaHealth = await waitForUTAReady({ baseUrl: utaUrl, timeoutMs: 750 })
     if (utaHealth) {
@@ -129,7 +146,8 @@ async function main() {
   }
   const utaManager = new UTAManagerSDK({
     client: utaClient,
-    ...(utaDisabled ? { unavailableReason: 'UTA disabled by OPENALICE_LITE_MODE' } : {}),
+    unavailableReason: () => liteUnavailableReason(currentTradingModePolicy()),
+    readonlyMutationReason: () => readonlyMutationReason(currentTradingModePolicy()),
   })
 
   // ==================== Persona ====================
@@ -379,6 +397,7 @@ async function main() {
     barService,
     reference,
     utaManager,
+    tradingModePolicy: currentTradingModePolicy,
     newsProvider: newsStore,
   }
 

@@ -38,12 +38,14 @@ type KeylessDataSource = typeof KEYLESS_DATA_SOURCE_OPTIONS[number]['id']
 interface TradingRuntimeConfig {
   observeExternalOrdersEvery: string
   keylessDataSources: KeylessDataSource[]
+  mode?: 'lite' | 'readonly' | 'pro'
 }
 
 async function loadTradingRuntimeConfig(): Promise<TradingRuntimeConfig> {
   const cfg = await fetch('/api/config').then((r) => r.json())
   return {
     observeExternalOrdersEvery: cfg?.trading?.observeExternalOrdersEvery ?? '15m',
+    mode: cfg?.trading?.mode,
     keylessDataSources: Array.isArray(cfg?.trading?.keylessDataSources)
       ? cfg.trading.keylessDataSources.filter((v: unknown): v is KeylessDataSource =>
         KEYLESS_DATA_SOURCE_OPTIONS.some((o) => o.id === v))
@@ -234,6 +236,10 @@ export function TradingPage() {
         if (!cancelled) setServiceStatus({
           available: false,
           state: 'unavailable',
+          mode: 'lite',
+          modeSource: 'auto',
+          envLocked: false,
+          hasUTAConfig: false,
           reason: 'status_unreachable',
           hint: 'Trading service status is not reachable. Alice is running in lite mode.',
         })

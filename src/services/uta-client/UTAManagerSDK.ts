@@ -31,18 +31,22 @@ import { UTAAccountSDK, NotImplementedInSDK } from './UTAAccountSDK.js'
 
 export interface UTAManagerSDKDeps {
   client: UTAClient
-  /** Stable offline/lite mode reason. When set, SDK reads degrade locally
-   *  instead of trying the HTTP carrier. */
-  unavailableReason?: string
+  /** Offline/lite mode reason. Getter form lets product-mode changes take
+   *  effect without reconstructing the SDK. */
+  unavailableReason?: string | (() => string | undefined)
+  /** Dynamic guard for venue-mutating broker writes in readonly mode. */
+  readonlyMutationReason?: () => string | undefined
 }
 
 export class UTAManagerSDK {
   private readonly client: UTAClient
-  private readonly unavailableReason?: string
+  private readonly unavailableReason?: string | (() => string | undefined)
+  private readonly readonlyMutationReason?: () => string | undefined
 
   constructor(deps: UTAManagerSDKDeps) {
     this.client = deps.client
     this.unavailableReason = deps.unavailableReason
+    this.readonlyMutationReason = deps.readonlyMutationReason
   }
 
   // ==================== Setup hooks — UTA owns these now ====================
@@ -77,7 +81,7 @@ export class UTAManagerSDK {
   // ==================== Reads (HTTP-backed) ====================
 
   async listUTAs(): Promise<UTASummary[]> {
-    if (this.unavailableReason) return []
+    if (this.getUnavailableReason()) return []
     const res = await this.client.get<{ utas: UTASummary[] }>(`/api/trading/uta`)
     return res.utas
   }
@@ -100,7 +104,7 @@ export class UTAManagerSDK {
     if (!source && opts?.tradingOnly) {
       matches = matches.filter((u) => u.health.tier !== 'data')
     }
-    return matches.map((u) => new UTAAccountSDK({ client: this.client, id: u.id, label: u.label }))
+    return matches.map((u) => this.accountFromSummary(u))
   }
 
   /** Like `UTAManager.resolveOne(source)` but async and throws when
@@ -117,7 +121,7 @@ export class UTAManagerSDK {
   async get(id: string): Promise<UTAAccountSDK | undefined> {
     const all = await this.listUTAs()
     const match = all.find((u) => u.id === id)
-    return match ? new UTAAccountSDK({ client: this.client, id: match.id, label: match.label }) : undefined
+    return match ? this.accountFromSummary(match) : undefined
   }
 
   async has(id: string): Promise<boolean> {
@@ -129,7 +133,7 @@ export class UTAManagerSDK {
    *  report each broker's honest entitlement (Alpaca free = 'iex', CCXT =
    *  'realtime') rather than blanket-labeling broker sources 'realtime'. */
   async getBarCapabilities(): Promise<Record<string, 'realtime' | 'iex' | 'delayed' | 'subscription'>> {
-    if (this.unavailableReason) return {}
+    if (this.getUnavailableReason()) return {}
     const all = await this.listUTAs()
     const out: Record<string, 'realtime' | 'iex' | 'delayed' | 'subscription'> = {}
     for (const u of all) {
@@ -156,7 +160,7 @@ export class UTAManagerSDK {
    *  UTAs (collected server-side from positions + account base currency).
    *  Used by the AI portfolio tool for cross-currency percentage math. */
   async getFxRates(): Promise<Array<{ currency: string; rate: number; source: string; updatedAt: string }>> {
-    if (this.unavailableReason) return []
+    if (this.getUnavailableReason()) return []
     const res = await this.client.get<{ rates: Array<{ currency: string; rate: number; source: string; updatedAt: string }> }>(`/api/trading/fx-rates`)
     return res.rates
   }
@@ -172,7 +176,8 @@ export class UTAManagerSDK {
    *  for v1; finer-grained reconnect can land alongside per-UTA hot
    *  reload in a future step. */
   async reconnectUTA(_id: string): Promise<ReconnectResult> {
-    if (this.unavailableReason) return { success: false, error: this.unavailableReason }
+    const unavailable = this.getUnavailableReason()
+    if (unavailable) return { success: false, error: unavailable }
     const r = await triggerUTARestart()
     if (r.triggered && r.ready) return { success: true, message: 'UTA restarted' }
     return { success: false, error: r.error ?? 'UTA restart did not complete' }
@@ -181,7 +186,7 @@ export class UTAManagerSDK {
   /** Same shape: triggers UTA restart so the new process picks up the
    *  caller-side write to `accounts.json`. */
   async removeUTA(_id: string): Promise<void> {
-    if (this.unavailableReason) return
+    if (this.getUnavailableReason()) return
     await triggerUTARestart().catch((err) => {
       // Best-effort — config-route caller has already deleted from disk;
       // not blocking the response on UTA respawn completion.
@@ -195,7 +200,7 @@ export class UTAManagerSDK {
     pattern: string,
     _assetClass?: unknown,
   ): Promise<ContractSearchHit[]> {
-    if (this.unavailableReason) return []
+    if (this.getUnavailableReason()) return []
     // The route returns flat per-account hits ({ source, contract,
     // derivativeSecTypes }), NOT the grouped ContractSearchResult shape.
     const res = await this.client.get<{ results: ContractSearchHit[] }>(
@@ -217,7 +222,23 @@ export class UTAManagerSDK {
   }
 
   private assertAvailable(): void {
-    if (this.unavailableReason) throw new Error(this.unavailableReason)
+    const unavailable = this.getUnavailableReason()
+    if (unavailable) throw new Error(unavailable)
+  }
+
+  private getUnavailableReason(): string | undefined {
+    return typeof this.unavailableReason === 'function'
+      ? this.unavailableReason()
+      : this.unavailableReason
+  }
+
+  private accountFromSummary(summary: UTASummary): UTAAccountSDK {
+    return new UTAAccountSDK({
+      client: this.client,
+      id: summary.id,
+      label: summary.label,
+      readonlyMutationReason: this.readonlyMutationReason,
+    })
   }
 }
 

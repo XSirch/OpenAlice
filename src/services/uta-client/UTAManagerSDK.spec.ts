@@ -24,6 +24,11 @@ function fakeClient(utas: unknown[]) {
       if (path === '/api/trading/uta') return { utas }
       throw new Error(`unexpected GET ${path}`)
     },
+    post: async (path: string) => {
+      if (path.includes('/wallet/stage-place-order')) return { hash: 'stage' }
+      if (path.includes('/wallet/push')) return { hash: 'push' }
+      throw new Error(`unexpected POST ${path}`)
+    },
   } as never
 }
 
@@ -97,5 +102,18 @@ describe('UTAManagerSDK — unavailable carrier', () => {
     await expect(m.removeUTA('alpaca-paper')).resolves.toBeUndefined()
     await expect(m.getAggregatedEquity()).rejects.toThrow(disabledReason)
     await expect(m.getContractDetails('alpaca-paper', {} as never)).rejects.toThrow(disabledReason)
+  })
+})
+
+describe('UTAManagerSDK — readonly product mode', () => {
+  it('allows local staging but blocks venue push', async () => {
+    const m = new UTAManagerSDK({
+      client: fakeClient([summary('alpaca-paper', 'trading')]),
+      readonlyMutationReason: () => 'Trading mode is readonly',
+    })
+    const [account] = await m.resolve()
+
+    await expect(account.stagePlaceOrder({} as never)).resolves.toEqual({ hash: 'stage' })
+    await expect(account.push()).rejects.toThrow('Trading mode is readonly')
   })
 })

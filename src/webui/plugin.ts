@@ -32,7 +32,7 @@ import { createAuthRoutes } from './routes/auth.js'
 import { createAuthMiddleware } from './middleware/auth.js'
 import { mountOpenTypeBB } from '../server/opentypebb.js'
 import { buildSDKCredentials } from '../domain/market-data/credential-map.js'
-import { isUTADisabled, resolveUTAUrl } from '../services/uta-supervisor/url.js'
+import { resolveUTAUrl } from '../services/uta-supervisor/url.js'
 import { createWorkspaceService, type WorkspaceService } from '../workspaces/service.js'
 
 /** Cross-plugin hand-off for WorkspaceService. WebPlugin creates it
@@ -229,14 +229,15 @@ export class WebPlugin implements Plugin {
     // `/api/trading/*` and `/api/simulator/*` are proxied to the UTA carrier.
     // UTA is optional, so the proxy owns the unavailable response instead of
     // making WebPlugin startup fail.
-    const utaDisabled = isUTADisabled()
-    const utaProxy = createTradingProxyRoutes(utaDisabled
-      ? { disabledReason: 'lite_mode' }
-      : { utaBaseUrl: resolveUTAUrl() })
+    const utaProxy = createTradingProxyRoutes({
+      utaBaseUrl: resolveUTAUrl(),
+      getPolicy: ctx.tradingModePolicy,
+    })
     app.route('/api/trading', utaProxy)
-    app.route('/api/simulator', createTradingProxyRoutes(utaDisabled
-      ? { disabledReason: 'lite_mode' }
-      : { utaBaseUrl: resolveUTAUrl() }))
+    app.route('/api/simulator', createTradingProxyRoutes({
+      utaBaseUrl: resolveUTAUrl(),
+      getPolicy: ctx.tradingModePolicy,
+    }))
     app.route('/api/tools', createToolsRoutes(ctx.toolCenter))
     app.route('/api/agent-status', createAgentStatusRoutes(ctx))
     app.route('/api/news', createNewsRoutes(ctx))
