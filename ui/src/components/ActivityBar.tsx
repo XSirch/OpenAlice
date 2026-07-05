@@ -1,5 +1,5 @@
-import { type LucideIcon, MessageSquare, Inbox, Telescope, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Info, ListChecks, PanelLeftClose, PanelLeftOpen, Gauge, LockKeyhole, ShieldCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type LucideIcon, MessageSquare, Inbox, Telescope, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Info, ListChecks, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useState } from 'react'
 import { type Page } from '../App'
 import { useWorkspace } from '../tabs/store'
 import type { ActivitySection, ViewSpec } from '../tabs/types'
@@ -8,8 +8,6 @@ import { usePendingPushCount } from '../live/trading-push'
 import { useActivityBarCollapse } from '../live/activity-bar-collapse'
 import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from './ThemeToggle'
-import { ensureTradingModePolling, useTradingMode } from '../live/trading-mode'
-import type { TradingMode } from '../api/types'
 
 /**
  * Map ActivityBar page enum (visual layout grouping) to the ActivitySection
@@ -189,8 +187,6 @@ export function ActivityBar({
   const narrowRail = desktopStatic && railMode === 'narrow' && !compactRail
   const denseRail = desktopStatic && shortRailHeight
 
-  useEffect(() => { ensureTradingModePolling() }, [])
-
   return (
     <>
       {/* Backdrop — mobile only */}
@@ -215,8 +211,13 @@ export function ActivityBar({
       >
         {/* Branding — h-10 to line up with the Sidebar header + TabStrip
             (all three top surfaces share the 40px header rhythm). */}
-        <div className={`${denseRail ? 'h-10 mb-2 md:h-7 md:mb-0.5' : 'h-10 mb-2'} flex items-center shrink-0 ${compactRail ? 'pl-[22px] pr-4 gap-2.5 md:gap-0 md:pr-0' : narrowRail ? 'pl-[18px] pr-3 gap-2' : 'pl-[22px] pr-4 gap-2.5'}`}>
-          <TradingModeControl compact={compactRail} />
+        <div className={`${denseRail ? 'h-10 mb-2 md:h-7 md:mb-0.5' : 'h-10 mb-2'} flex items-center shrink-0 ${compactRail ? 'justify-center px-0' : narrowRail ? 'pl-[18px] pr-3 gap-2' : 'pl-[22px] pr-4 gap-2.5'}`}>
+          <img
+            src="/alice.ico"
+            alt="Alice"
+            className={`${denseRail ? 'h-6 w-6 md:h-5 md:w-5' : 'h-6 w-6'} shrink-0 rounded-full ring-1 ring-border shadow-[0_0_14px_var(--color-accent-dim)]`}
+            draggable={false}
+          />
           <h1 className={`min-w-0 flex-1 truncate text-[15px] font-semibold text-text ${compactRail ? 'md:hidden' : ''}`}>OpenAlice</h1>
         </div>
 
@@ -351,132 +352,6 @@ export function ActivityBar({
         </div>
       </aside>
     </>
-  )
-}
-
-// ==================== Trading Mode Control ====================
-
-const MODE_META: Record<TradingMode, {
-  label: string
-  short: string
-  desc: string
-  dot: string
-  Icon: LucideIcon
-}> = {
-  lite: {
-    label: 'Lite',
-    short: 'LITE',
-    desc: 'UTA off. Analysis-only startup.',
-    dot: 'bg-text-muted',
-    Icon: Gauge,
-  },
-  readonly: {
-    label: 'Readonly',
-    short: 'READ',
-    desc: 'UTA reads accounts; venue writes blocked.',
-    dot: 'bg-yellow-400',
-    Icon: LockKeyhole,
-  },
-  pro: {
-    label: 'Pro',
-    short: 'PRO',
-    desc: 'UTA on with per-account permissions.',
-    dot: 'bg-green',
-    Icon: ShieldCheck,
-  },
-}
-
-export function TradingModeControl({ compact }: { compact: boolean }) {
-  const status = useTradingMode((s) => s.status)
-  const saving = useTradingMode((s) => s.saving)
-  const setMode = useTradingMode((s) => s.setMode)
-  const error = useTradingMode((s) => s.error)
-  const [open, setOpen] = useState(false)
-  const current = MODE_META[status.mode]
-
-  return (
-    <div className="relative z-20">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`Trading mode: ${current.label}`}
-        aria-expanded={open}
-        className={`group flex items-center rounded-full transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] hover:bg-overlay ${
-          compact ? 'h-10 w-10 justify-center' : 'h-8 gap-2 pr-2'
-        }`}
-        title={`Trading mode: ${current.label}`}
-      >
-        <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full">
-          <img
-            src="/alice.ico"
-            alt="Alice"
-            className="h-6 w-6 rounded-full ring-1 ring-border shadow-[0_0_14px_var(--color-accent-dim)] transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)] group-hover:scale-[1.04]"
-            draggable={false}
-          />
-          <span className={`absolute -right-0.5 bottom-0 h-2.5 w-2.5 rounded-full border border-bg-tertiary ${current.dot} ${saving ? 'animate-pulse' : ''} ${compact ? 'hidden' : ''}`} />
-          <span
-            className={`absolute left-1/2 top-[24px] min-w-[26px] -translate-x-1/2 items-center justify-center rounded-full border border-bg-tertiary bg-bg-secondary px-1 text-[8px] font-semibold leading-3 text-text shadow-sm ${compact ? 'flex' : 'hidden'}`}
-            aria-hidden
-          >
-            {current.short}
-          </span>
-        </span>
-        <span className={`min-w-0 items-center gap-1.5 ${compact ? 'md:hidden' : 'flex'}`}>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted/75">{current.short}</span>
-          <ChevronDown size={11} className={`text-text-muted/60 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} aria-hidden />
-        </span>
-      </button>
-
-      <div
-        className={`absolute left-0 top-9 w-[232px] origin-top-left rounded-lg border border-border bg-bg-secondary shadow-xl shadow-black/25 transition-[opacity,transform] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] ${
-          open ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0 pointer-events-none'
-        }`}
-      >
-        <div className="border-b border-border/70 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium text-text-muted">Trading mode</span>
-            <span className="text-[10px] uppercase tracking-wide text-text-muted/60">
-              {status.envLocked ? 'env locked' : status.modeSource}
-            </span>
-          </div>
-        </div>
-        <div className="p-1.5">
-          {(Object.keys(MODE_META) as TradingMode[]).map((mode) => {
-            const meta = MODE_META[mode]
-            const Icon = meta.Icon
-            const active = status.mode === mode
-            const disabled = status.envLocked || saving !== null
-            return (
-              <button
-                key={mode}
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  void setMode(mode).then(() => setOpen(false)).catch(() => {})
-                }}
-                className={`flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors ${
-                  active ? 'bg-accent-dim text-text' : 'text-text-muted hover:bg-overlay hover:text-text'
-                } ${disabled ? 'cursor-default opacity-70' : ''}`}
-              >
-                <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md ${active ? 'bg-accent/15 text-accent' : 'bg-bg-tertiary text-text-muted'}`}>
-                  <Icon size={14} strokeWidth={1.8} aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-medium">{meta.label}</span>
-                  <span className="mt-0.5 block text-[10.5px] leading-snug text-text-muted/70">{meta.desc}</span>
-                </span>
-                {saving === mode && <span className="mt-1 h-1.5 w-1.5 rounded-full bg-accent animate-pulse" aria-hidden />}
-              </button>
-            )
-          })}
-        </div>
-        {error && (
-          <div className="border-t border-border/70 px-3 py-2 text-[10.5px] leading-snug text-red">
-            {error}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 

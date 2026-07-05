@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ActivityBar, TradingModeControl } from './components/ActivityBar'
+import { ActivityBar } from './components/ActivityBar'
 import { TabHost } from './components/TabHost'
 import { DesktopUpdatePrompt } from './components/DesktopUpdatePrompt'
 import { UpdateBanner } from './components/UpdateBanner'
@@ -94,7 +94,6 @@ function AppShell() {
             <path d="M3 5h14M3 10h14M3 15h14" />
           </svg>
         </button>
-        <TradingModeControl compact={false} />
         <span className="text-sm font-semibold text-text">OpenAlice</span>
       </div>
 

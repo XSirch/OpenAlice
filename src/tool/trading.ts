@@ -750,7 +750,7 @@ Optional: attach takeProfit and/or stopLoss for automatic exit orders.`,
 
 By DEFAULT this does NOT execute: it returns the pending operations and you must ask the user to approve them in the Web UI (Trading as Git page, or the account detail page).
 
-ONLY if the operator has enabled "Allow AI to push trades" in Settings does this execute directly — committed operations are sent to the broker as live orders. Use deliberately.`,
+ONLY if the operator has enabled "Allow AI to push trades" in Settings → Agent Permissions does this execute directly — committed operations are sent to the broker as live orders. Use deliberately.`,
       inputSchema: z.object({
         source: z.string().optional().describe(sourceDesc(false, 'If omitted, checks all accounts.')),
       }).meta({ examples: [{ source: 'alpaca-paper' }] }),

@@ -259,7 +259,7 @@ export function PortfolioPage() {
             {!tradingModeLoading && tradingMode === 'lite' ? (
               <TradingModeGate
                 title="Portfolio is unavailable in Lite mode."
-                description="Lite mode keeps UTA disconnected, so there are no broker accounts, positions, or equity snapshots to show. Switch to Readonly or Pro to connect UTA."
+                description="Lite mode keeps UTA disconnected, so there are no broker accounts, positions, or equity snapshots to show. Change the trading mode in Agent Permissions to connect UTA."
               />
             ) : <>
             <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />

@@ -22,7 +22,7 @@ export function TradingAsGitPage() {
         ) : mode === 'lite' ? (
           <TradingModeGate
             title="Trading as Git is unavailable in Lite mode."
-            description="Lite mode keeps UTA disconnected, so Alice cannot review broker write proposals. Switch to Readonly or Pro to connect UTA."
+            description="Lite mode keeps UTA disconnected, so Alice cannot review broker write proposals. Change the trading mode in Agent Permissions to connect UTA."
           />
         ) : (
           <PushApprovalPanel />
