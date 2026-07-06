@@ -4,7 +4,7 @@ import { delimiter, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { detectBinary, findExecutableOnPath } from './agent-detect.js';
+import { detectBinary, findExecutableOnPath, runtimeInstallOverride } from './agent-detect.js';
 
 let dir: string;
 
@@ -78,5 +78,36 @@ describe('detectBinary', () => {
       installed: false,
       path: null,
     });
+  });
+});
+
+describe('runtimeInstallOverride', () => {
+  it('only applies in onboarding test mode', () => {
+    expect(runtimeInstallOverride('claude', { OPENALICE_AGENT_RUNTIME_INSTALLS: 'none' })).toBeNull();
+  });
+
+  it('can simulate no installed agent runtimes', () => {
+    expect(runtimeInstallOverride('claude', {
+      OPENALICE_ONBOARDING_TEST: '1',
+      OPENALICE_AGENT_RUNTIME_INSTALLS: 'none',
+    })).toEqual({ installed: false, path: null });
+  });
+
+  it('can simulate only selected installed runtimes', () => {
+    const env = {
+      OPENALICE_ONBOARDING_TEST: '1',
+      OPENALICE_AGENT_RUNTIME_INSTALLS: 'only:codex,opencode',
+    };
+    expect(runtimeInstallOverride('codex', env)).toEqual({ installed: true, path: null });
+    expect(runtimeInstallOverride('claude', env)).toEqual({ installed: false, path: null });
+  });
+
+  it('can simulate selected missing runtimes', () => {
+    const env = {
+      OPENALICE_ONBOARDING_TEST: '1',
+      OPENALICE_AGENT_RUNTIME_INSTALLS: 'missing:pi',
+    };
+    expect(runtimeInstallOverride('codex', env)).toEqual({ installed: true, path: null });
+    expect(runtimeInstallOverride('pi', env)).toEqual({ installed: false, path: null });
   });
 });

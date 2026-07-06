@@ -3,6 +3,7 @@ import { ActivityBar } from './components/ActivityBar'
 import { TabHost } from './components/TabHost'
 import { DesktopUpdatePrompt } from './components/DesktopUpdatePrompt'
 import { UpdateBanner } from './components/UpdateBanner'
+import { FirstRunGuide } from './components/FirstRunGuide'
 import { DemoBanner } from './demo/DemoBanner'
 import { DemoAnalytics } from './demo/DemoAnalytics'
 import { WorkspacesProvider } from './contexts/WorkspacesContext'
@@ -118,6 +119,7 @@ function AppShell() {
           {mainContent}
         </div>
         <UrlAdopter />
+        <FirstRunGuide />
       </div>
     </div>
   )

@@ -23,6 +23,7 @@ import { MCPPage } from '../pages/MCPPage'
 import { MarketDataPage } from '../pages/MarketDataPage'
 import { NewsCollectorPage } from '../pages/NewsCollectorPage'
 import { UTADetailPage } from '../pages/UTADetailPage'
+import { OnboardingDesignPage } from '../pages/OnboardingDesignPage'
 import { DevPage } from '../pages/DevPage'
 import { InboxPage } from '../pages/InboxPage'
 import { InboxPageShell } from '../pages/InboxPageShell'
@@ -302,8 +303,16 @@ const utaDetailModule: ViewModule<'uta-detail'> = {
   ),
 }
 
+const onboardingModule: ViewModule<'onboarding'> = {
+  kind: 'onboarding',
+  title: () => 'Onboarding',
+  toUrl: () => '/onboarding',
+  Component: () => <OnboardingDesignPage />,
+}
+
 const devTabTitle: Record<Extract<ViewSpec, { kind: 'dev' }>['params']['tab'], string> = {
   tools: 'Tools',
+  onboarding: 'Onboarding',
   snapshots: 'Snapshots',
   logs: 'Logs',
   simulator: 'Simulator',
@@ -487,6 +496,7 @@ const VIEWS = {
   'market-detail': marketDetailModule,
   settings: settingsModule,
   'uta-detail': utaDetailModule,
+  onboarding: onboardingModule,
   dev: devModule,
   inbox: inboxModule,
   tracked: trackedModule,

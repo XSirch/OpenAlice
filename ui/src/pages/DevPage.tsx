@@ -5,6 +5,7 @@ import { getIntlLocale } from '../lib/intl'
 import { useToast } from '../components/Toast'
 import { LogsPage } from './LogsPage'
 import { SimulatorPage } from './SimulatorPage'
+import { OnboardingDesignPage } from './OnboardingDesignPage'
 import {
   toolsApi,
   type ToolInfo,
@@ -21,6 +22,7 @@ type Tab = Extract<ViewSpec, { kind: 'dev' }>['params']['tab']
 
 const TAB_TITLES: Record<Tab, string> = {
   tools: 'Tools',
+  onboarding: 'Onboarding',
   snapshots: 'Snapshots',
   logs: 'Logs',
   simulator: 'Simulator',
@@ -43,6 +45,7 @@ export function DevPage({ spec }: DevPageProps) {
       <PageHeader title={TAB_TITLES[tab]} />
       <div className={`flex-1 min-h-0 ${SELF_SCROLLING_TABS.has(tab) ? 'flex flex-col' : 'overflow-y-auto'}`}>
         {tab === 'tools' && <ToolsTab />}
+        {tab === 'onboarding' && <OnboardingDesignPage />}
         {tab === 'snapshots' && <SnapshotsTab />}
         {tab === 'logs' && <LogsPage />}
         {tab === 'simulator' && <SimulatorPage />}

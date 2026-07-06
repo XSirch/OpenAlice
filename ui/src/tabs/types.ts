@@ -33,7 +33,8 @@ export type ViewSpec =
   | { kind: 'market-detail';  params: { assetClass: 'equity' | 'crypto' | 'currency' | 'commodity'; symbol: string; source?: string } }
   | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'agent-permissions' | 'trading' | 'issues' | 'mcp' | 'market-data' | 'news-collector' } }
   | { kind: 'uta-detail';     params: { id: string } }
-  | { kind: 'dev';            params: { tab: 'tools' | 'snapshots' | 'logs' | 'simulator' } }
+  | { kind: 'onboarding';     params: Record<string, never> }
+  | { kind: 'dev';            params: { tab: 'tools' | 'onboarding' | 'snapshots' | 'logs' | 'simulator' } }
   | { kind: 'inbox';               params: Record<string, never> }
   | { kind: 'tracked';             params: Record<string, never> }
   | { kind: 'chat-landing';        params: { targetWsId?: string } }

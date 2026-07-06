@@ -70,7 +70,7 @@ import { terminalThemeEnv } from './terminal-theme.js';
 import { readReadmeVersion, TemplateRegistry } from './template-registry.js';
 import { readWorkspaceMetadata } from './workspace-metadata.js';
 import { TranscriptWatcher } from './transcript-watcher.js';
-import { detectBinary, type AgentAvailability } from './agent-detect.js';
+import { detectBinary, runtimeInstallOverride, type AgentAvailability } from './agent-detect.js';
 import { resolveLaunchCommand } from './win-command.js';
 import { WorkspaceCreator } from './workspace-creator.js';
 import { WorkspaceRegistry, type WorkspaceMeta } from './workspace-registry.js';
@@ -910,6 +910,11 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     const out: Record<string, AgentAvailability> = {};
     const env = { ...process.env, PATH: buildCliPath(process.env) };
     for (const a of adapters.list()) {
+      const override = isAgentRuntime(a) ? runtimeInstallOverride(a.id, env) : null;
+      if (override) {
+        out[a.id] = override;
+        continue;
+      }
       // No declared binary (shell → `$SHELL`) is always available.
       out[a.id] = a.binary ? detectBinary(a.binary, { env }) : { installed: true, path: null };
     }
