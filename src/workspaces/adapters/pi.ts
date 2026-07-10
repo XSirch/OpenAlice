@@ -10,11 +10,11 @@ import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
 // Pi's per-workspace provider override. `models.json` is read from Pi's AGENT
 // DIR, which has NO project-local layer — so we redirect the whole agent dir to
 // `<cwd>/.pi-agent` via PI_CODING_AGENT_DIR (composeEnv) and drop models.json
-// there. This is a DIFFERENT dir from `<cwd>/.pi` (Pi's project-local
-// extensions/skills discovery, keyed off cwd and unaffected by
-// PI_CODING_AGENT_DIR) — so the alice* CLI skills in `<cwd>/.pi/skills` still
-// resolve. Verified against pi 0.78.1 (`dist/core/model-registry.js:144-157`,
-// `dist/config.js:378,393-407`).
+// there. This does not affect project-resource discovery rooted at `cwd`: Pi
+// officially discovers shared project skills from `<cwd>/.agents/skills`
+// (walking ancestors to the repo root), so OpenAlice can use the same canonical
+// copy as Codex without maintaining a duplicate `<cwd>/.pi/skills` tree.
+// Verified against Pi 0.78.1 and the bundled 0.80.3.
 const PI_AGENT_DIR = '.pi-agent';
 const PI_MODELS_PATH = `${PI_AGENT_DIR}/models.json`;
 const PI_SETTINGS_PATH = `${PI_AGENT_DIR}/settings.json`;
@@ -39,7 +39,8 @@ function piCommandHead(env: Readonly<Record<string, string>>): readonly string[]
  * TOOL ACCESS: Pi has no native MCP, and the launcher injects NO MCP into
  * workspaces at all — Pi reaches OpenAlice purely through the `alice*` CLI
  * shims on PATH (`service.ts`) + the `alice*` / `traderhub` skills
- * copied to `<cwd>/.pi/skills` (`context-injector.ts`); Pi's built-in `bash`
+ * copied to the shared `<cwd>/.agents/skills` path (`context-injector.ts`);
+ * Pi's built-in `bash`
  * tool runs `alice` / `alice-uta` / `alice-workspace` / `traderhub`. This is
  * the full surface (data, trading, workspace, market) — same as every other
  * agent; only cron is unavailable (MCP-only by design, on no CLI). The old
@@ -82,8 +83,9 @@ export const piAdapter: CliAdapter = {
   },
 
   composeCommand(_base: readonly string[], ctx: SpawnContext): readonly string[] {
-    // Tools come from the CLI-injection path (alice on PATH + .pi/skills), not
-    // flags — so the command head is just the binary + a resume flag (if any).
+    // Tools come from the CLI-injection path (alice on PATH + shared
+    // .agents/skills), not flags — so the command head is just the binary + a
+    // resume flag (if any).
     // OpenAlice creates and owns the workspace, so approve its project-local
     // resources for this invocation instead of blocking a fresh chat on Pi's
     // interactive trust prompt. This does not mutate the user's global policy.
@@ -105,8 +107,9 @@ export const piAdapter: CliAdapter = {
   },
 
   // Headless: `pi -p <prompt>` is non-interactive and exits at the turn
-  // boundary. The MCP bridge + skills auto-load from `<cwd>/.pi` (process cwd =
-  // workspace), so the agent reaches inbox_push without any flag. NOTE: pi
+  // boundary. Shared skills auto-load from `<cwd>/.agents/skills` (process cwd =
+  // workspace), and the alice* CLI shims remain on PATH, so the agent reaches
+  // inbox_push without any extra flag or MCP bridge. NOTE: pi
   // REJECTS a `--` end-of-options terminator ("Unknown option: --", verified
   // 0.78.1), so the prompt is a bare trailing positional — a prompt literally
   // starting with `-`/`--` is unprotected on pi (rare for task prompts).
