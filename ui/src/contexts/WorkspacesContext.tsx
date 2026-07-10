@@ -38,6 +38,7 @@ import {
   listAgents,
   listTemplates,
   listWorkspaces,
+  openHeadlessRunSession,
   pauseSession as apiPauseSession,
   quickChat as apiQuickChat,
   resumeSession as apiResumeSession,
@@ -178,6 +179,47 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
     const saved = await apiSetWorkspaceDefaultAgent(agent)
     setDefaultAgentState(saved)
   }, [])
+
+  const openHeadlessRun = useCallback(
+    async (
+      wsId: string,
+      taskId: string,
+      opts: { agent?: string; agentSessionId?: string; title?: string } = {},
+    ): Promise<void> => {
+      const { session } = await openHeadlessRunSession(wsId, taskId, opts)
+      let nextSession = session
+      if (session.state === 'paused') {
+        const resumed = await apiResumeSession(wsId, session.id, terminalTheme)
+        if (resumed) {
+          nextSession = {
+            ...session,
+            state: 'running',
+            pid: resumed.pid,
+            startedAt: resumed.startedAt,
+            agentSessionId: resumed.agentSessionId ?? session.agentSessionId,
+            lastActiveAt: new Date().toISOString(),
+          }
+        }
+      }
+      setWorkspaces((prev) =>
+        prev.map((workspace) =>
+          workspace.id === wsId
+            ? {
+                ...workspace,
+                sessions: workspace.sessions.some((candidate) => candidate.id === nextSession.id)
+                  ? workspace.sessions.map((candidate) =>
+                      candidate.id === nextSession.id ? nextSession : candidate,
+                    )
+                  : [...workspace.sessions, nextSession],
+              }
+            : workspace,
+        ),
+      )
+      openOrFocus({ kind: 'workspace', params: { wsId, sessionId: nextSession.id } })
+      void refresh()
+    },
+    [openOrFocus, refresh, terminalTheme],
+  )
 
   const setIssueDefaultAgent = useCallback(async (agent: string | null): Promise<void> => {
     const saved = await apiSetIssueDefaultAgent(agent)
@@ -338,6 +380,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
         templatesLoaded,
         refresh,
         spawn,
+        openHeadlessRun,
         setDefaultAgent,
         setIssueDefaultAgent,
         quickChat,

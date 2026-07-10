@@ -23,6 +23,11 @@ export interface WorkspacesContextValue {
   readonly templatesLoaded: boolean
   refresh(): void
   spawn(wsId: string, opts?: SpawnOpts, source?: WorkspaceSource): Promise<void>
+  openHeadlessRun(
+    wsId: string,
+    taskId: string,
+    opts?: { agent?: string; agentSessionId?: string; title?: string },
+  ): Promise<void>
   setDefaultAgent(agent: string | null): Promise<void>
   setIssueDefaultAgent(agent: string | null): Promise<void>
   quickChat(prompt: string, agent?: string, credentialSlug?: string, targetWsId?: string): Promise<string>
