@@ -325,7 +325,7 @@ export async function setIssueDefaultAgent(agent: string | null): Promise<string
 //
 // V3.S4 — single SessionRecord type that covers both running PTYs and paused
 // records. `pid` + `startedAt` are non-null only when `state === 'running'`.
-// Persisted server-side at ~/.auto-quant-launcher/state/sessions/<wsId>.json
+// Persisted server-side at <OPENALICE_HOME>/workspaces/state/sessions/<wsId>.json
 // so records survive PTY death and server restarts.
 
 export interface SessionRecord {
@@ -341,6 +341,8 @@ export interface SessionRecord {
   readonly startedAt: number | null;
   /** First message (seeded sessions) — the sidebar title; null → fall back to `name`. */
   readonly title: string | null;
+  /** Headless run this stable Alice Session was materialized from. */
+  readonly sourceRunId?: string | null;
 }
 
 export interface SpawnedSession {
@@ -391,6 +393,38 @@ export async function spawnSession(
     throw new Error(`spawn session failed: ${res.status} ${msg}`);
   }
   return (await res.json()) as SpawnedSession;
+}
+
+export interface OpenHeadlessSessionOptions {
+  readonly agent?: string;
+  readonly agentSessionId?: string;
+  readonly title?: string;
+}
+
+export interface OpenHeadlessSessionResult {
+  readonly session: SessionRecord;
+  readonly created: boolean;
+}
+
+/** Idempotently materialize a finished headless run as one interactive Session. */
+export async function openHeadlessRunSession(
+  wsId: string,
+  taskId: string,
+  opts: OpenHeadlessSessionOptions = {},
+): Promise<OpenHeadlessSessionResult> {
+  const res = await fetch(
+    `/api/workspaces/${encodeURIComponent(wsId)}/headless/${encodeURIComponent(taskId)}/session`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(opts),
+    },
+  );
+  if (!res.ok) {
+    const parsed = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+    throw new Error(parsed?.message ?? parsed?.error ?? `open headless session failed: ${res.status}`);
+  }
+  return (await res.json()) as OpenHeadlessSessionResult;
 }
 
 /** Response of the quick-chat launch: the (reused-or-created) chat workspace + the seeded session. */

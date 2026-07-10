@@ -117,6 +117,25 @@ interface SpawnedSessionBody {
   readonly title: string | null;
 }
 
+interface PublicSessionBody {
+  readonly id: string;
+  readonly wsId: string;
+  readonly agent: string;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly lastActiveAt: string;
+  readonly state: 'running' | 'paused';
+  readonly agentSessionId: string | null;
+  readonly pid: number | null;
+  readonly startedAt: number | null;
+  readonly title: string | null;
+  readonly sourceRunId: string | null;
+}
+
+type OpenHeadlessSessionResult =
+  | { readonly ok: true; readonly created: boolean; readonly session: PublicSessionBody }
+  | { readonly ok: false; readonly status: 400 | 404 | 409 | 500; readonly body: { error: string; message?: string } };
+
 type SpawnSessionResult =
   | { readonly ok: true; readonly session: SpawnedSessionBody }
   | { readonly ok: false; readonly status: number; readonly body: { error: string; message?: string } };
@@ -126,6 +145,7 @@ export function createWorkspaceRoutes(
   quickChatPreferences: QuickChatWorkspacePreferenceDeps = defaultQuickChatWorkspacePreferenceDeps,
 ): Hono {
   const app = new Hono();
+  const headlessSessionInFlight = new Map<string, Promise<OpenHeadlessSessionResult>>();
 
   const resolveDefaultAgentId = async (meta: WorkspaceMeta): Promise<string | undefined> => {
     const configured = await readWorkspaceDefaultAgent().catch(() => null);
@@ -153,6 +173,8 @@ export function createWorkspaceRoutes(
       readonly agentId?: string;
       readonly resume?: SessionFactoryContext['resume'];
       readonly initialPrompt?: string;
+      readonly title?: string;
+      readonly sourceRunId?: string;
       readonly credentialSlug?: string;
       readonly terminalTheme?: TerminalThemeVariant;
     },
@@ -208,7 +230,8 @@ export function createWorkspaceRoutes(
     });
     const recordName = svc.sessionRegistry.nextName(id, adapter.id, prefix);
     const nowIso = new Date().toISOString();
-    const title = initialPrompt ? initialPrompt.slice(0, MAX_SESSION_TITLE) : undefined;
+    const titleSource = opts.title?.trim() || initialPrompt;
+    const title = titleSource ? titleSource.slice(0, MAX_SESSION_TITLE) : undefined;
     const record: SessionRecord = {
       id: recordId,
       wsId: id,
@@ -218,6 +241,10 @@ export function createWorkspaceRoutes(
       lastActiveAt: nowIso,
       state: 'running',
       ...(title !== undefined ? { title } : {}),
+      ...(opts.sourceRunId ? { sourceRunId: opts.sourceRunId } : {}),
+      ...(resume && resume !== 'last'
+        ? { resumeHint: { kind: 'agent-session-id' as const, value: resume.sessionId } }
+        : {}),
     };
     try {
       await svc.sessionRegistry.create(record);
@@ -263,6 +290,83 @@ export function createWorkspaceRoutes(
       return { ok: false, status: 500, body: { error: 'spawn_failed', message: (err as Error).message } };
     }
   }
+
+  const publicSession = (record: SessionRecord): PublicSessionBody => {
+    const live = svc.pool.get(record.id);
+    return {
+      id: record.id,
+      wsId: record.wsId,
+      agent: record.agent,
+      name: record.name,
+      createdAt: record.createdAt,
+      lastActiveAt: record.lastActiveAt,
+      state: record.state === 'running' && live ? 'running' : 'paused',
+      agentSessionId: live?.agentSessionId ?? record.resumeHint?.value ?? null,
+      pid: live?.pid ?? null,
+      startedAt: live?.startedAt ?? null,
+      title: record.title ?? null,
+      sourceRunId: record.sourceRunId ?? null,
+    };
+  };
+
+  const openHeadlessRunAsSession = async (
+    meta: WorkspaceMeta,
+    taskId: string,
+    fallback: { agent?: string; agentSessionId?: string; title?: string } = {},
+  ): Promise<OpenHeadlessSessionResult> => {
+    await svc.sessionRegistry.ensureLoaded(meta.id);
+    const existing = svc.sessionRegistry.findBySourceRunId(meta.id, taskId);
+    if (existing) return { ok: true, created: false, session: publicSession(existing) };
+
+    const task = svc.headlessTasks.get(taskId);
+    if (task && task.wsId !== meta.id) {
+      return { ok: false, status: 404, body: { error: 'run_not_found' } };
+    }
+    if (task?.status === 'running') {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: 'run_still_running', message: 'wait for the headless run to finish before continuing it interactively' },
+      };
+    }
+
+    const agent = task?.agent ?? fallback.agent;
+    const agentSessionId = task?.agentSessionId ?? fallback.agentSessionId;
+    if (!agent || !agentSessionId || !AGENT_SESSION_ID_RE.test(agentSessionId)) {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: 'session_unavailable', message: 'this run did not capture a resumable agent session id' },
+      };
+    }
+    const adapter = svc.adapters.get(agent);
+    if (!adapter || !adapter.capabilities.resumeById) {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: 'resume_unsupported', message: `${agent} cannot resume this run by session id` },
+      };
+    }
+
+    const spawned = await spawnInteractiveSession(meta, {
+      agentId: agent,
+      resume: { sessionId: agentSessionId },
+      title: task?.prompt ?? fallback.title ?? `Headless run ${taskId}`,
+      sourceRunId: taskId,
+    });
+    if (!spawned.ok) {
+      return {
+        ok: false,
+        status: spawned.status === 400 ? 400 : 500,
+        body: spawned.body,
+      };
+    }
+    const record = svc.sessionRegistry.get(meta.id, spawned.session.sessionId);
+    if (!record) {
+      return { ok: false, status: 500, body: { error: 'registry_failed', message: 'spawned session record is missing' } };
+    }
+    return { ok: true, created: true, session: publicSession(record) };
+  };
 
   const rememberRecentChat = async (meta: WorkspaceMeta): Promise<void> => {
     if (meta.template !== CHAT_WORKSPACE_TEMPLATE) return;
@@ -579,6 +683,46 @@ export function createWorkspaceRoutes(
   });
 
   // ── sessions ─────────────────────────────────────────────────────────────
+
+  // Materialize a finished headless run as one stable interactive Session.
+  // The sourceRunId index makes this idempotent across Inbox, Automation, the
+  // Workspace sidebar, reloads, and server restarts. New Inbox entries carry a
+  // server-stamped native session id as a fallback after the bounded run log is
+  // pruned; recent/legacy entries resolve from HeadlessTaskRegistry instead.
+  app.post('/:id/headless/:taskId/session', async (c) => {
+    const id = c.req.param('id');
+    const taskId = c.req.param('taskId');
+    if (!validId(id) || !validId(taskId)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'workspace_not_found' }, 404);
+
+    const body = await safeJson(c).catch(() => null);
+    const fields = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+    const fallback = {
+      ...(typeof fields['agent'] === 'string' ? { agent: fields['agent'] } : {}),
+      ...(typeof fields['agentSessionId'] === 'string'
+        ? { agentSessionId: fields['agentSessionId'] }
+        : {}),
+      ...(typeof fields['title'] === 'string' ? { title: fields['title'] } : {}),
+    };
+
+    const key = `${id}::${taskId}`;
+    let run = headlessSessionInFlight.get(key);
+    if (!run) {
+      run = openHeadlessRunAsSession(meta, taskId, fallback);
+      headlessSessionInFlight.set(key, run);
+    }
+    try {
+      const result = await run;
+      if (!result.ok) return c.json(result.body, result.status);
+      return c.json(
+        { session: result.session, created: result.created },
+        result.created ? 201 : 200,
+      );
+    } finally {
+      if (headlessSessionInFlight.get(key) === run) headlessSessionInFlight.delete(key);
+    }
+  });
 
   app.post('/:id/sessions/spawn', async (c) => {
     const id = c.req.param('id');

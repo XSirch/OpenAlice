@@ -1267,6 +1267,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
         pid: liveEntry?.pid ?? null,
         startedAt: liveEntry?.startedAt ?? null,
         title: r.title ?? null,
+        sourceRunId: r.sourceRunId ?? null,
       };
     });
     // Workspace AI provider override signals — read by the Overview

@@ -118,6 +118,13 @@ The launcher binds the run/issue origin; the agent does not pass its own
 identity. A no-change check should exit silently rather than generating Inbox
 noise.
 
+When a user opens an Inbox result, Alice uses the run's captured native CLI
+session id to resume the original conversation in an interactive PTY. The
+created Session stores `sourceRunId`; later opens from Inbox, the Automation
+panel, or the Workspace sidebar reuse that same Session instead of duplicating
+it. A scheduled result therefore keeps both links: its owning issue for work
+history and its originating Session for conversational follow-up.
+
 Scheduling never bypasses trading approval. A headless agent may research or
 stage a trade, but execution remains behind UTA/Trading-as-Git permission and
 human approval boundaries.
@@ -135,6 +142,8 @@ human approval boundaries.
 | `src/workspaces/service.ts` | Scanner composition, agent resolution, headless registry |
 | `src/tool/issue-tools.ts` | Workspace-scoped issue CLI/MCP tools |
 | `src/tool/inbox-push.ts` | Headless/interactive delivery to Inbox |
+| `src/workspaces/session-registry.ts` | Durable Session identity and run → Session source index |
+| `src/webui/routes/workspaces.ts` | Idempotent headless-run → interactive-Session materialization |
 | `src/webui/routes/issues.ts` | Issue board/detail HTTP API |
 | `src/webui/routes/schedule.ts` | Scheduled projection API |
 | `default/skills/self-scheduling/SKILL.md` | Agent-facing authoring instructions |

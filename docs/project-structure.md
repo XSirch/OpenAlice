@@ -120,6 +120,20 @@ Load-bearing paths:
 - `src/workspaces/adapters/` — CLI-specific command/config behavior.
 - `src/workspaces/protocol.ts` — UI ↔ Workspace contract.
 
+Sessions have three deliberately separate identities:
+
+- `SessionRecord.id` is Alice's durable UI/runtime key. Tabs, PTY attachment,
+  pause/resume routes, and Inbox links use it.
+- `agentSessionId` is the native CLI conversation id used by an adapter to
+  resume Claude, Codex, opencode, or Pi.
+- `sourceRunId` is present when a finished headless run has been materialized
+  as an interactive Session. It is the persistent, idempotent run → Session
+  index: opening the same result again returns to the same Alice Session.
+
+Do not use a headless task id directly as a PTY/session id, and do not create a
+new Alice Session every time the same run is opened. The run is execution
+provenance; the Session is the durable conversation surface.
+
 Built-in templates use cross-platform `bootstrap.mjs` files and route git
 through `src/workspaces/templates/_common.mjs`. Do not add new Bash bootstraps
 for built-in templates. `bootstrap.sh` remains only as a third-party fallback.
@@ -159,8 +173,10 @@ issue/schedule -> headless Workspace run -> native agent -> inbox_push -> Inbox
 ```
 
 Inbox is the durable agent-to-user delivery surface. Agents publish reports or
-status by calling the injected `inbox_push` capability; the user can return to
-the originating Workspace session from the Inbox item.
+status by calling the injected `inbox_push` capability. Alice stamps the
+interactive Session or headless run identity out-of-band. The user can return
+to the exact originating interactive Session; a finished headless run is
+materialized once and then reused as a normal Session for follow-up.
 
 ## Persistent State
 

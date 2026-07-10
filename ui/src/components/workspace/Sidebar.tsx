@@ -54,6 +54,11 @@ export interface SidebarProps {
   readonly onSelectWorkspace: (wsId: string) => void;
   readonly onSelectSession: (wsId: string, sessionId: string) => void;
   readonly onSpawn: (wsId: string, opts?: SpawnOpts) => void;
+  readonly onOpenHeadlessRun: (
+    wsId: string,
+    taskId: string,
+    opts: { agent?: string; agentSessionId?: string; title?: string },
+  ) => void;
   readonly onSetDefaultAgent: (agent: string | null) => void;
   readonly onPauseSession: (wsId: string, sessionId: string) => void;
   readonly onResumeSession: (wsId: string, sessionId: string) => void;
@@ -189,6 +194,7 @@ export function Sidebar(props: SidebarProps): ReactElement {
             onSelectWorkspace={props.onSelectWorkspace}
             onSelectSession={props.onSelectSession}
             onSpawn={props.onSpawn}
+            onOpenHeadlessRun={props.onOpenHeadlessRun}
             onSetDefaultAgent={props.onSetDefaultAgent}
             onPauseSession={props.onPauseSession}
             onResumeSession={props.onResumeSession}
@@ -240,6 +246,7 @@ export interface WorkspaceRowProps {
   readonly onSelectWorkspace: (wsId: string) => void;
   readonly onSelectSession: (wsId: string, sessionId: string) => void;
   readonly onSpawn: (wsId: string, opts?: SpawnOpts) => void;
+  readonly onOpenHeadlessRun: SidebarProps['onOpenHeadlessRun'];
   readonly onSetDefaultAgent: (agent: string | null) => void;
   readonly onPauseSession: (wsId: string, sessionId: string) => void;
   readonly onResumeSession: (wsId: string, sessionId: string) => void;
@@ -485,7 +492,11 @@ export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
       {(props.headlessTasks?.length ?? 0) > 0 && (
         <HeadlessGroup
           tasks={props.headlessTasks!}
-          onOpenAsSession={(t) => props.onSpawn(w.id, { resume: t.agentSessionId!, agent: t.agent })}
+          onOpenAsSession={(task) => props.onOpenHeadlessRun(w.id, task.taskId, {
+            agent: task.agent,
+            agentSessionId: task.agentSessionId,
+            title: task.prompt,
+          })}
         />
       )}
     </div>

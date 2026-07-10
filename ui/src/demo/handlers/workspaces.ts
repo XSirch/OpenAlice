@@ -167,6 +167,31 @@ export const workspacesHandlers = [
       title: null,
     }),
   ),
+  http.post('/api/workspaces/:id/headless/:taskId/session', ({ params }) => {
+    const wsId = String(params.id)
+    const taskId = String(params.taskId)
+    const workspace = demoWorkspaces.find((candidate) => candidate.id === wsId)
+    if (!workspace) return HttpResponse.json({ error: 'workspace_not_found' }, { status: 404 })
+    const existing = workspace.sessions.find((session) => session.sourceRunId === taskId)
+    if (existing) return HttpResponse.json({ session: existing, created: false })
+    const now = new Date().toISOString()
+    const session = {
+      id: `run-${taskId}`,
+      wsId,
+      agent: 'codex',
+      name: `x${workspace.sessions.length + 1}`,
+      createdAt: now,
+      lastActiveAt: now,
+      state: 'running' as const,
+      agentSessionId: '019eb75e-0b1b-7fa2-ba95-fd7db4463afe',
+      pid: 0,
+      startedAt: Date.now(),
+      title: 'Compute a quant snapshot of NVDA and push a report to the inbox.',
+      sourceRunId: taskId,
+    }
+    ;(workspace.sessions as Array<typeof session>).push(session)
+    return HttpResponse.json({ session, created: true }, { status: 201 })
+  }),
 
   // Quick-chat launch — honor an explicit Chat Workspace target and otherwise
   // reuse the recent demo Chat workspace. The terminal is a scripted replay.
