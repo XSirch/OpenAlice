@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 
 import type { CliAdapter, OnDiskSession, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
 import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
+import type { HeadlessOutputEvent } from '../headless-output.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -134,6 +135,70 @@ export const opencodeAdapter: CliAdapter = {
         : null;
     } catch {
       return null;
+    }
+  },
+
+  extractHeadlessOutputEvents(line: string): readonly HeadlessOutputEvent[] {
+    try {
+      const evt = JSON.parse(line) as Record<string, unknown>;
+      if (evt['type'] === 'error') {
+        const error = evt['error'];
+        const record = error && typeof error === 'object' ? error as Record<string, unknown> : null;
+        const data = record?.['data'] && typeof record['data'] === 'object'
+          ? record['data'] as Record<string, unknown>
+          : null;
+        const message = typeof data?.['message'] === 'string'
+          ? data['message']
+          : typeof record?.['message'] === 'string'
+            ? record['message']
+            : typeof record?.['name'] === 'string'
+              ? record['name']
+              : typeof error === 'string'
+                ? error
+                : 'OpenCode session failed';
+        return [{ type: 'error', message }];
+      }
+      const part = evt['part'];
+      if (!part || typeof part !== 'object') return [];
+      const record = part as Record<string, unknown>;
+      if (evt['type'] === 'text' && record['type'] === 'text' && typeof record['text'] === 'string') {
+        return [{ type: 'text', text: record['text'] }];
+      }
+      if (evt['type'] !== 'tool_use' && record['type'] !== 'tool') return [];
+      const state = record['state'] && typeof record['state'] === 'object'
+        ? record['state'] as Record<string, unknown>
+        : {};
+      const id = typeof record['callID'] === 'string'
+        ? record['callID']
+        : typeof record['id'] === 'string'
+          ? record['id']
+          : `opencode-${record['tool'] ?? 'tool'}`;
+      const name = typeof record['tool'] === 'string'
+        ? record['tool']
+        : typeof record['name'] === 'string'
+          ? record['name']
+          : 'Tool';
+      const start: HeadlessOutputEvent = {
+        type: 'tool-start',
+        id,
+        name,
+        ...(state['input'] !== undefined || record['input'] !== undefined
+          ? { input: state['input'] ?? record['input'] }
+          : {}),
+      };
+      const status = state['status'];
+      if (status !== 'completed' && status !== 'error' && status !== 'failed') return [start];
+      return [start, {
+        type: 'tool-finish',
+        id,
+        name,
+        ...(state['output'] !== undefined || state['error'] !== undefined
+          ? { output: state['output'] ?? state['error'] }
+          : {}),
+        ...(status === 'error' || status === 'failed' ? { isError: true } : {}),
+      }];
+    } catch {
+      return [];
     }
   },
 

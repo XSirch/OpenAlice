@@ -16,6 +16,7 @@ export interface WorkspaceAcceptanceReceipt {
     readonly allCliManifestsLoaded: boolean
     readonly shellCliRoundTrip: boolean
     readonly managedPiAssistantReply: boolean
+    readonly managedPiStructuredOutput: boolean
     readonly managedPiCliSideEffect: boolean
     readonly cleanupComplete: boolean
   }
@@ -52,6 +53,7 @@ export async function runRendererWorkspaceAcceptanceSmoke(
       allCliManifestsLoaded: false,
       shellCliRoundTrip: false,
       managedPiAssistantReply: false,
+      managedPiStructuredOutput: false,
       managedPiCliSideEffect: false,
       cleanupComplete: false,
     }
@@ -222,6 +224,16 @@ export async function runRendererWorkspaceAcceptanceSmoke(
         throw new Error('managed Pi assistant reply was not decoded: ' + JSON.stringify(headless.assistantText))
       }
       checks.managedPiAssistantReply = true
+      if (
+        headless.structured?.schemaVersion !== 1 ||
+        headless.structured?.assistantText?.trim() !== '${ASSISTANT_TEXT}' ||
+        typeof headless.structured?.metrics?.toolCalls !== 'number' ||
+        headless.structured.metrics.toolCalls < 1 ||
+        !headless.structured?.blocks?.some((block) => block?.type === 'tool' && block?.status === 'completed')
+      ) {
+        throw new Error('managed Pi structured output was not decoded: ' + JSON.stringify(headless.structured))
+      }
+      checks.managedPiStructuredOutput = true
 
       const agentIssues = await json(await fetch('/api/issues'))
       if (!issueExists(agentIssues, workspaceId, agentIssueId)) {

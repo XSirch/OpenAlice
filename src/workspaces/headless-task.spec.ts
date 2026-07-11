@@ -1,3 +1,7 @@
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { runHeadlessTask } from './headless-task.js';
@@ -120,23 +124,25 @@ describe('runHeadlessTask', () => {
       timeoutMs: 5_000,
       logger: noopLogger,
       extractAssistantText: (line) => {
+        throw new Error(`structured translator should own text parsing: ${line}`);
+      },
+      extractOutputEvents: (line) => {
         try {
           const evt = JSON.parse(line) as Record<string, unknown>;
           return evt['type'] === 'assistant' && typeof evt['text'] === 'string'
-            ? evt['text']
-            : null;
+            ? [{ type: 'text' as const, text: evt['text'] }]
+            : [];
         } catch {
-          return null;
+          return [];
         }
       },
     });
     expect(r.assistantText).toBe('Hello 👋');
+    expect(r.structured.assistantText).toBe('Hello 👋');
+    expect(r.structured.blocks).toHaveLength(2);
   });
 
-  it('streams the FULL stdout/stderr to log files (beyond the 16KB tails)', async () => {
-    const { mkdtemp, readFile, rm } = await import('node:fs/promises');
-    const { tmpdir } = await import('node:os');
-    const { join } = await import('node:path');
+  it('streams raw stdout/stderr to log files beyond the 16KB in-memory tails', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'headless-log-'));
     try {
       // 64KB of stdout — far past the 16KB tail budget.
@@ -155,7 +161,8 @@ describe('runHeadlessTask', () => {
       });
       expect(r.exitCode).toBe(0);
       expect(r.stdoutTail.length).toBeLessThanOrEqual(16 * 1024); // tail stays bounded
-      // The log file has everything. The write stream is end()ed at exit but
+      // This output is below the 16MB raw cap, so the log file has everything.
+      // The write stream is end()ed at exit but
       // not awaited; poll briefly for the flush.
       let full = '';
       for (let i = 0; i < 40 && full.length < 64 * 1024; i++) {
@@ -164,6 +171,63 @@ describe('runHeadlessTask', () => {
       }
       expect(full.length).toBe(64 * 1024);
       expect(await readFile(stderrFile, 'utf8')).toBe('E-DIAG');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes a compact structured snapshot for live Automation polling', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'headless-structured-'));
+    try {
+      const structuredFile = join(dir, 't1.structured.json');
+      const event = JSON.stringify({ type: 'assistant', text: 'Snapshot reply' });
+      const result = await runHeadlessTask({
+        command: ['node', '-e', `process.stdout.write(${JSON.stringify(`${event}\n`)})`],
+        cwd: process.cwd(),
+        env: baseEnv,
+        timeoutMs: 5_000,
+        logger: noopLogger,
+        structuredFile,
+        extractAssistantText: (line) => {
+          const parsed = JSON.parse(line) as { type?: string; text?: string };
+          return parsed.type === 'assistant' ? parsed.text ?? null : null;
+        },
+        extractOutputEvents: (line) => {
+          const parsed = JSON.parse(line) as { type?: string; text?: string };
+          return parsed.type === 'assistant' && parsed.text
+            ? [{ type: 'text' as const, text: parsed.text }]
+            : [];
+        },
+      });
+      const stored = JSON.parse(await readFile(structuredFile, 'utf8')) as typeof result.structured;
+      expect(stored).toEqual(result.structured);
+      expect(stored.assistantText).toBe('Snapshot reply');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('caps each raw diagnostic stream at 16MB', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'headless-log-cap-'));
+    try {
+      const stdoutFile = join(dir, 't1.stdout.log');
+      const result = await runHeadlessTask({
+        command: ['node', '-e', 'process.stdout.write(Buffer.alloc(17 * 1024 * 1024, 83))'],
+        cwd: process.cwd(),
+        env: baseEnv,
+        timeoutMs: 10_000,
+        logger: noopLogger,
+        stdoutFile,
+      });
+      expect(result.exitCode).toBe(0);
+      let size = 0;
+      for (let i = 0; i < 80 && size < 16 * 1024 * 1024; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        size = (await stat(stdoutFile).catch(() => ({ size: 0 }))).size;
+      }
+      const stored = await readFile(stdoutFile, 'utf8');
+      expect(size).toBeLessThan(16 * 1024 * 1024 + 256);
+      expect(stored).toContain('raw log capped at 16MB');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

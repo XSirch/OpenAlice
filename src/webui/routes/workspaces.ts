@@ -1255,10 +1255,11 @@ export function createWorkspaceRoutes(
 
   // Headless task dispatch — the standard automation API. Spawns the
   // workspace's agent CLI in one-shot headless mode with a positional prompt,
-  // runs to natural exit, returns exit/duration + bounded output tails. The
-  // agent reports its actual result via `inbox_push`; this endpoint just waits
-  // on the process exit (the turn boundary). No session/PTY — a fresh one-shot
-  // clone each call (no respawn, not pooled). Synchronous: the request stays
+  // runs to natural exit, returns exit/duration, a normalized reply/tool
+  // timeline, and bounded output tails. `inbox_push` remains the durable
+  // user-delivery channel; structured output powers readiness, Automation, and
+  // orchestration. No session/PTY — a fresh one-shot clone each call (no
+  // respawn, not pooled). Synchronous: the request stays
   // open until the task exits (the cron/automation trigger calls
   // `svc.runHeadlessTask` directly instead). Body: { prompt, agent?, timeoutMs? }.
   //   curl -XPOST .../:id/headless -d '{"prompt":"...","agent":"claude"}'
@@ -1341,8 +1342,8 @@ export function createWorkspaceRoutes(
       }
     }
     // Default → async: record + spawn in the background, return the taskId. The
-    // run's status is queryable at GET /api/headless/:taskId; the agent reports
-    // its actual result via the Inbox.
+    // run's status and normalized output are queryable under /api/headless;
+    // the agent can additionally publish durable user-facing work to Inbox.
     try {
       const { taskId } = await svc.dispatchHeadlessTask(meta, adapter, prompt, timeoutMs);
       return c.json({ taskId, status: 'running' }, 202);

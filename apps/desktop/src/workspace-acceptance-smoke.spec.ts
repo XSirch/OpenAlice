@@ -14,6 +14,8 @@ describe('Workspace acceptance renderer source', () => {
       expect(source).toContain(`"printf '__OPENALICE_%s_OK__\\\\n' '${marker}'"`)
     }
     expect(source).toContain('__OPENALICE_WORKSPACE_%s_FAILED__ %s %s\\\\n%s\\\\n')
+    expect(source).toContain('managedPiStructuredOutput')
+    expect(source).toContain("block?.type === 'tool' && block?.status === 'completed'")
     expect(() => new Function(`return ${source}`)).not.toThrow()
   })
 })

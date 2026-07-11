@@ -21,6 +21,14 @@ import type { Logger } from './logger.js'
 
 export type HeadlessTaskStatus = 'running' | 'done' | 'failed' | 'interrupted'
 
+export interface HeadlessTaskOutputSummary {
+  readonly hasAssistantReply: boolean
+  readonly assistantPreview?: string
+  readonly blockCount: number
+  readonly toolCalls: number
+  readonly toolFailures: number
+}
+
 export interface HeadlessTaskRecord {
   readonly taskId: string
   readonly wsId: string
@@ -51,13 +59,19 @@ export interface HeadlessTaskRecord {
    * announcing (spawn failure) or predate the field.
    */
   agentSessionId?: string
+  /** Compact list-view projection; full normalized blocks stay in the log API. */
+  output?: HeadlessTaskOutputSummary
 }
 
 /** Task-log file paths — shared by the writer (service) and reader (route). */
-export function headlessLogPaths(logsDir: string, taskId: string): { stdout: string; stderr: string } {
+export function headlessLogPaths(
+  logsDir: string,
+  taskId: string,
+): { stdout: string; stderr: string; structured: string } {
   return {
     stdout: join(logsDir, `${taskId}.stdout.log`),
     stderr: join(logsDir, `${taskId}.stderr.log`),
+    structured: join(logsDir, `${taskId}.structured.json`),
   }
 }
 
@@ -65,6 +79,8 @@ const MAX_RECORDS = 200 // prune oldest FINISHED records past this (bounds the f
 
 export class HeadlessTaskRegistry {
   private tasks: HeadlessTaskRecord[] = [] // newest-last in memory
+  /** Mutations may finish concurrently; serialize tmp→rename writes. */
+  private flushChain: Promise<void> = Promise.resolve()
 
   private constructor(
     private readonly path: string,
@@ -136,7 +152,7 @@ export class HeadlessTaskRegistry {
     patch: Partial<
       Pick<
         HeadlessTaskRecord,
-        'status' | 'finishedAt' | 'durationMs' | 'exitCode' | 'signal' | 'killed' | 'error'
+        'status' | 'finishedAt' | 'durationMs' | 'exitCode' | 'signal' | 'killed' | 'error' | 'output'
       >
     >,
   ): Promise<void> {
@@ -177,6 +193,12 @@ export class HeadlessTaskRegistry {
   }
 
   private async flush(): Promise<void> {
+    const next = this.flushChain.then(() => this.flushNow())
+    this.flushChain = next.catch(() => undefined)
+    await next
+  }
+
+  private async flushNow(): Promise<void> {
     if (this.tasks.length > MAX_RECORDS) {
       // Drop the OLDEST finished records; never drop a `running` one.
       const dropCount = this.tasks.length - MAX_RECORDS
@@ -194,6 +216,7 @@ export class HeadlessTaskRegistry {
             const paths = headlessLogPaths(this.logsDir, taskId)
             void rm(paths.stdout, { force: true }).catch(() => undefined)
             void rm(paths.stderr, { force: true }).catch(() => undefined)
+            void rm(paths.structured, { force: true }).catch(() => undefined)
           }
         }
       }

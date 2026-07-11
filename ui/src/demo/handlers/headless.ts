@@ -48,6 +48,16 @@ const demoOutput = (taskId: string): HeadlessOutput | null => {
   return {
     taskId,
     status: t.status,
+    structured: {
+      schemaVersion: 1,
+      assistantText: 'Report pushed to the inbox.',
+      blocks: [
+        { type: 'tool', id: 'tool-1', name: 'alice analysis', status: 'completed', input: { symbol: 'NVDA' }, output: 'snapshot ready' },
+        { type: 'text', text: 'Report pushed to the inbox.' },
+      ],
+      metrics: { textBlocks: 1, toolCalls: 1, toolFailures: 0 },
+      truncated: false,
+    },
     stdout: { text, sizeBytes: text.length, truncated: false },
     stderr: null,
   }
@@ -57,7 +67,7 @@ export const headlessHandlers = [
   http.get('/api/headless', ({ request }) => {
     const wsId = new URL(request.url).searchParams.get('wsId')
     const tasks = wsId ? demoHeadlessTasks.filter((t) => t.wsId === wsId) : demoHeadlessTasks
-    return HttpResponse.json({ tasks })
+    return HttpResponse.json({ tasks, capacity: { running: tasks.filter((task) => task.status === 'running').length, limit: 8 } })
   }),
   // Path-specific route BEFORE the :taskId catch-all (msw matches in order).
   http.get('/api/headless/:taskId/output', ({ params }) => {

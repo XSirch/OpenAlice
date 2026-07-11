@@ -166,11 +166,10 @@ export interface WorkspaceService {
   /**
    * Dispatch a one-shot HEADLESS task: spawn the adapter's
    * `composeHeadlessCommand` (prompt placed) on a plain pipe, run to natural
-   * exit (= done), return exit/duration + output tails. The automation
-   * primitive — the agent reports via `inbox_push`; this just waits on exit.
-   * Reuses the spawn env/cwd of a fresh interactive spawn (same MCP injection),
-   * but is NOT pooled (one-shot, no respawn). Throws if the adapter has no
-   * headless mode.
+   * exit (= done), return exit/duration + normalized reply/tool blocks and
+   * bounded diagnostic tails. Reuses the spawn env/cwd of a fresh interactive
+   * spawn (same CLI injection), but is NOT pooled (one-shot, no respawn).
+   * Throws if the adapter has no headless mode.
    */
   runHeadlessTask(
     meta: WorkspaceMeta,
@@ -228,6 +227,8 @@ export interface WorkspaceService {
   resolveIssuesByName(name: string): Promise<WikilinkIssueRef[]>;
   /** The headless-task management plane (cross-workspace; powers GET /api/headless). */
   headlessTasks: HeadlessTaskRegistry;
+  /** Global in-flight capacity exposed to the Automation control plane. */
+  headlessCapacity: number;
   /** Where dispatched tasks' full stdout/stderr logs land (read by the output route). */
   headlessLogsDir: string;
   isShuttingDown(): boolean;
@@ -618,6 +619,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       ...(adapter.extractHeadlessAssistantText
         ? { extractAssistantText: adapter.extractHeadlessAssistantText.bind(adapter) }
         : {}),
+      ...(adapter.extractHeadlessOutputEvents
+        ? { extractOutputEvents: adapter.extractHeadlessOutputEvents.bind(adapter) }
+        : {}),
     });
     return { result, source: effectiveSource };
   };
@@ -633,6 +637,13 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     stderrTail: message,
     agentSessionId: null,
     assistantText: null,
+    structured: {
+      schemaVersion: 1,
+      assistantText: null,
+      blocks: [],
+      metrics: { textBlocks: 0, toolCalls: 0, toolFailures: 0 },
+      truncated: false,
+    },
   });
 
   const runtimeReadinessProbeInFlight = new Map<string, Promise<AgentRuntimeReadinessRow>>();
@@ -847,12 +858,17 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       env,
       timeoutMs,
       logger: launcherLogger.child({ scope: 'headless', wsId: ws.id, agent: adapter.id }),
-      ...(logPaths ? { stdoutFile: logPaths.stdout, stderrFile: logPaths.stderr } : {}),
+      ...(logPaths
+        ? { stdoutFile: logPaths.stdout, stderrFile: logPaths.stderr, structuredFile: logPaths.structured }
+        : {}),
       ...(adapter.extractHeadlessSessionId
         ? { extractSessionId: adapter.extractHeadlessSessionId.bind(adapter) }
         : {}),
       ...(adapter.extractHeadlessAssistantText
         ? { extractAssistantText: adapter.extractHeadlessAssistantText.bind(adapter) }
+        : {}),
+      ...(adapter.extractHeadlessOutputEvents
+        ? { extractOutputEvents: adapter.extractHeadlessOutputEvents.bind(adapter) }
         : {}),
       ...(opts.onSessionId ? { onSessionId: opts.onSessionId } : {}),
     });
@@ -896,7 +912,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     // Fire-and-forget: run to natural exit, then fill the record. NOTE: status
     // is judged by exit code — pi can exit 0 on an in-band model error, so
     // "done" means "process exited cleanly", not "the agent succeeded"; the
-    // operator confirms via the Inbox / the task's tail.
+    // operator confirms via the normalized output / Inbox.
     void runHeadlessTaskMethod(ws, adapter, prompt, timeoutMs, {
       taskId: rec.taskId,
       onSessionId: (id) =>
@@ -907,7 +923,8 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
           ),
     })
       .then(async (r) => {
-        const status = r.killed ? 'failed' : r.exitCode === 0 ? 'done' : 'failed';
+        const runtimeReportedError = r.structured.blocks.some((block) => block.type === 'error');
+        const status = r.killed || runtimeReportedError || r.exitCode !== 0 ? 'failed' : 'done';
         await headlessTasks.complete(rec.taskId, {
           status,
           finishedAt: Date.now(),
@@ -915,6 +932,15 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
           exitCode: r.exitCode,
           signal: r.signal,
           killed: r.killed,
+          output: {
+            hasAssistantReply: r.structured.assistantText !== null,
+            ...(r.structured.assistantText
+              ? { assistantPreview: r.structured.assistantText.slice(0, 1000) }
+              : {}),
+            blockCount: r.structured.blocks.length,
+            toolCalls: r.structured.metrics.toolCalls,
+            toolFailures: r.structured.metrics.toolFailures,
+          },
         });
         // Scheduled one-shot issues are the only board items whose lifecycle can
         // be closed mechanically from a run exit. Repeating schedules keep their
@@ -1349,6 +1375,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     issueDetail,
     resolveIssuesByName,
     headlessTasks,
+    headlessCapacity: MAX_CONCURRENT_HEADLESS,
     headlessLogsDir,
     isShuttingDown: () => shuttingDown,
     dispose,

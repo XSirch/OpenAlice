@@ -12,6 +12,7 @@
  */
 
 import type { WireShape } from '../ai-providers/preset-catalog.js';
+import type { HeadlessOutputEvent } from './headless-output.js';
 
 export interface OnDiskSession {
   readonly sessionId: string;
@@ -209,6 +210,9 @@ export interface CliAdapter {
    * without coupling the generic runner to vendor event schemas.
    */
   extractHeadlessAssistantText?(line: string): string | null;
+
+  /** Translate one native JSONL line into vendor-neutral response/tool events. */
+  extractHeadlessOutputEvents?(line: string): readonly HeadlessOutputEvent[];
 
   /** Optional per-CLI env adjustments on top of `spawn-env.ts`'s baseline. */
   envOverrides?(parent: NodeJS.ProcessEnv): EnvOverrides;

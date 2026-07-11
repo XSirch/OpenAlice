@@ -7,6 +7,7 @@ import { resolveBashPath } from '@/core/shell-resolver.js';
 
 import type { CliAdapter, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
 import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
+import type { HeadlessOutputEvent } from '../headless-output.js';
 
 // Pi's per-workspace provider override. `models.json` is read from Pi's AGENT
 // DIR, which has NO project-local layer — so we redirect the whole agent dir to
@@ -186,6 +187,9 @@ export const piAdapter: CliAdapter = {
   },
 
   extractHeadlessAssistantText(line: string): string | null {
+    // Pi's message_update frames contain cumulative content and dominate large
+    // runs. JSON mode uses JSON.stringify, so cheaply reject them before parse.
+    if (!line.startsWith('{"type":"message_end"')) return null;
     try {
       const evt = JSON.parse(line) as Record<string, unknown>;
       if (evt['type'] !== 'message_end') return null;
@@ -205,6 +209,65 @@ export const piAdapter: CliAdapter = {
       return text || null;
     } catch {
       return null;
+    }
+  },
+
+  extractHeadlessOutputEvents(line: string): readonly HeadlessOutputEvent[] {
+    if (
+      !line.startsWith('{"type":"tool_execution_start"') &&
+      !line.startsWith('{"type":"tool_execution_end"') &&
+      !line.startsWith('{"type":"message_end"')
+    ) return [];
+    try {
+      const evt = JSON.parse(line) as Record<string, unknown>;
+      if (
+        evt['type'] === 'tool_execution_start' &&
+        typeof evt['toolCallId'] === 'string' &&
+        typeof evt['toolName'] === 'string'
+      ) {
+        return [{
+          type: 'tool-start',
+          id: evt['toolCallId'],
+          name: evt['toolName'],
+          ...(evt['args'] !== undefined ? { input: evt['args'] } : {}),
+        }];
+      }
+      if (
+        evt['type'] === 'tool_execution_end' &&
+        typeof evt['toolCallId'] === 'string'
+      ) {
+        return [{
+          type: 'tool-finish',
+          id: evt['toolCallId'],
+          ...(typeof evt['toolName'] === 'string' ? { name: evt['toolName'] } : {}),
+          ...(evt['result'] !== undefined ? { output: evt['result'] } : {}),
+          ...(evt['isError'] === true ? { isError: true } : {}),
+        }];
+      }
+      if (evt['type'] !== 'message_end') return [];
+      const message = evt['message'];
+      if (!message || typeof message !== 'object') return [];
+      const record = message as Record<string, unknown>;
+      if (record['role'] !== 'assistant' || !Array.isArray(record['content'])) return [];
+      const events: HeadlessOutputEvent[] = [];
+      if (record['stopReason'] === 'error' || record['stopReason'] === 'aborted') {
+        events.push({
+          type: 'error',
+          message: typeof record['errorMessage'] === 'string'
+            ? record['errorMessage']
+            : `Pi request ${record['stopReason']}`,
+        });
+      }
+      events.push(...record['content'].flatMap((part): HeadlessOutputEvent[] => {
+        if (!part || typeof part !== 'object') return [];
+        const content = part as Record<string, unknown>;
+        return content['type'] === 'text' && typeof content['text'] === 'string'
+          ? [{ type: 'text', text: content['text'] }]
+          : [];
+      }));
+      return events;
+    } catch {
+      return [];
     }
   },
 

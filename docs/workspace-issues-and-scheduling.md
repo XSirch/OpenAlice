@@ -89,6 +89,7 @@ an attended, human-approved path and a commit in the peer repository.
   -> due calculation from `when` + last-fired marker
   -> headless run of the owning Workspace
   -> native agent CLI
+  -> normalized reply + message/tool blocks
   -> inbox_push when there is a user-visible result
   -> Inbox item linked to the run and issue
 ```
@@ -102,13 +103,36 @@ Schedule semantics remain in the issue file. Markers are written after a
 successful dispatch; capacity/transient rejection stays due for retry.
 
 Headless runs may overlap with interactive sessions or other runs in the same
-checkout. Agents must tolerate concurrent edits. Global headless capacity is
-bounded, but there is no per-Workspace exclusive lock.
+checkout. Agents must tolerate concurrent edits. The launcher currently admits
+at most eight headless processes globally and serializes registry persistence,
+but there is no per-Workspace exclusive lock.
+
+## Structured Runtime Output
+
+Claude Code, Codex, opencode, and Pi all emit different JSON event streams.
+Adapters translate those streams into one launcher-owned contract while the run
+is active:
+
+- `assistantText` — the latest completed assistant reply;
+- ordered `text`, `tool`, and `error` message blocks;
+- tool name, input, output, and `running | completed | failed` status;
+- compact metrics for reply presence, tool count, and tool failures.
+
+Automation reads a debounced `.structured.json` snapshot instead of replaying
+an entire vendor log. This makes live polling cheap and gives future workbench
+orchestration a stable contract independent of CLI versions. Runs created before
+this contract are parsed best-effort from the last 2 MB of stdout when opened.
+
+Raw stdout/stderr remain available only as a diagnostic fallback. Each stream
+is capped at 16 MB because Pi's JSON mode can emit cumulative `message_update`
+frames; appending every cumulative frame without a cap can otherwise turn one
+normal conversation into a multi-gigabyte log. Normalized output is separately
+bounded to 300 blocks, 64 KB per text reply, and 8 KB per tool input/output.
 
 ## Delivery and Trading Safety
 
-Headless stdout is diagnostic, not the user delivery channel. A run with a
-meaningful result calls:
+Structured headless output is the live control-plane result, while Inbox is the
+durable user-delivery channel. A run with a meaningful report or artifact calls:
 
 ```bash
 alice-workspace inbox push --doc <path> --comments "<summary>"
@@ -140,6 +164,12 @@ human approval boundaries.
 | `src/workspaces/schedule/scanner.ts` | Workspace scan, due calculation, dispatch |
 | `src/workspaces/schedule/marker-store.ts` | Atomic last-fired persistence |
 | `src/workspaces/service.ts` | Scanner composition, agent resolution, headless registry |
+| `src/workspaces/headless-task.ts` | Process lifecycle, bounded logs, live structured snapshots |
+| `src/workspaces/headless-task-registry.ts` | Concurrent run records, capacity projection, and log pruning |
+| `src/workspaces/headless-output.ts` | Vendor-neutral reply/tool block contract and accumulator |
+| `src/workspaces/adapters/{claude,codex,opencode,pi}.ts` | Runtime-specific JSON event translation |
+| `src/webui/routes/headless.ts` | Cross-workspace capacity, task, normalized output, and raw-tail API |
+| `ui/src/pages/AutomationRunsSection.tsx` | Run list, final reply, tool activity, and diagnostics UI |
 | `src/tool/issue-tools.ts` | Workspace-scoped issue CLI/MCP tools |
 | `src/tool/inbox-push.ts` | Headless/interactive delivery to Inbox |
 | `src/workspaces/session-registry.ts` | Durable Session identity and run → Session source index |
@@ -157,6 +187,10 @@ central schedule store or revive the legacy cron/AgentWork path.
 ```bash
 npx tsc --noEmit
 pnpm vitest run \
+  src/workspaces/headless-output.spec.ts \
+  src/workspaces/headless-task.spec.ts \
+  src/workspaces/headless-task-registry.spec.ts \
+  src/webui/routes/headless.spec.ts \
   src/workspaces/issues/declaration.spec.ts \
   src/workspaces/issues/mutate.spec.ts \
   src/workspaces/issues/board.spec.ts \

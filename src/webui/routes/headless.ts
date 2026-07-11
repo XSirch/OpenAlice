@@ -4,19 +4,24 @@
  * Read-only view over `WorkspaceService.headlessTasks`: "what are the workers
  * doing" across every workspace. Dispatch lives at POST /api/workspaces/:id/
  * headless (it's per-workspace); this surface is the panel + per-task status
- * + the task's full output log (the run's own stdout/stderr on disk).
+ * + its normalized reply/tool timeline and size-capped raw diagnostic logs.
  */
-import { open, stat } from 'node:fs/promises'
+import { open, readFile, stat } from 'node:fs/promises'
 
 import { Hono } from 'hono'
 
 import { headlessLogPaths, type HeadlessTaskStatus } from '../../workspaces/headless-task-registry.js'
+import {
+  parseHeadlessOutputText,
+  type HeadlessStructuredOutput,
+} from '../../workspaces/headless-output.js'
 import type { WorkspaceService } from '../../workspaces/service.js'
 
 const STATUSES = new Set<HeadlessTaskStatus>(['running', 'done', 'failed', 'interrupted'])
 
 const DEFAULT_TAIL_BYTES = 64 * 1024
 const MAX_TAIL_BYTES = 1024 * 1024
+const STRUCTURED_TAIL_BYTES = 2 * 1024 * 1024
 
 /** Read the last `tailBytes` of a file; null when the file doesn't exist. */
 async function readTail(
@@ -40,6 +45,16 @@ async function readTail(
   }
 }
 
+async function readStructured(path: string): Promise<HeadlessStructuredOutput | null> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as HeadlessStructuredOutput
+    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.blocks)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 export function createHeadlessRoutes(svc: WorkspaceService): Hono {
   const app = new Hono()
 
@@ -53,7 +68,13 @@ export function createHeadlessRoutes(svc: WorkspaceService): Hono {
         : undefined
     const limitRaw = Number(c.req.query('limit'))
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 100
-    return c.json({ tasks: svc.headlessTasks.list({ wsId, status, limit }) })
+    return c.json({
+      tasks: svc.headlessTasks.list({ wsId, status, limit }),
+      capacity: {
+        running: svc.headlessTasks.runningCount(),
+        limit: svc.headlessCapacity,
+      },
+    })
   })
 
   // GET /api/headless/:taskId → one task's record.
@@ -63,11 +84,10 @@ export function createHeadlessRoutes(svc: WorkspaceService): Hono {
     return c.json(rec)
   })
 
-  // GET /api/headless/:taskId/output?tailBytes= → the task's on-disk log
-  // tails (stdout = the agent's structured event stream, stderr = CLI
-  // diagnostics). Tail-bounded so a chatty run can't flood the panel; the
-  // viewer polls this while the task runs. Streams are null when the log file
-  // doesn't exist (task predates log capture, or spawn failed before output).
+  // GET /api/headless/:taskId/output?tailBytes= → compact normalized output +
+  // raw diagnostic tails. New runs read their live structured snapshot;
+  // historical runs are parsed from a bounded stdout tail. Streams are null
+  // when the log file doesn't exist (old task, pruned log, or spawn failure).
   app.get('/:taskId/output', async (c) => {
     const taskId = c.req.param('taskId')
     const rec = svc.headlessTasks.get(taskId)
@@ -76,11 +96,25 @@ export function createHeadlessRoutes(svc: WorkspaceService): Hono {
     const tailBytes =
       Number.isFinite(tailRaw) && tailRaw > 0 ? Math.min(tailRaw, MAX_TAIL_BYTES) : DEFAULT_TAIL_BYTES
     const paths = headlessLogPaths(svc.headlessLogsDir, taskId)
-    const [stdout, stderr] = await Promise.all([
+    const [stdout, stderr, storedStructured] = await Promise.all([
       readTail(paths.stdout, tailBytes),
       readTail(paths.stderr, tailBytes),
+      readStructured(paths.structured),
     ])
-    return c.json({ taskId, status: rec.status, stdout, stderr })
+    const adapter = svc.adapters.get(rec.agent)
+    const structuredSource = storedStructured ? null : await readTail(paths.stdout, STRUCTURED_TAIL_BYTES)
+    const structured = storedStructured ?? parseHeadlessOutputText({
+      text: structuredSource?.text ?? '',
+      ...(adapter?.extractHeadlessOutputEvents
+        ? { extractEvents: adapter.extractHeadlessOutputEvents.bind(adapter) }
+        : {}),
+      ...(adapter?.extractHeadlessAssistantText
+        ? { extractAssistantText: adapter.extractHeadlessAssistantText.bind(adapter) }
+        : {}),
+      sourceTruncated: structuredSource?.truncated ?? false,
+      runStillActive: rec.status === 'running',
+    })
+    return c.json({ taskId, status: rec.status, structured, stdout, stderr })
   })
 
   return app
