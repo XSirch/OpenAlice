@@ -35,6 +35,7 @@ import { useWorkspace } from '../tabs/store'
 import { CadencePill, PriorityIndicator } from './IssuesBoard'
 import { STATUS_META } from './issue-status-meta'
 import { MarkdownContent } from './MarkdownContent'
+import { MarkdownWhatEditor } from './MarkdownWhatEditor'
 import { CenteredLoading } from './StateViews'
 import { InquiryPanel } from './InquiryPanel'
 
@@ -566,21 +567,6 @@ function WhatEditor({
   onWikilink: (key: string) => void
 }) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const [preview, setPreview] = useState(false)
-
-  useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [editing, value])
-
-  const save = useCallback(async () => {
-    const what = draft.trim()
-    if (!what || saving) return
-    if (await onSave(what)) {
-      setEditing(false)
-      setPreview(false)
-    }
-  }, [draft, onSave, saving])
 
   return (
     <section className="mt-4 border-t border-border/60 pt-4">
@@ -602,32 +588,16 @@ function WhatEditor({
         )}
       </div>
       {editing ? (
-        <div>
-          <textarea
-            autoFocus
-            rows={14}
-            value={draft}
-            disabled={saving}
-            onChange={(event) => setDraft(event.target.value)}
-            className="w-full resize-y rounded-lg border border-border bg-bg px-3 py-2.5 font-mono text-[13px] leading-relaxed text-text outline-none transition-colors focus:border-accent/60 focus:shadow-[0_0_0_1px_var(--color-accent-dim)] disabled:opacity-50"
-          />
-          {preview && (
-            <div className="mt-3 rounded-lg border border-border bg-bg-secondary p-4">
-              <MarkdownContent text={draft} onWikilink={onWikilink} />
-            </div>
-          )}
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setPreview((value) => !value)} className="rounded-md px-2.5 py-1.5 text-xs text-muted hover:text-text">
-              {preview ? 'Hide preview' : 'Preview'}
-            </button>
-            <button type="button" onClick={() => { setEditing(false); setDraft(value); setPreview(false) }} disabled={saving} className="rounded-md px-2.5 py-1.5 text-xs text-muted hover:text-text disabled:opacity-50">
-              Cancel
-            </button>
-            <button type="button" onClick={() => void save()} disabled={saving || !draft.trim() || draft.trim() === value.trim()} className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-bg disabled:cursor-not-allowed disabled:opacity-40">
-              {saving ? 'Saving…' : 'Save What'}
-            </button>
-          </div>
-        </div>
+        <MarkdownWhatEditor
+          value={value}
+          saving={saving}
+          onSave={async (what) => {
+            const saved = await onSave(what)
+            if (saved) setEditing(false)
+            return saved
+          }}
+          onCancel={() => setEditing(false)}
+        />
       ) : (
         <MarkdownContent text={value} onWikilink={onWikilink} />
       )}
