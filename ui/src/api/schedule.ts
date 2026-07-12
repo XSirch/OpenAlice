@@ -1,5 +1,4 @@
 import { fetchJson } from './client'
-import type { IssueExecution } from './issues'
 
 export type ScheduleWhen =
   | { kind: 'at'; at: string }
@@ -13,7 +12,7 @@ export interface ScheduleTask {
   when: ScheduleWhen
   what: string
   agent?: string
-  execution?: IssueExecution
+  assignee: string
   enabled: boolean
   /** When the scanner last fired this task (epoch ms), null if never. */
   lastFiredAtMs: number | null

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, Hash, History, Inbox, ListChecks, Settings, TrendingUp, UserRound, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, Hash, History, Inbox, ListChecks, Settings, TrendingUp, X } from 'lucide-react'
 
 import type { HeadlessTaskRecord, HeadlessTaskStatus } from '../api/headless'
 import type { InboxEntry } from '../api/inbox'
@@ -8,7 +8,6 @@ import type {
   IssueDetail as IssueDetailData,
   IssueDetailIssue,
   IssueActivityRecord,
-  IssueExecution,
   IssuePriority,
   IssueProvenanceRecord,
   IssueStatus,
@@ -25,7 +24,6 @@ import {
 import { issuesApi } from '../api/issues'
 import { inquiriesApi } from '../api/inquiries'
 import { useIssueDetail } from '../hooks/useIssueDetail'
-import { useIssues } from '../hooks/useIssues'
 import { useWorkspaces } from '../contexts/workspaces-context'
 import { formatRelativeTime } from '../lib/intl'
 import { useInboxRead } from '../live/inbox-read'
@@ -58,9 +56,6 @@ const PRIORITY_OPTIONS: IssuePriority[] = ['urgent', 'high', 'medium', 'low', 'n
 // settings `inputClass`, trimmed for the narrow rail.
 const railControl =
   'min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1 text-[13px] text-text outline-none transition-colors focus:border-accent/60 focus:shadow-[0_0_0_1px_var(--color-accent-dim)] disabled:cursor-not-allowed disabled:opacity-50'
-
-// Sentinel option that swaps the assignee select into a free-text input.
-const ASSIGNEE_CUSTOM = '__custom__'
 
 const CONFIGURABLE_AGENTS: readonly AgentId[] = ['claude', 'codex', 'opencode', 'pi']
 
@@ -97,60 +92,31 @@ function EditRow({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-/**
- * Assignee editor: a small select over the common assignees (unassigned / human
- * / `ws:<this workspace's tag>`), with the current value preserved if it's
- * something else, plus a "Custom…" escape hatch that reveals a free-text input.
- */
 function AssigneeEditor({
   value,
-  wsTag,
+  scheduled,
+  sessions,
   disabled,
   onChange,
 }: {
   value: string
-  wsTag?: string
+  scheduled: boolean
+  sessions: readonly WorkspaceSessionDirectoryEntry[]
   disabled?: boolean
   onChange: (next: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-
-  const presets = useMemo(() => {
-    const out = ['unassigned', 'human']
-    if (wsTag) out.push(`ws:${wsTag}`)
-    if (!out.includes(value)) out.push(value)
-    return out
-  }, [wsTag, value])
-
-  if (editing) {
-    const commit = () => {
-      const next = draft.trim()
-      setEditing(false)
-      if (next && next !== value) onChange(next)
-      else setDraft(value)
-    }
-    return (
-      <input
-        autoFocus
-        className={railControl}
-        value={draft}
-        disabled={disabled}
-        placeholder="ws:tag / human / …"
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            commit()
-          } else if (e.key === 'Escape') {
-            e.preventDefault()
-            setEditing(false)
-            setDraft(value)
-          }
-        }}
-        onBlur={commit}
-      />
-    )
+  const sessionChoices = sessions.filter(
+    (session) => session.resumeId && session.agent !== 'shell' && session.resumable,
+  )
+  const selectedResumeId = value.startsWith('session:') ? value.slice('session:'.length) : null
+  const hasSelected = !selectedResumeId || sessionChoices.some((session) => session.resumeId === selectedResumeId)
+  const labelFor = (session: WorkspaceSessionDirectoryEntry) => {
+    const raw = session.interactive?.title
+      || session.interactive?.name
+      || session.latestExecution?.assistantPreview
+      || session.resumeId
+    const label = raw.length > 38 ? `${raw.slice(0, 37)}…` : raw
+    return `${label} · ${session.agent}`
   }
 
   return (
@@ -158,22 +124,22 @@ function AssigneeEditor({
       className={railControl}
       value={value}
       disabled={disabled}
-      onChange={(e) => {
-        const v = e.target.value
-        if (v === ASSIGNEE_CUSTOM) {
-          setDraft(value)
-          setEditing(true)
-          return
-        }
-        if (v !== value) onChange(v)
-      }}
+      aria-label="Assignee"
+      onChange={(event) => onChange(event.target.value)}
     >
-      {presets.map((p) => (
-        <option key={p} value={p}>
-          {p}
-        </option>
-      ))}
-      <option value={ASSIGNEE_CUSTOM}>Custom…</option>
+      <option value="workspace">{scheduled ? 'Workspace · new Session each run' : 'Workspace'}</option>
+      {!scheduled && <option value="human">Human</option>}
+      {!scheduled && <option value="unassigned">Unassigned</option>}
+      <optgroup label="Workspace Sessions">
+        {sessionChoices.map((session) => (
+          <option key={session.resumeId} value={`session:${session.resumeId}`}>
+            {labelFor(session)}
+          </option>
+        ))}
+        {!hasSelected && selectedResumeId && (
+          <option value={value}>Unavailable Session · {selectedResumeId}</option>
+        )}
+      </optgroup>
     </select>
   )
 }
@@ -252,93 +218,6 @@ function AgentEditor({
   )
 }
 
-function ExecutionEditor({
-  value,
-  sessions,
-  disabled,
-  onChange,
-}: {
-  value?: IssueExecution
-  sessions: readonly WorkspaceSessionDirectoryEntry[]
-  disabled?: boolean
-  onChange: (next: IssueExecution) => void
-}) {
-  const labelFor = (session: WorkspaceSessionDirectoryEntry) => {
-    const raw = session.interactive?.title
-      || session.interactive?.name
-      || session.latestExecution?.assistantPreview
-      || session.resumeId
-    return raw.length > 44 ? `${raw.slice(0, 43)}…` : raw
-  }
-  const selected = value?.mode === 'resume' ? value.resumeId : '__fresh__'
-  // A product resumeId can exist before the native runtime has reported its
-  // own session id. Such an entry is useful provenance, but cannot own a
-  // scheduled resume yet: dispatch would fail with `not_ready` on every tick.
-  const choices = sessions.filter(
-    (session) => session.resumeId && session.agent !== 'shell' && session.resumable,
-  )
-  const hasSelected = value?.mode !== 'resume' || choices.some((session) => session.resumeId === value.resumeId)
-
-  const mode = value?.mode ?? 'fresh'
-  return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onChange({ mode: 'fresh' })}
-        className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-          mode === 'fresh' ? 'border-accent/60 bg-accent/10' : 'border-border bg-bg hover:border-accent/30'
-        } disabled:opacity-50`}
-      >
-        <span className="flex items-center gap-2 text-[12px] font-medium text-text">
-          <UsersRound size={14} aria-hidden /> New agent every run
-        </span>
-        <span className="mt-1 block text-[11px] leading-snug text-muted">
-          Each fire starts a separate Session. Ask a specific run when you need follow-up.
-        </span>
-      </button>
-      <button
-        type="button"
-        disabled={disabled || (choices.length === 0 && mode !== 'resume')}
-        onClick={() => {
-          if (mode !== 'resume' && choices[0]) onChange({ mode: 'resume', resumeId: choices[0].resumeId })
-        }}
-        className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-          mode === 'resume' ? 'border-accent/60 bg-accent/10' : 'border-border bg-bg hover:border-accent/30'
-        } disabled:cursor-not-allowed disabled:opacity-50`}
-      >
-        <span className="flex items-center gap-2 text-[12px] font-medium text-text">
-          <UserRound size={14} aria-hidden /> One responsible Session
-        </span>
-        <span className="mt-1 block text-[11px] leading-snug text-muted">
-          Every fire resumes the same accountable agent and conversational context.
-        </span>
-      </button>
-      {mode === 'resume' && (
-        <select
-          className={`${railControl} w-full`}
-          value={selected}
-          disabled={disabled}
-          aria-label="Responsible Session"
-          onChange={(event) => onChange({ mode: 'resume', resumeId: event.target.value })}
-        >
-          {choices.map((session) => (
-            <option key={session.resumeId} value={session.resumeId}>
-              {labelFor(session)} · {session.agent}
-            </option>
-          ))}
-          {!hasSelected && value?.mode === 'resume' && (
-            <option value={value.resumeId}>Unavailable owner · {value.resumeId}</option>
-          )}
-        </select>
-      )}
-      {choices.length === 0 && mode !== 'resume' && (
-        <p className="text-[11px] leading-snug text-muted">No resumable Session is available in this Workspace yet.</p>
-      )}
-    </div>
-  )
-}
-
 function PropertySection({
   title,
   description,
@@ -359,7 +238,6 @@ function PropertySection({
 
 function PropertiesRail({
   issue,
-  wsTag,
   agentOptions,
   issueDefaultAgent,
   defaultAgent,
@@ -371,7 +249,6 @@ function PropertiesRail({
   onConfigureAgent,
 }: {
   issue: IssueDetailIssue
-  wsTag?: string
   agentOptions: readonly { id: string; displayName: string; installed?: boolean }[]
   issueDefaultAgent: string | null
   defaultAgent: string | null
@@ -379,13 +256,15 @@ function PropertiesRail({
   sessions: readonly WorkspaceSessionDirectoryEntry[]
   saving: boolean
   error: string | null
-  onPatch: (patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; execution?: IssueExecution; what?: string }) => void
+  onPatch: (patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string }) => void
   onConfigureAgent: (agent: AgentId) => void
 }) {
   const meta = STATUS_META[issue.status]
   const issueDefaultInOptions = issueDefaultAgent && agentOptions.some((a) => a.id === issueDefaultAgent) ? issueDefaultAgent : null
   const defaultInOptions = defaultAgent && agentOptions.some((a) => a.id === defaultAgent) ? defaultAgent : null
-  const ownerResumeId = issue.execution?.mode === 'resume' ? issue.execution.resumeId : null
+  const ownerResumeId = issue.assignee.startsWith('session:')
+    ? issue.assignee.slice('session:'.length)
+    : null
   const ownerSession = ownerResumeId
     ? sessions.find((session) => session.resumeId === ownerResumeId)
     : undefined
@@ -393,8 +272,8 @@ function PropertiesRail({
   const selectedReadiness = effectiveAgent ? agentReadiness[effectiveAgent] : undefined
   const agentNeedsCredential = selectedReadiness?.requiresCredential === true && !selectedReadiness.ready
   return (
-    <aside className="w-full shrink-0 space-y-3 lg:w-72">
-      <PropertySection title="Work item" description="Human tracking fields. These do not decide which agent runs the schedule.">
+    <aside className="w-full shrink-0 space-y-3 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+      <PropertySection title="Work item" description="Ownership and schedule are part of this Issue.">
         <EditRow label="Status">
           <meta.Icon size={14} className={`shrink-0 ${meta.className}`} />
           <select
@@ -428,28 +307,16 @@ function PropertiesRail({
         <EditRow label="Assignee">
           <AssigneeEditor
             value={issue.assignee}
-            wsTag={wsTag}
+            scheduled={Boolean(issue.when)}
+            sessions={sessions}
             disabled={saving}
             onChange={(assignee) => onPatch({ assignee })}
           />
         </EditRow>
-      </PropertySection>
-
-      {issue.when && (
-        <PropertySection
-          title="Scheduled execution"
-          description="Choose whether each fire recruits a new worker or keeps one accountable Session."
-        >
+        {issue.when && (
+          <>
           <PropRow label="Cadence"><CadencePill when={issue.when} /></PropRow>
-          <div className="py-3">
-            <ExecutionEditor
-              value={issue.execution}
-              sessions={sessions}
-              disabled={saving}
-              onChange={(execution) => onPatch({ execution })}
-            />
-          </div>
-          {issue.execution?.mode === 'resume' ? (
+          {ownerResumeId ? (
             <PropRow label="Runtime">
               <span title="The responsible Session determines its runtime">
                 {ownerSession?.agent ?? 'Session-owned'}
@@ -478,8 +345,9 @@ function PropertiesRail({
           <PropRow label="Next run">
             {issue.nextDueAtMs ? formatRelativeTime(issue.nextDueAtMs) : <span className="text-muted">—</span>}
           </PropRow>
-        </PropertySection>
-      )}
+          </>
+        )}
+      </PropertySection>
       {error && <p className="mt-2 text-[11px] leading-snug text-red-400">{error}</p>}
     </aside>
   )
@@ -906,7 +774,6 @@ export function IssueDetail({
   onOpenIssue,
 }: IssueDetailProps) {
   const { data, error, loading, mutate } = useIssueDetail(wsId, id)
-  const { data: board } = useIssues()
   const { agents, defaultAgent, issueDefaultAgent, openAgentConfig, openHeadlessRun, workspaces } = useWorkspaces()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
   const setSidebar = useWorkspace((s) => s.setSidebar)
@@ -1015,10 +882,6 @@ export function IssueDetail({
     [gotoEntity, gotoIssue],
   )
 
-  // This workspace's tag — the `ws:<tag>` assignee option. Sourced from the
-  // board snapshot (the canonical wsId→tag map), which is process-cached and
-  // already warm when the detail is opened from a board row.
-  const wsTag = board?.workspaces.find((w) => w.wsId === wsId)?.tag
   const workspace = workspaces.find((w) => w.id === wsId) ?? null
   const agentOptions = agents.filter(
     (agent) =>
@@ -1027,7 +890,7 @@ export function IssueDetail({
   )
 
   const onPatch = useCallback(
-    async (patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; execution?: IssueExecution; what?: string }): Promise<boolean> => {
+    async (patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string }): Promise<boolean> => {
       setSaving(true)
       setActionError(null)
       try {
@@ -1077,11 +940,15 @@ export function IssueDetail({
     </button>
   )
 
+  const stableOwnerResumeId = data?.issue.assignee.startsWith('session:')
+    ? data.issue.assignee.slice('session:'.length)
+    : null
+
   useEffect(() => {
-    if (inquiryTarget.relation === 'owner' && data?.issue.execution?.mode !== 'resume') {
+    if (inquiryTarget.relation === 'owner' && !stableOwnerResumeId) {
       setInquiryTarget({ relation: 'creator' })
     }
-  }, [data?.issue.execution, inquiryTarget.relation])
+  }, [stableOwnerResumeId, inquiryTarget.relation])
 
   if (!data) {
     return (
@@ -1111,7 +978,7 @@ export function IssueDetail({
     ...runs.map((run) => ({ kind: 'run' as const, id: run.taskId, at: run.startedAt, run })),
   ].sort((a, b) => b.at - a.at)
   const inquiryDescription = inquiryTarget.relation === 'owner'
-    ? 'Continue the one responsible Session declared by this Issue’s execution policy.'
+    ? 'Continue the Session assigned to this Issue.'
     : inquiryTarget.relation === 'run'
       ? `Continue the exact Session behind run ${inquiryTarget.runId}.`
       : 'Ask the attributable creator why this Issue exists. Legacy human-created Issues may require Workspace reconstruction.'
@@ -1119,8 +986,8 @@ export function IssueDetail({
   return (
     <div className="mx-auto max-w-4xl px-4 py-5 md:px-6">
       {backToBoard}
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <main className="min-w-0 flex-1">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+        <main className="min-w-0 lg:col-start-1 lg:row-start-1">
           <div className="mb-1 flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted/70">{id}</span>
             {issue.when && <CadencePill when={issue.when} />}
@@ -1148,7 +1015,7 @@ export function IssueDetail({
                 >
                   Creator
                 </button>
-                {issue.execution?.mode === 'resume' && (
+                {stableOwnerResumeId && (
                   <button
                     type="button"
                     onClick={() => setInquiryTarget({ relation: 'owner' })}
@@ -1167,19 +1034,9 @@ export function IssueDetail({
           />
           <IssueComments comments={comments} />
           <CommentComposer wsId={wsId} id={id} onPosted={mutate} />
-          <IssueActivity
-            activity={activity}
-            onContinue={continueProvenanceSession}
-            onAskRun={(run) => {
-              setInquiryTarget({ relation: 'run', runId: run.taskId })
-              window.requestAnimationFrame(() => document.getElementById('inquiries')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-            }}
-          />
-          <InboxReportsSection reports={inboxReports} onOpen={gotoInbox} />
         </main>
         <PropertiesRail
           issue={issue}
-          wsTag={wsTag}
           agentOptions={agentOptions}
           issueDefaultAgent={issueDefaultAgent}
           defaultAgent={defaultAgent}
@@ -1190,6 +1047,17 @@ export function IssueDetail({
           onPatch={onPatch}
           onConfigureAgent={(agent) => openAgentConfig(wsId, agent)}
         />
+        <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+          <IssueActivity
+            activity={activity}
+            onContinue={continueProvenanceSession}
+            onAskRun={(run) => {
+              setInquiryTarget({ relation: 'run', runId: run.taskId })
+              window.requestAnimationFrame(() => document.getElementById('inquiries')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+            }}
+          />
+          <InboxReportsSection reports={inboxReports} onOpen={gotoInbox} />
+        </div>
       </div>
       {picker && (
         <WikilinkPicker

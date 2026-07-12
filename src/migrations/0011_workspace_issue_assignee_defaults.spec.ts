@@ -51,8 +51,8 @@ describe('0011 workspace issue assignee defaults', () => {
     const read = await readWorkspaceIssues(wsDir['chat-jul3'])
     expect(read.ok).toBe(true)
     if (!read.ok) return
-    expect(read.issues[0].assigneeDefaulted).toBe(true)
-    expect(snapshotBoardIssue(read.issues[0], null, 'chat-jul3').assignee).toBe('ws:chat-jul3')
+    expect(read.issues[0].assignee).toBe('workspace')
+    expect(snapshotBoardIssue(read.issues[0], null).assignee).toBe('workspace')
   })
 
   it('leaves explicit non-default assignees untouched and is idempotent', async () => {
@@ -66,10 +66,7 @@ describe('0011 workspace issue assignee defaults', () => {
     const read = await readWorkspaceIssues(wsDir['chat-jul4'])
     expect(read.ok).toBe(true)
     if (!read.ok) return
-    expect(Object.fromEntries(read.issues.map((issue) => [issue.id, issue.assignee]))).toEqual({
-      human: 'human',
-      workspace: 'ws:chat-jul4',
-    })
+    expect(read.issues.find((issue) => issue.id === 'human')?.assignee).toBe('human')
   })
 
   it('skips malformed issue files without blocking other files', async () => {

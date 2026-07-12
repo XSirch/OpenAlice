@@ -25,7 +25,7 @@ import type {
   HeadlessTaskRecord,
   HeadlessTaskStatus,
 } from '../headless-task-registry.js'
-import { issueExecution, type IssueExecution, type IssuePriority, type IssueRecord, type IssueStatus } from './declaration.js'
+import type { IssuePriority, IssueRecord, IssueStatus } from './declaration.js'
 import type { IssueComment } from './comments.js'
 
 /** One board row: the issue's display fields, plus — iff it self-schedules — its
@@ -38,8 +38,6 @@ export interface IssuesSnapshotIssue {
   assignee: string
   /** Adapter id for the scheduled fire (frontmatter `agent`), if set. */
   agent?: string
-  /** Effective scheduled owner policy. */
-  execution: IssueExecution
   /** Present iff the issue self-schedules. */
   when?: Schedule
   /** When the scanner last fired this issue (epoch ms); only for scheduled issues. */
@@ -135,8 +133,6 @@ export interface BoardRow {
   assignee: string
   /** Adapter id for the scheduled fire override, if set. */
   agent?: string
-  /** Effective scheduled owner policy. */
-  execution?: IssueExecution
   /** True iff the issue self-schedules (snapshot `when` present). */
   scheduled: boolean
   workspace: { wsId: string; tag: string }
@@ -175,7 +171,6 @@ export function flattenBoardRows(snapshot: IssuesSnapshot): {
         priority: issue.priority,
         assignee: issue.assignee,
         ...(issue.agent ? { agent: issue.agent } : {}),
-        execution: issue.execution,
         scheduled: issue.when !== undefined,
         workspace: { wsId: ws.wsId, tag: ws.tag },
         ...(issue.nameCollision ? { nameCollision: true } : {}),
@@ -223,8 +218,6 @@ export interface IssueDetailIssue {
   when?: Schedule
   /** Adapter id for the scheduled fire (frontmatter `agent`), if set. */
   agent?: string
-  /** Effective policy; legacy files project as fresh. */
-  execution: IssueExecution
   /** When the scanner last fired this issue (epoch ms); only for scheduled issues. */
   lastFiredAtMs?: number | null
   /** When it is next due (epoch ms); only for scheduled issues. */
@@ -352,18 +345,11 @@ export function inboxReportsForIssue(entries: readonly InboxEntry[], issueId: st
   return entries.filter((e) => e.origin?.issueId === issueId)
 }
 
-/** A missing assignee in a workspace-owned issue means "this workspace owns it".
- *  Keep an explicit `assignee: unassigned` as unassigned so human edits survive. */
-export function issueAssigneeForWorkspace(issue: IssueRecord, workspaceTag?: string): string {
-  return issue.assigneeDefaulted && workspaceTag ? `ws:${workspaceTag}` : issue.assignee
-}
-
 /** Map a validated issue (+ its firing markers, iff scheduled) to the detail
  *  issue shape. Keeps What and scheduling frontmatter the board drops. */
 export function detailIssue(
   issue: IssueRecord,
   markers: IssueFiringMarkers | null,
-  workspaceTag?: string,
 ): IssueDetailIssue {
   return {
     id: issue.id,
@@ -371,10 +357,9 @@ export function detailIssue(
     what: issue.what,
     status: issue.status,
     priority: issue.priority,
-    assignee: issueAssigneeForWorkspace(issue, workspaceTag),
+    assignee: issue.assignee,
     ...(issue.when ? { when: issue.when } : {}),
     ...(issue.agent ? { agent: issue.agent } : {}),
-    execution: issueExecution(issue),
     ...(markers ? { lastFiredAtMs: markers.lastFiredAtMs, nextDueAtMs: markers.nextDueAtMs } : {}),
   }
 }
@@ -385,16 +370,14 @@ export function detailIssue(
 export function snapshotBoardIssue(
   issue: IssueRecord,
   markers: IssueFiringMarkers | null,
-  workspaceTag?: string,
 ): IssuesSnapshotIssue {
   return {
     id: issue.id,
     title: issue.title,
     status: issue.status,
     priority: issue.priority,
-    assignee: issueAssigneeForWorkspace(issue, workspaceTag),
+    assignee: issue.assignee,
     ...(issue.agent ? { agent: issue.agent } : {}),
-    execution: issueExecution(issue),
     ...(issue.when ? { when: issue.when } : {}),
     ...(markers ? { lastFiredAtMs: markers.lastFiredAtMs, nextDueAtMs: markers.nextDueAtMs } : {}),
   }

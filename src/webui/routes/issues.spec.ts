@@ -117,25 +117,25 @@ describe('PATCH /api/issues/:wsId/:id', () => {
   it('validates and persists explicit scheduled ownership', async () => {
     await createIssue(wsDir, { id: 'i1', title: 'T', when: { kind: 'every', every: '1h' } })
     const { app } = build()
-    const invalid = await req(app, 'PATCH', '/ws-1/i1', { execution: { mode: 'resume' } })
+    const invalid = await req(app, 'PATCH', '/ws-1/i1', { assignee: 'session:' })
     expect(invalid.status).toBe(400)
-    expect(invalid.body.error).toBe('invalid_execution')
+    expect(invalid.body.error).toBe('invalid_assignee')
 
     const updated = await req(app, 'PATCH', '/ws-1/i1', {
-      execution: { mode: 'resume', resumeId: 'resume-kind-owl-abc123' },
+      assignee: 'session:resume-kind-owl-abc123',
     })
     expect(updated.status).toBe(200)
-    expect(updated.body.issue.execution).toEqual({ mode: 'resume', resumeId: 'resume-kind-owl-abc123' })
+    expect(updated.body.issue.assignee).toBe('session:resume-kind-owl-abc123')
   })
 
-  it('409 when the selected execution owner is not resumable yet', async () => {
+  it('409 when the selected Session assignee is not resumable yet', async () => {
     await createIssue(wsDir, { id: 'i1', title: 'T', when: { kind: 'every', every: '1h' } })
     const { app } = build()
     const unavailable = await req(app, 'PATCH', '/ws-1/i1', {
-      execution: { mode: 'resume', resumeId: 'resume-unready' },
+      assignee: 'session:resume-unready',
     })
     expect(unavailable.status).toBe(409)
-    expect(unavailable.body.error).toBe('unavailable_execution_owner')
+    expect(unavailable.body.error).toBe('unavailable_assignee_session')
   })
 
   it('400 no_fields when the body has none of the patchable fields', async () => {

@@ -20,11 +20,10 @@
  *   title: <required, short human title>
  *   status: backlog | todo | in_progress | done | canceled   (optional → 'todo')
  *   priority: urgent | high | medium | low | none             (optional → 'none')
- *   assignee: "human" | "ws:<tag|id>" | "unassigned"          (optional → 'unassigned')
+ *   assignee: "workspace" | "human" | "unassigned" | "session:<resumeId>"  (optional → 'workspace')
  *   when: { kind: at, at } | { kind: every, every } | { kind: cron, cron }  (OPTIONAL — present iff scheduled)
  *   what: <legacy fire prompt; migrated into the markdown What body>
  *   agent: <optional adapter id for the scheduled run>
- *   execution: { mode: fresh } | { mode: resume, resumeId: <product Session id> }
  *   ---
  *   <markdown What — the exact work definition and scheduled prompt>
  *
@@ -72,13 +71,19 @@ export const issueWhenSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cron'), cron: z.string().min(1) }),
 ])
 
-/** Who receives each scheduled fire. Legacy files omit this and retain the
- * historical behavior (`fresh`); new agent-created schedules must choose. */
-export const issueExecutionSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('fresh') }),
-  z.object({ mode: z.literal('resume'), resumeId: z.string().min(1) }),
+/** Who owns the Issue. Workspace ownership recruits a fresh Session for each
+ * scheduled fire; Session ownership resumes exactly one product Session. */
+export const issueAssigneeSchema = z.union([
+  z.literal('workspace'),
+  z.literal('human'),
+  z.literal('unassigned'),
+  z.string().regex(/^session:[^\s:][^\s]*$/, 'session assignee must be session:<resumeId>'),
 ])
-export type IssueExecution = z.infer<typeof issueExecutionSchema>
+
+/** Exact product Session owner encoded by the single assignee contract. */
+export function issueAssigneeResumeId(assignee: string): string | null {
+  return assignee.startsWith('session:') ? assignee.slice('session:'.length) || null : null
+}
 
 /**
  * The validated frontmatter of one issue. `id` and `what` are NOT here — `id`
@@ -90,29 +95,37 @@ export const issueFrontmatterSchema = z.object({
   title: z.string().min(1),
   status: z.enum(ISSUE_STATUSES).default('todo'),
   priority: z.enum(ISSUE_PRIORITIES).default('none'),
-  assignee: z.string().min(1).default('unassigned'),
+  assignee: issueAssigneeSchema.default('workspace'),
   /** Present iff the issue self-schedules. Absent ⇒ pure board work item. */
   when: issueWhenSchema.optional(),
   /** Legacy compatibility only. New files keep What in the markdown document
    * below frontmatter so the human-visible work definition and runtime prompt
    * cannot drift. Migration 0017 removes this key from existing files. */
   what: z.string().min(1).optional(),
-  /** Which agent runtime to run the scheduled fire with; omitted uses the issue default / workspace default / first runtime. */
+  /** Runtime override for Workspace-owned scheduled work. A Session owner
+   * already carries its runtime identity and therefore cannot set this. */
   agent: z.string().min(1).optional(),
-  /** `fresh`: create a new product Session each fire. `resume`: continue the
-   * exact OpenAlice-owned product Session named by resumeId. */
-  execution: issueExecutionSchema.optional(),
+  /** Migration 0018 removes the former parallel ownership field. Keeping a
+   * `never` key makes stale files fail loudly instead of being silently read. */
+  execution: z.never().optional(),
 }).superRefine((value, ctx) => {
-  if (value.execution && !value.when) {
+  if (value.when && (value.assignee === 'human' || value.assignee === 'unassigned')) {
     ctx.addIssue({
       code: 'custom',
-      path: ['execution'],
-      message: 'execution only applies to a scheduled issue with `when`',
+      path: ['assignee'],
+      message: 'scheduled issues must be assigned to workspace or session:<resumeId>',
+    })
+  }
+  if (issueAssigneeResumeId(value.assignee) && value.agent) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['agent'],
+      message: 'session assignee owns its runtime; remove the agent override',
     })
   }
 })
 type IssueFrontmatterFile = z.infer<typeof issueFrontmatterSchema>
-export type IssueFrontmatter = Omit<IssueFrontmatterFile, 'what'>
+export type IssueFrontmatter = Omit<IssueFrontmatterFile, 'what' | 'execution'>
 
 /** A fully read issue: validated frontmatter + filename id + markdown What. */
 export interface IssueRecord extends IssueFrontmatter {
@@ -121,12 +134,6 @@ export interface IssueRecord extends IssueFrontmatter {
   /** Markdown work definition below frontmatter. For a scheduled Issue this is
    * the exact prompt sent to the Agent Runtime. */
   what: string
-  /**
-   * True when `assignee` came from the schema default rather than frontmatter.
-   * Board projections can then default it to `ws:<workspace>` while still
-   * respecting a human who explicitly wrote `assignee: unassigned`.
-   */
-  assigneeDefaulted: boolean
 }
 
 /** A file that could not be read/validated — reported, never propagated. */
@@ -151,11 +158,6 @@ export function isFireable(issue: IssueRecord): issue is IssueRecord & { when: S
  * prompt field for it to disagree with. */
 export function issueFirePrompt(issue: IssueRecord): string {
   return issue.what
-}
-
-/** Backward-compatible effective execution policy for the scanner/UI. */
-export function issueExecution(issue: IssueRecord): IssueExecution {
-  return issue.execution ?? { mode: 'fresh' }
 }
 
 /**
@@ -240,14 +242,12 @@ export function parseIssueContent(
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     return { ok: false, error: 'frontmatter is not a mapping' }
   }
-  const rawFrontmatter = data as Record<string, unknown>
-
   const parsed = issueFrontmatterSchema.safeParse(data)
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }
   }
 
-  const { what: legacyWhat, ...frontmatter } = parsed.data
+  const { what: legacyWhat, execution: _retiredExecution, ...frontmatter } = parsed.data
   const document = splitLegacyIssueDocument(split.body)
   return {
     ok: true,
@@ -255,7 +255,6 @@ export function parseIssueContent(
       id,
       ...frontmatter,
       what: mergeLegacyWhat(legacyWhat, document.what, frontmatter.title),
-      assigneeDefaulted: !Object.prototype.hasOwnProperty.call(rawFrontmatter, 'assignee'),
     },
   }
 }

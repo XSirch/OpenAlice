@@ -1224,7 +1224,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
         }
         const issues: IssuesSnapshotIssue[] = res.issues.map((issue) => {
           // Unscheduled ⇒ pure board work item, no firing markers.
-          if (!issue.when) return snapshotBoardIssue(issue, null, ws.tag);
+          if (!issue.when) return snapshotBoardIssue(issue, null);
           // Scheduled ⇒ reuse the schedule snapshot's math so the board's
           // last/next match the Schedules dashboard exactly.
           const fired = snapshotScheduledIssue(
@@ -1240,7 +1240,6 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
               lastFiredAtMs: fired.lastFiredAtMs,
               nextDueAtMs: fired.nextDueAtMs,
             },
-            ws.tag,
           );
         });
         return { wsId: ws.id, tag: ws.tag, status: 'ok', issues };
@@ -1308,7 +1307,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       artifact: { kind: 'issue', workspaceId: ws.id, issueId: issue.id },
     }));
     const activity = issueActivityRecords(provenance, runs);
-    return { issue: detailIssue(issue, markers, ws.tag), comments, runs, inboxReports, provenance, activity };
+    return { issue: detailIssue(issue, markers), comments, runs, inboxReports, provenance, activity };
   };
 
   const sessionDirectory = async (

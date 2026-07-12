@@ -13,6 +13,7 @@ import type { IInboxStore } from '../../core/inbox-store.js'
 import { makeInboxEntryOriginResolver } from '../../core/workspace-tool-center.js'
 import { createWorkspaceConversationControl } from '../../workspaces/conversation-control.js'
 import type { HeadlessInquiryScope, HeadlessInquirySubject, HeadlessTaskRecord } from '../../workspaces/headless-task-registry.js'
+import { issueAssigneeResumeId } from '../../workspaces/issues/declaration.js'
 import { HeadlessCapacityError, HeadlessResumeError, type WorkspaceService } from '../../workspaces/service.js'
 
 const DEFAULT_TIMEOUT_MS = 300_000
@@ -144,10 +145,11 @@ export function createInquiryRoutes(deps: InquiryRoutesDeps): Hono {
     let target
     let runId: string | undefined
     if (relation === 'owner') {
-      if (detail.issue.execution.mode !== 'resume') {
+      const resumeId = issueAssigneeResumeId(detail.issue.assignee)
+      if (!resumeId) {
         return c.json({ error: 'no_stable_owner', message: 'this Issue recruits a new Session for every run' }, 409)
       }
-      target = { kind: 'resume' as const, resumeId: detail.issue.execution.resumeId }
+      target = { kind: 'resume' as const, resumeId }
     } else if (relation === 'run') {
       runId = typeof body.runId === 'string' ? body.runId : undefined
       const run = runId ? detail.runs.find((candidate) => candidate.taskId === runId) : undefined

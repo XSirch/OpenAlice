@@ -48,9 +48,9 @@ Output is JSON on stdout; a non-zero exit means it failed (reason on stderr).
 **To place a trade, that's `alice-uta`** — resolve the contract first and report
 every result. Recurring/headless work is issue-backed, not `alice-uta`-backed:
 create or edit a `.alice/issues/<id>.md` issue with a `when` field (or use
-`alice-workspace issue create --when ... --execution '{"mode":"resume"}'`) and
-write a complete `what` prompt. Choose `resume` for one accountable Session or
-`fresh` to recruit a new Session each fire.
+`alice-workspace issue create --when ... --assignee session:self`) and write a
+complete `what` prompt. Use `session:<resumeId>` for one accountable Session or
+`workspace` to recruit a new Session each fire.
 
 ## Beyond Alice's data — `opencli` (optional, read-only)
 
@@ -156,7 +156,7 @@ For recurring work, create a scheduled issue instead of inventing a side channel
 ```bash
 alice-workspace issue create --title "Pre-market power brief" --priority high \
   --when '{"kind":"cron","cron":"30 8 * * 1-5"}' \
-  --execution '{"mode":"resume"}' \
+  --assignee session:self \
   --what "Check AI power infrastructure names, write research/premarket-power.md, then push it to Inbox if there is a material update."
 ```
 

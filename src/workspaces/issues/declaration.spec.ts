@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { issueExecution, issueFirePrompt, isFireable, readWorkspaceIssues } from './declaration.js'
+import { issueAssigneeResumeId, issueFirePrompt, isFireable, readWorkspaceIssues } from './declaration.js'
 
 let dir: string
 beforeEach(async () => {
@@ -69,21 +69,19 @@ describe('readWorkspaceIssues', () => {
         title: 'Fix the login bug',
         status: 'todo',
         priority: 'none',
-        assignee: 'unassigned',
+        assignee: 'workspace',
       })
-      expect(i.assigneeDefaulted).toBe(true)
       expect(i.when).toBeUndefined()
       expect(isFireable(i)).toBe(false)
     }
   })
 
-  it('distinguishes explicit unassigned from a defaulted assignee', async () => {
+  it('preserves an explicit unassigned owner for an unscheduled issue', async () => {
     await writeIssue('explicit', fm('title: Explicit\nassignee: unassigned'))
     const r = await readWorkspaceIssues(dir)
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.issues[0].assignee).toBe('unassigned')
-      expect(r.issues[0].assigneeDefaulted).toBe(false)
     }
   })
 
@@ -95,7 +93,7 @@ describe('readWorkspaceIssues', () => {
           'title: Morning research sweep',
           'status: in_progress',
           'priority: high',
-          'assignee: "ws:auto-quant"',
+          'assignee: workspace',
           'when: { kind: every, every: 30m }',
           'what: run the research routine',
           'agent: codex',
@@ -113,7 +111,7 @@ describe('readWorkspaceIssues', () => {
         title: 'Morning research sweep',
         status: 'in_progress',
         priority: 'high',
-        assignee: 'ws:auto-quant',
+        assignee: 'workspace',
         what: 'run the research routine\n\n## Context\n\nScan overnight movers and summarize.',
         agent: 'codex',
       })
@@ -123,19 +121,32 @@ describe('readWorkspaceIssues', () => {
     }
   })
 
-  it('parses resume ownership and treats legacy omission as fresh', async () => {
+  it('parses Session ownership and defaults scheduled work to the Workspace', async () => {
     await writeIssue('owned', fm([
       'title: Owned work',
       'when: { kind: every, every: 30m }',
-      'execution: { mode: resume, resumeId: resume-kind-owl-abc123 }',
+      'assignee: session:resume-kind-owl-abc123',
     ].join('\n')))
     await writeIssue('legacy', fm('title: Legacy\nwhen: { kind: every, every: 30m }'))
     const result = await readWorkspaceIssues(dir)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     const byId = Object.fromEntries(result.issues.map((issue) => [issue.id, issue]))
-    expect(issueExecution(byId['owned'])).toEqual({ mode: 'resume', resumeId: 'resume-kind-owl-abc123' })
-    expect(issueExecution(byId['legacy'])).toEqual({ mode: 'fresh' })
+    expect(issueAssigneeResumeId(byId['owned'].assignee)).toBe('resume-kind-owl-abc123')
+    expect(byId['legacy'].assignee).toBe('workspace')
+  })
+
+  it('rejects retired execution declarations instead of silently keeping two owner models', async () => {
+    await writeIssue('retired', fm([
+      'title: Retired owner field',
+      'when: { kind: every, every: 30m }',
+      'execution: { mode: fresh }',
+    ].join('\n')))
+    const result = await readWorkspaceIssues(dir)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.issues).toEqual([])
+    expect(result.invalid[0]?.error).toMatch(/execution/)
   })
 
   it('parses block-style and cron/at `when` shapes', async () => {

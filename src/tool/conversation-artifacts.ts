@@ -6,6 +6,7 @@ import {
   type WorkspaceToolContext,
   type WorkspaceToolFactory,
 } from '../core/workspace-tool-center.js'
+import { issueAssigneeResumeId } from '../workspaces/issues/declaration.js'
 import {
   askWorkspaceConversation,
   conversationAskCommonShape,
@@ -130,15 +131,16 @@ export const issueAskFactory: WorkspaceToolFactory = {
             target = { kind: 'resume' as const, resumeId: run.resumeId }
             relation = 'run'
           } else if (owner) {
-            if (detail.issue.execution.mode !== 'resume') {
+            const resumeId = issueAssigneeResumeId(detail.issue.assignee)
+            if (!resumeId) {
               return {
                 ok: false as const,
-                error: 'this Issue uses fresh execution and has no stable owner; ask --creator or choose --run-id',
+                error: 'this Issue is assigned to its Workspace and has no stable Session owner; ask --creator or choose --run-id',
               }
             }
             target = {
               kind: 'resume' as const,
-              resumeId: detail.issue.execution.resumeId,
+              resumeId,
             }
             relation = 'owner'
           } else {

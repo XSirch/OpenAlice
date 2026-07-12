@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { IssueExecution, IssuePriority, IssueStatus } from '../../api/issues'
+import type { IssuePriority, IssueStatus } from '../../api/issues'
 import {
   demoIssueAddComment,
   demoIssueDetail,
@@ -60,14 +60,13 @@ export const issuesHandlers = [
       priority?: unknown
       assignee?: unknown
       agent?: unknown
-      execution?: unknown
       what?: unknown
     } | null
     if (!body || typeof body !== 'object') {
       return HttpResponse.json({ error: 'invalid_body' }, { status: 400 })
     }
 
-    const patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; execution?: IssueExecution; what?: string } = {}
+    const patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string } = {}
     if (body.status !== undefined) {
       if (!ISSUE_STATUSES.includes(body.status as IssueStatus)) {
         return HttpResponse.json({ error: 'invalid_status' }, { status: 400 })
@@ -99,15 +98,6 @@ export const issuesHandlers = [
         patch.agent = agent
       }
     }
-    if (body.execution !== undefined) {
-      const execution = body.execution as Partial<IssueExecution>
-      if (execution.mode === 'fresh') patch.execution = { mode: 'fresh' }
-      else if (execution.mode === 'resume' && typeof execution.resumeId === 'string' && execution.resumeId) {
-        patch.execution = { mode: 'resume', resumeId: execution.resumeId }
-      } else {
-        return HttpResponse.json({ error: 'invalid_execution' }, { status: 400 })
-      }
-    }
     if (body.what !== undefined) {
       if (typeof body.what !== 'string' || !body.what.trim()) {
         return HttpResponse.json({ error: 'invalid_what' }, { status: 400 })
@@ -119,7 +109,6 @@ export const issuesHandlers = [
       patch.priority === undefined &&
       patch.assignee === undefined &&
       patch.agent === undefined
-      && patch.execution === undefined
       && patch.what === undefined
     ) {
       return HttpResponse.json({ error: 'no_fields' }, { status: 400 })

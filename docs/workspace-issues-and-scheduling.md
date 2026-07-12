@@ -33,10 +33,9 @@ workspaces.
 title: Pre-market brief
 status: todo
 priority: high
-assignee: ws:research
+assignee: workspace
 when: { kind: cron, cron: "30 8 * * 1-5" }
 agent: pi
-execution: { mode: fresh }
 ---
 
 Pull pre-market movers and overnight news, write `research/premarket.md`,
@@ -48,20 +47,22 @@ The filename stem is the stable issue id. Frontmatter:
 - `title` — required human title.
 - `status` — `backlog | todo | in_progress | done | canceled`; default `todo`.
 - `priority` — `urgent | high | medium | low | none`; default `none`.
-- `assignee` — human/workspace display ownership.
+- `assignee` — the single ownership and dispatch contract:
+  - `workspace` means the owning Workspace recruits a new product Session for
+    every scheduled fire;
+  - `session:<resumeId>` continues one exact accountable product Session;
+  - `human` or `unassigned` is valid only for unscheduled work.
 - `when` — optional schedule:
   - `{ kind: at, at: <ISO timestamp> }`
   - `{ kind: every, every: <duration> }`
   - `{ kind: cron, cron: <5-field expression> }`
-- `agent` — optional CLI adapter id; otherwise Workspace/default resolution is
-  used. It selects the runtime for `fresh`; `resume` uses the declared Session's
-  immutable runtime.
-- `execution` — scheduled ownership: `{ mode: fresh }` creates a new product
-  Session per fire; `{ mode: resume, resumeId: <id> }` continues one exact
-  accountable Session. A new resume owner must already have captured a native
-  runtime session id; provenance-only, not-yet-resumable Sessions are rejected
-  at assignment time. Existing files without `execution` remain fresh for
-  compatibility; new agent-created schedules must choose explicitly.
+- `agent` — optional CLI adapter id for `workspace`-owned scheduled work;
+  otherwise Workspace/default resolution is used. A Session assignee already
+  owns its runtime and cannot be overridden here.
+
+Migration `0018_issue_assignee_ownership` removes the retired parallel
+`execution` field. It maps `resume` to `session:<resumeId>` and fresh/omitted
+scheduled ownership to `workspace`; the reader only accepts the new contract.
 
 The markdown below frontmatter is the Issue's canonical **What**: the work
 definition humans inspect and edit. For scheduled Issues, Alice sends this exact
@@ -85,14 +86,14 @@ Agents normally use:
 ```bash
 alice-workspace issue list
 alice-workspace issue show --id <id-or-title>
-alice-workspace issue create --title "..." --what "..." --when '{"kind":"every","every":"1h"}' --execution '{"mode":"fresh"}'
+alice-workspace issue create --title "..." --what "..." --when '{"kind":"every","every":"1h"}' --assignee workspace
 alice-workspace issue update --id <id> --status done
 alice-workspace issue comment --id <id> --text "..."
 ```
 
 The CLI and MCP tools use the same implementation and write the same files.
 Direct file editing is also valid and is the clearest way to author rich What
-markdown plus `when` / `agent` / `execution` frontmatter.
+markdown plus `when` / `assignee` / `agent` frontmatter.
 
 Reads such as list/show aggregate all workspaces. Writes from an autonomous or
 headless run stay inside its own Workspace. Editing a peer Workspace requires
@@ -104,7 +105,7 @@ an attended, human-approved path and a commit in the peer repository.
 .alice/issues/<id>.md
   -> ScheduleScanner (~60s)
   -> due calculation from `when` + last-fired marker
-  -> execution policy selects a fresh Session or exact resumeId
+  -> assignee selects a new Workspace Session or exact resumeId
   -> headless run of the owning Workspace
   -> native agent CLI
   -> normalized reply + message/tool blocks
@@ -210,12 +211,11 @@ overlap. If server-side collection reaches its budget while a task still runs,
 use a later collect or one-shot read; agents should not manufacture shell sleep
 loops.
 
-The Issue detail UI separates human tracking properties from scheduled
-execution responsibility. Status, priority, and assignee do not select an
-agent. A scheduled Issue instead presents two explicit policies: recruit a new
-Session on every fire (`fresh`), or keep one responsible Session (`resume`).
-Only the second policy has a stable owner to ask; fresh execution exposes the
-creator and each concrete run as separate follow-up targets.
+The Issue detail UI treats scheduling as an intrinsic Work item capability.
+`assignee: workspace` recruits a new Session on every fire;
+`assignee: session:<resumeId>` keeps one responsible Session. Only the latter
+has a stable owner to ask; Workspace-owned execution exposes the creator and
+each concrete run as separate follow-up targets.
 
 Scheduling never bypasses trading approval. A headless agent may research or
 stage a trade, but execution remains behind UTA/Trading-as-Git permission and

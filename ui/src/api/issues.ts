@@ -22,10 +22,6 @@ import type { ScheduleWhen } from './schedule'
 
 export type IssueStatus = 'backlog' | 'todo' | 'in_progress' | 'done' | 'canceled'
 export type IssuePriority = 'urgent' | 'high' | 'medium' | 'low' | 'none'
-export type IssueExecution =
-  | { mode: 'fresh' }
-  | { mode: 'resume'; resumeId: string }
-
 export type IssueProvenanceAction = 'created' | 'updated' | 'commented' | 'sent' | 'decided' | 'reconstructed'
 export type IssueProvenanceOrigin =
   | {
@@ -71,8 +67,6 @@ export interface IssueListItem {
   assignee: string
   /** Adapter id for the scheduled fire override, if set. */
   agent?: string
-  /** Effective scheduled owner policy; legacy server payloads may omit it. */
-  execution?: IssueExecution
   /** Present iff the issue is scheduled (shares the core Schedule union). */
   when?: ScheduleWhen
   /** Scanner last-fired marker (epoch ms) — scheduled issues only. */
@@ -161,8 +155,6 @@ export interface IssueDetailIssue {
   when?: ScheduleWhen
   /** Adapter id for the scheduled fire (frontmatter `agent`), if set. */
   agent?: string
-  /** Effective scheduled owner policy; legacy server payloads may omit it. */
-  execution?: IssueExecution
   /** Scanner last-fired marker (epoch ms) — scheduled issues only. */
   lastFiredAtMs?: number | null
   /** Computed next fire (epoch ms) — scheduled issues only. */
@@ -227,7 +219,7 @@ export const issuesApi = {
   async update(
     wsId: string,
     id: string,
-    patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; execution?: IssueExecution; what?: string },
+    patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string },
   ): Promise<IssueDetail> {
     return fetchJson<IssueDetail>(
       `/api/issues/${encodeURIComponent(wsId)}/${encodeURIComponent(id)}`,

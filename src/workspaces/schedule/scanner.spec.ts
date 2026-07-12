@@ -8,7 +8,6 @@ import type { Schedule } from '../../core/schedule-expr.js'
 import type { CliAdapter } from '../cli-adapter.js'
 import type { Logger } from '../logger.js'
 import type { WorkspaceMeta, WorkspaceRegistry } from '../workspace-registry.js'
-import type { IssueExecution } from '../issues/declaration.js'
 
 import { ScheduleScanner, type MarkerStore, type ScheduleScannerDeps } from './scanner.js'
 
@@ -70,7 +69,7 @@ interface IssueSpec {
   status?: string
   priority?: string
   agent?: string
-  execution?: IssueExecution
+  assignee?: string
   body?: string
 }
 
@@ -81,10 +80,7 @@ function issueMd(spec: IssueSpec): string {
   if (spec.priority) lines.push(`priority: ${spec.priority}`)
   if (spec.what) lines.push(`what: ${spec.what}`)
   if (spec.agent) lines.push(`agent: ${spec.agent}`)
-  if (spec.execution?.mode === 'fresh') lines.push('execution: { mode: fresh }')
-  if (spec.execution?.mode === 'resume') {
-    lines.push(`execution: { mode: resume, resumeId: ${spec.execution.resumeId} }`)
-  }
+  if (spec.assignee) lines.push(`assignee: ${spec.assignee}`)
   if (spec.when) {
     const w = spec.when
     const inner =
@@ -155,7 +151,7 @@ describe('ScheduleScanner', () => {
       title: 'owned work',
       when: { kind: 'every', every: '30m' },
       what: 'continue',
-      execution: { mode: 'resume', resumeId: 'resume-kind-owl-abc123' },
+      assignee: 'session:resume-kind-owl-abc123',
     }])
     const resolveAdapter = vi.fn(async () => headlessAdapter)
     const { scanner, dispatch } = scannerFor([ws], { resolveAdapter })
@@ -170,8 +166,8 @@ describe('ScheduleScanner', () => {
       'owned',
       'resume-kind-owl-abc123',
     )
-    expect(scanner.snapshot()!.workspaces[0].tasks[0].execution)
-      .toEqual({ mode: 'resume', resumeId: 'resume-kind-owl-abc123' })
+    expect(scanner.snapshot()!.workspaces[0].tasks[0].assignee)
+      .toBe('session:resume-kind-owl-abc123')
   })
 
   it('ignores an UNSCHEDULED issue (no when): never fires, never in the snapshot', async () => {

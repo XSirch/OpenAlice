@@ -28,13 +28,13 @@ import {
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
   ISSUES_DIR_REL,
+  issueAssigneeResumeId,
+  issueAssigneeSchema,
   issueFrontmatterSchema,
-  issueExecutionSchema,
   parseIssueContent,
   splitLegacyIssueDocument,
   splitFrontmatter,
   type IssuePriority,
-  type IssueExecution,
   type IssueRecord,
   type IssueStatus,
 } from './declaration.js'
@@ -49,8 +49,6 @@ export interface IssueFieldPatch {
   assignee?: string
   /** Runtime override for scheduled fires; null removes the override. */
   agent?: string | null
-  /** Scheduled execution owner. Use `{mode:'fresh'}` instead of deleting it. */
-  execution?: IssueExecution
   /** Canonical markdown work definition; exact scheduled prompt. */
   what?: string
 }
@@ -66,7 +64,6 @@ export interface CreateIssueInput {
   when?: unknown
   what?: string
   agent?: string
-  execution?: IssueExecution
   /** @deprecated Compatibility alias for callers written before What became the
    * sole markdown document. New callers must use `what`. */
   body?: string
@@ -113,7 +110,7 @@ function serializeIssue(frontmatter: Record<string, unknown>, what: string, lega
 
 /**
  * Patch one or more board fields on an existing issue. Reads the file, validates
- * each patched field against the enums (assignee = non-empty string), merges
+ * each patched field against the Issue schema (including the owner contract), merges
  * into the existing frontmatter (preserving `when`/`agent` + any other
  * keys), re-serializes via the `yaml` lib, and writes. Returns the re-validated
  * IssueRecord, or `not_found` when the file is absent.
@@ -154,8 +151,12 @@ export async function updateIssueFields(
   }
   if (patch.assignee !== undefined) {
     const a = patch.assignee.trim()
-    if (a.length === 0) return { ok: false, reason: 'invalid', error: 'assignee must be a non-empty string' }
-    data.assignee = a
+    const assignee = issueAssigneeSchema.safeParse(a)
+    if (!assignee.success) {
+      return { ok: false, reason: 'invalid', error: 'assignee must be workspace, human, unassigned, or session:<resumeId>' }
+    }
+    data.assignee = assignee.data
+    if (issueAssigneeResumeId(assignee.data)) delete data.agent
   }
   if (patch.agent !== undefined) {
     if (patch.agent === null) {
@@ -165,16 +166,6 @@ export async function updateIssueFields(
       if (a.length === 0) return { ok: false, reason: 'invalid', error: 'agent must be a non-empty string or null' }
       data.agent = a
     }
-  }
-  if (patch.execution !== undefined) {
-    if (!current.issue.when) {
-      return { ok: false, reason: 'invalid', error: 'execution only applies to a scheduled issue with `when`' }
-    }
-    const execution = issueExecutionSchema.safeParse(patch.execution)
-    if (!execution.success) {
-      return { ok: false, reason: 'invalid', error: 'execution must be {mode:"fresh"} or {mode:"resume",resumeId}' }
-    }
-    data.execution = execution.data
   }
   let what = current.issue.what
   if (patch.what !== undefined) {
@@ -212,10 +203,6 @@ export async function createIssue(wsDir: string, input: CreateIssueInput): Promi
 
   const existing = await readWorkspaceFile(wsDir, relFor(id))
   if (existing !== null) return { ok: false, reason: 'conflict', id }
-  if (input.execution !== undefined && input.when === undefined) {
-    return { ok: false, reason: 'invalid', error: 'execution only applies to a scheduled issue with `when`' }
-  }
-
   // Assemble frontmatter from only the provided keys (so we don't write default
   // noise), then validate the whole thing against the issue schema.
   const data: Record<string, unknown> = { title }
@@ -224,7 +211,6 @@ export async function createIssue(wsDir: string, input: CreateIssueInput): Promi
   if (input.assignee !== undefined) data.assignee = input.assignee
   if (input.when !== undefined) data.when = input.when
   if (input.agent !== undefined) data.agent = input.agent
-  if (input.execution !== undefined) data.execution = input.execution
 
   const parsed = issueFrontmatterSchema.safeParse(data)
   if (!parsed.success) {

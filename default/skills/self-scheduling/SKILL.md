@@ -6,8 +6,8 @@ description: >
   YAML frontmatter + one canonical markdown What. An issue WITHOUT a `when` field is
   just a tracked work item (it shows on the Issue board, the scanner ignores
   it). An issue WITH a `when` field self-schedules: the launcher scans the dir
-  and, when it's due, spawns a fresh headless run of this workspace with your
-  prompt; the run reports back to the user's Inbox. Use for: "track this",
+  and, when it's due, dispatches the Workspace or assigned product Session with
+  your prompt; the run reports back to the user's Inbox. Use for: "track this",
   "add an issue/todo", "run this every 30 minutes", "every morning before the
   open do X", "check Y each hour and ping me only if Z", "do this once at 4pm",
   "self-schedule", "set up a recurring job". Manage issues either by editing
@@ -50,7 +50,7 @@ You have two equivalent paths, and both write the **same**
    with no separate path.
 2. **Editing the file directly** with your normal file tools. Reach for this when
    you are writing rich markdown **What** or scheduling frontmatter
-   (`when` / `agent`) — the CLI verbs cover the board fields, What, and
+   (`when` / `assignee` / `agent`) — the CLI verbs cover the board fields, What, and
    comments, but the document and schedule shape read most clearly as text. The
    file is always the single source of truth either way.
 
@@ -88,7 +88,7 @@ as `--when`:
 ```bash
 alice-workspace issue create --title "Pre-market brief" --priority high \
   --when '{"kind":"cron","cron":"30 8 * * 1-5"}' \
-  --execution '{"mode":"resume"}' \
+  --assignee session:self \
   --what "Pull pre-market movers and overnight news for my watchlist, write a short brief to research/premarket.md, then run: alice-workspace inbox push --doc research/premarket.md --comments 'Pre-market brief'." \
   --agent claude
 ```
@@ -109,10 +109,8 @@ on-disk file shape the CLI and your direct edits both produce.
 title: Pre-market brief
 status: todo
 priority: high
-assignee: ws:research
+assignee: session:resume-calm-amber-river-a1b2c3
 when: { kind: cron, cron: "30 8 * * 1-5" }
-agent: claude
-execution: { mode: resume, resumeId: resume-calm-amber-river-a1b2c3 }
 ---
 
 Pull pre-market movers and overnight news for my watchlist. Every trading
@@ -138,8 +136,8 @@ touch fetching.
 ```
 
 The first self-schedules (it has `when`) and keeps one accountable product
-Session; the second is a pure work item the
-scanner ignores. Drop the `when`/`agent` lines and any issue becomes a
+Session; the second is a pure work item the scanner ignores. Drop the `when`
+line and any issue becomes a
 plain tracked item; add a `when` and it starts firing.
 
 ## Frontmatter fields
@@ -155,8 +153,13 @@ plain tracked item; add a `when` and it starts firing.
   (There is no `enabled` field — terminal status is how you pause a timer.)
 - **`priority`** *(optional, default `none`)* — `urgent`, `high`, `medium`,
   `low`, `none`. Display/sort only.
-- **`assignee`** *(optional, default `unassigned`)* — `human`, `ws:<workspace
-  tag or id>`, or `unassigned`. Display only.
+- **`assignee`** *(optional, default `workspace`)* — the single owner and
+  scheduled-dispatch policy:
+  - `workspace` recruits a new product Session for each scheduled fire;
+  - `session:<resumeId>` continues that exact accountable Session;
+  - `human` and `unassigned` are valid only for unscheduled work.
+  The CLI convenience value `session:self` resolves to the caller's concrete
+  `session:<resumeId>` before writing the file.
 - **`when`** *(OPTIONAL — present iff the issue self-schedules)* — one of:
   - `{ kind: every, every: "30m" }` — repeat on an interval (`30m`, `2h`,
     `1h30m`). Runs on the next scan, then on the interval.
@@ -165,16 +168,12 @@ plain tracked item; add a `when` and it starts firing.
     lists `1,15`, steps `*/15`). Wall-clock; waits for the next match.
   - `{ kind: at, at: "2026-03-01T13:30:00Z" }` — run ONCE at an ISO timestamp,
     then never again.
-- **`agent`** *(optional)* — which CLI runs the scheduled job; defaults to this
-  workspace's default agent. It selects the worker kind for `fresh`; a `resume`
-  owner already has an immutable runtime, so that Session's runtime wins.
-- **`execution`** *(required for newly created scheduled issues)* — choose who
-  receives each fire:
-  - `{ mode: fresh }` recruits a new product Session each time;
-  - `{ mode: resume, resumeId: <id> }` continues that exact accountable Session.
-    With `alice-workspace issue create`, pass `--execution '{"mode":"resume"}'`
-    to bind the current Session without guessing its id. Existing legacy Issues
-    that omit this field keep the historical `fresh` behavior.
+- **`agent`** *(optional)* — runtime override for `workspace`-owned scheduled
+  work; defaults to this Workspace's runtime resolution. A Session assignee
+  already has an immutable runtime, so Session-owned Issues cannot set this.
+
+The old parallel `execution` field is retired and rejected after migration;
+never write it into a new Issue.
 
 The markdown **What** below the closing `---` is the Issue's canonical work
 definition. It is useful for every Issue; when scheduled, this exact visible

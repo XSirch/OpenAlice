@@ -231,10 +231,11 @@ An Issue has two independent identity questions:
 
 1. **Creation/mutation provenance:** which Session or human created and edited
    the self-describing Issue?
-2. **Execution responsibility:** should scheduled fires keep using one product
-   Session, or should the Workspace pull a fresh worker every time?
+2. **Current ownership:** is the Work item owned by one product Session or by
+   the Workspace, which recruits a new worker for each scheduled fire?
 
-Creating an Issue must explicitly choose one execution mode.
+`assignee` is the single answer to the second question; schedule is an intrinsic
+capability of that Work item, not a second ownership object.
 
 Issue detail and `alice-workspace issue show` expose `created` / `updated` /
 `commented` activity newest-first. Adjacent updates from the same origin are
@@ -256,9 +257,7 @@ instead of creating another parallel timeline.
 #### Mode A: one responsible Session
 
 ```yaml
-execution:
-  mode: resume
-  resumeId: resume-calm-amber-river-a1b2c3
+assignee: session:resume-calm-amber-river-a1b2c3
 ```
 
 - Every scheduled fire continues that exact `resumeId`.
@@ -270,15 +269,15 @@ execution:
 - If the Session becomes unresumable, the Issue becomes blocked/unavailable;
   it must not silently recruit a replacement and pretend continuity.
 
-For agent-facing `issue_create`, `execution: { mode: "resume" }` without a
-`resumeId` binds the caller's authoritative product Session; OpenAlice resolves
-and stamps the id server-side. A human UI may select an existing Session.
+For agent-facing `issue_create`, `assignee: session:self` binds the caller's
+authoritative product Session; OpenAlice resolves and persists the concrete
+`session:<resumeId>` value server-side. A human UI may select an existing
+resumable Workspace Session.
 
 #### Mode B: a fresh worker per fire
 
 ```yaml
-execution:
-  mode: fresh
+assignee: workspace
 ```
 
 - Every scheduled fire creates a new headless product Session and `resumeId`.
@@ -288,12 +287,12 @@ execution:
   a unique worker.
 - Each run keeps its own origin so a user can still ask that specific worker.
 
-The Issue's creator provenance is stamped separately in both modes. Choosing
-`fresh` for execution does not erase who designed the Issue.
+The Issue's creator provenance is stamped separately in both modes. Workspace
+ownership does not erase who designed the Issue.
 
-Existing Issues without an execution declaration retain the current fresh-run
-behavior for compatibility. New agent/UI creation should require an explicit
-choice so ownership is never accidental.
+Migration `0018_issue_assignee_ownership` removes the former `execution` field
+and converts its meaning into `assignee`; the runtime does not maintain two
+ownership contracts.
 
 Typical questions then resolve without ambiguity:
 
@@ -301,9 +300,9 @@ Typical questions then resolve without ambiguity:
 |---|---|
 | Why does this Issue exist? | Issue `created` provenance |
 | Why was its priority changed? | Matching `updated` provenance |
-| Ask the responsible owner | Declared `execution.mode: resume` Session |
+| Ask the responsible owner | Declared `session:<resumeId>` assignee |
 | Why did yesterday's report say this? | That run's `resumeId` |
-| What does the latest fresh worker think? | Explicit latest-run selection |
+| What does the latest Workspace worker think? | Explicit latest-run selection |
 
 ### Trades
 
@@ -357,12 +356,13 @@ can explain the original trigger and falsifiers from its conversational context.
 ### One recurring Issue, multiple workers
 
 A financial/industrial scan has historical Codex runs and later Pi runs. If its
-execution mode is `fresh`, each report has a different `resumeId`. “Who created
+assignee is `workspace`, each report has a different `resumeId`. “Who created
 the scan?”, “who wrote the 10 July report?”, and “who ran it most recently?” are
 three different provenance queries.
 
 If the user instead wants one analyst to accumulate memory across days, the
-Issue must declare `mode: resume` and keep one responsible `resumeId`.
+Issue must declare `assignee: session:<resumeId>` and keep one responsible
+product Session.
 
 ### Legacy Inbox with no sender Session
 
@@ -390,8 +390,8 @@ approval state, routing, fills, and slippage.
 9. Mutable artifacts retain occurrence-level provenance instead of one mutable
    “author” field.
 10. Issue creation provenance and future execution responsibility are separate.
-11. New Issues explicitly choose `resume` or `fresh`; legacy omissions preserve
-    compatible fresh behavior.
+11. Issue assignee is the only ownership/dispatch contract: `workspace` or an
+    exact `session:<resumeId>` for scheduled work.
 12. Trade decision attribution and trade execution authority remain separate.
 13. Provenance is stamped from authoritative context, not asserted by an agent.
 14. Existing UUID `resumeId`s remain valid; readable ids apply only to new
@@ -417,8 +417,7 @@ responsible?” It owns:
 - reliable propagation of `resumeId`, Workspace, runtime kind, and optional
   execution id;
 - Inbox sender attribution;
-- Issue creator/mutation attribution and explicit `resume`/`fresh` execution
-  responsibility;
+- Issue creator/mutation attribution and explicit Workspace/Session ownership;
 - report revision/write attribution where observable;
 - trade-decision correlation across the Alice -> UTA boundary;
 - read-only artifact and reverse-Session queries through
@@ -498,7 +497,7 @@ Business convenience wrappers delegate to the same shipped resolver:
 ```text
 inbox ask <entry>             -> sender Session or reconstructed Workspace Session (shipped)
 issue ask <issue> --creator   -> creation provenance (shipped)
-issue ask <issue> --owner     -> declared resume owner, or explain fresh mode (shipped)
+issue ask <issue> --owner     -> declared Session assignee, or explain Workspace ownership (shipped)
 issue ask <issue> --run-id    -> that run's Session (shipped)
 report ask <path> [revision]  -> matching writer/update occurrence
 trade ask <order> --decision  -> initiating Session
@@ -516,7 +515,7 @@ No feature should invent its own meaning of “the agent who made this.”
 | Product Session | `ResumeRegistry`, headless `resumeId`, interactive materialization | Standard origin projection and read-only lookup | Continue exact or create reconstructed Session |
 | Execution | `HeadlessTaskRegistry`, `parentTaskId`, normalized output | Bind every attributable occurrence to the execution and `resumeId` | Poll/stream the peer reply and tool activity |
 | Inbox | Server-stamped run/session origin | Safe exposure and legacy/unknown classification | Ask sender or reconstruct at Workspace |
-| Issue | `{ workspaceId, issueId }`, run and Inbox activity | Creator/mutation edges plus explicit `resume`/`fresh` responsibility | Ask creator, owner, or one selected run |
+| Issue | `{ workspaceId, issueId }`, run and Inbox activity | Creator/mutation edges plus explicit Workspace/Session ownership | Ask creator, owner, or one selected run |
 | Report | Workspace path and git repository | Revision-level creation/update attribution | Ask writer of the selected revision |
 | Trade | UTA operation/order authority | Alice Session decision correlation across the UTA boundary | Ask initiator; route execution questions to UTA evidence |
 

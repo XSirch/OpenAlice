@@ -7,7 +7,7 @@ import { createInquiryRoutes } from './inquiries.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function build(opts: { execution?: { mode: 'fresh' } | { mode: 'resume'; resumeId: string } } = {}) {
+function build(opts: { assignee?: string } = {}) {
   const inboxStore = createMemoryInboxStore()
   const dispatchHeadlessTask = vi.fn(async (
     _meta: unknown,
@@ -40,8 +40,8 @@ function build(opts: { execution?: { mode: 'fresh' } | { mode: 'resume'; resumeI
     headlessLogsDir: '/tmp/missing-inquiry-logs',
     issueDetail: vi.fn(async () => ({
       issue: {
-        id: 'issue-1', title: 'Issue', body: '', status: 'todo', priority: 'none', assignee: 'ws:Research',
-        execution: opts.execution ?? { mode: 'fresh' },
+        id: 'issue-1', title: 'Issue', body: '', status: 'todo', priority: 'none',
+        assignee: opts.assignee ?? 'workspace',
       },
       runs: [{ taskId: 'run-old', resumeId: 'resume-run', wsId: 'ws-1', agent: 'pi', status: 'done', startedAt: 1, resumable: true }],
       inboxReports: [], provenance: [],
@@ -88,8 +88,8 @@ describe('business inquiry routes', () => {
     expect(dispatchHeadlessTask.mock.calls[0]?.[6]?.resolution).toMatchObject({ mode: 'reconstructed' })
   })
 
-  it('rejects Ask owner for a fresh-execution Issue', async () => {
-    const { app } = build({ execution: { mode: 'fresh' } })
+  it('rejects Ask owner for a Workspace-owned Issue', async () => {
+    const { app } = build({ assignee: 'workspace' })
     const response = await app.request('/issues/ws-1/issue-1', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: 'Status?', relation: 'owner' }),
@@ -99,7 +99,7 @@ describe('business inquiry routes', () => {
   })
 
   it('asks the fixed Issue owner and one selected run by their resumeIds', async () => {
-    const { app, dispatchHeadlessTask } = build({ execution: { mode: 'resume', resumeId: 'resume-owner' } })
+    const { app, dispatchHeadlessTask } = build({ assignee: 'session:resume-owner' })
     const owner = await app.request('/issues/ws-1/issue-1', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: 'Owner?', relation: 'owner' }),

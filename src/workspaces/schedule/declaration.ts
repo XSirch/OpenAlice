@@ -19,10 +19,8 @@ import {
   isFireable,
   isTerminalStatus,
   issueFirePrompt,
-  issueExecution,
   readWorkspaceIssues,
   type IssueRecord,
-  type IssueExecution,
 } from '../issues/declaration.js'
 
 export {
@@ -46,8 +44,9 @@ export interface ScheduleSnapshotTask {
   when: Schedule
   /** The prompt this fire hands to the headless run (resolved `what`/title+body). */
   what: string
+  /** Unified owner. `workspace` recruits a fresh Session; `session:<resumeId>` resumes one. */
+  assignee: string
   agent?: string
-  execution: IssueExecution
   /** False once the owning issue reaches a terminal status (done/canceled). */
   enabled: boolean
   /** When the scanner last fired this issue (epoch ms), null if never. */
@@ -101,8 +100,8 @@ export function snapshotScheduledIssue(
     issue: issue.title,
     when,
     what: issueFirePrompt(issue),
+    assignee: issue.assignee,
     ...(issue.agent ? { agent: issue.agent } : {}),
-    execution: issueExecution(issue),
     enabled: !isTerminalStatus(issue.status),
     lastFiredAtMs,
     // An overdue computed time clamps to now: a due-now task reads "due now",

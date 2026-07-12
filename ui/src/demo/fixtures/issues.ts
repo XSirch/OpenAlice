@@ -1,5 +1,5 @@
 import type { HeadlessTaskRecord } from '../../api/headless'
-import type { IssueComment, IssueDetail, IssueExecution, IssuePriority, IssueSnapshot, IssueStatus } from '../../api/issues'
+import type { IssueComment, IssueDetail, IssuePriority, IssueSnapshot, IssueStatus } from '../../api/issues'
 import { demoInboxEntries } from './inbox'
 
 // GET /api/issues aggregates every workspace's declared issues by SCANNING
@@ -11,8 +11,8 @@ import { demoInboxEntries } from './inbox'
 //
 // Coverage exercised by these fixtures: 2 workspaces; all five `status` values
 // (backlog/todo/in_progress/done/canceled); all five `priority` values
-// (urgent/high/medium/low/none); all three assignee shapes (human / ws:<tag> /
-// unassigned); all three `when` kinds (cron/every/at) plus unscheduled work
+// (urgent/high/medium/low/none); all four assignee shapes (workspace / session /
+// human / unassigned); all three `when` kinds (cron/every/at) plus unscheduled work
 // items (no `when`, no lastFired/nextDue).
 //
 // Also exercised: a CROSS-WORKSPACE NAME COLLISION. Both workspaces declare an
@@ -40,9 +40,8 @@ export const demoIssuesSnapshot: IssueSnapshot = {
           title: 'Morning movers scan',
           status: 'in_progress',
           priority: 'high',
-          assignee: 'ws:auto-quant',
+          assignee: 'workspace',
           agent: 'codex',
-          execution: { mode: 'fresh' },
           when: { kind: 'cron', cron: '30 8 * * 1-5' },
           lastFiredAtMs: now - HOUR,
           nextDueAtMs: now + 16 * HOUR,
@@ -53,9 +52,7 @@ export const demoIssuesSnapshot: IssueSnapshot = {
           title: 'Thesis invalidation watch',
           status: 'todo',
           priority: 'urgent',
-          assignee: 'ws:auto-quant',
-          agent: 'claude',
-          execution: { mode: 'resume', resumeId: 'demo-resume-thesis-owner' },
+          assignee: 'session:demo-resume-thesis-owner',
           when: { kind: 'every', every: '1h' },
           lastFiredAtMs: now - HOUR / 2,
           nextDueAtMs: now + HOUR / 2,
@@ -84,7 +81,7 @@ export const demoIssuesSnapshot: IssueSnapshot = {
           title: 'Liquidity risk review',
           status: 'todo',
           priority: 'high',
-          assignee: 'ws:auto-quant',
+          assignee: 'workspace',
           nameCollision: true,
         },
       ],
@@ -100,7 +97,7 @@ export const demoIssuesSnapshot: IssueSnapshot = {
           title: 'Weekly macro digest',
           status: 'in_progress',
           priority: 'medium',
-          assignee: 'ws:macro-research',
+          assignee: 'workspace',
           agent: 'codex',
           when: { kind: 'cron', cron: '0 16 * * 5' },
           lastFiredAtMs: now - 2 * DAY,
@@ -475,14 +472,13 @@ const demoIssueComments: Record<string, IssueComment[]> = {}
 export function demoIssueUpdate(
   wsId: string,
   id: string,
-  patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; execution?: IssueExecution; what?: string },
+  patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string },
 ): IssueDetail | null {
   const boardIssue = findBoardIssue(wsId, id)
   if (!boardIssue) return null
   if (patch.status !== undefined) boardIssue.status = patch.status
   if (patch.priority !== undefined) boardIssue.priority = patch.priority
   if (patch.assignee !== undefined) boardIssue.assignee = patch.assignee
-  if (patch.execution !== undefined) boardIssue.execution = patch.execution
   if (patch.what !== undefined) {
     const key = `${wsId}/${id}`
     const existing = demoIssueExtras[key]

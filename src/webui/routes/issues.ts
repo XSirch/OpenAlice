@@ -28,8 +28,8 @@ import { ACTIVITY_UPDATE_COALESCE_MS } from '../../core/provenance-store.js'
 import {
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
-  issueExecutionSchema,
-  type IssueExecution,
+  issueAssigneeResumeId,
+  issueAssigneeSchema,
   type IssuePriority,
   type IssueStatus,
 } from '../../workspaces/issues/declaration.js'
@@ -86,7 +86,7 @@ export function createIssuesRoutes(svc: WorkspaceService): Hono {
 
     const body = await safeJson(c)
     const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-    const patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; execution?: IssueExecution; what?: string } = {}
+    const patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string } = {}
     if ('status' in fields) {
       const s = fields['status']
       if (typeof s !== 'string' || !ISSUE_STATUSES.includes(s as IssueStatus)) {
@@ -103,10 +103,27 @@ export function createIssuesRoutes(svc: WorkspaceService): Hono {
     }
     if ('assignee' in fields) {
       const a = fields['assignee']
-      if (typeof a !== 'string' || a.trim().length === 0) {
-        return c.json({ error: 'invalid_assignee', message: 'assignee must be a non-empty string' }, 400)
+      const assignee = typeof a === 'string' ? issueAssigneeSchema.safeParse(a.trim()) : null
+      if (!assignee?.success) {
+        return c.json({ error: 'invalid_assignee', message: 'assignee must be workspace, human, unassigned, or session:<resumeId>' }, 400)
       }
-      patch.assignee = a.trim()
+      const resumeId = issueAssigneeResumeId(assignee.data)
+      if (resumeId) {
+        const identity = svc.resumeRegistry.get(resumeId)
+        if (!identity || identity.wsId !== wsId) {
+          return c.json({
+            error: 'invalid_assignee_session',
+            message: 'session assignee must identify a product Session in this Workspace',
+          }, 400)
+        }
+        if (!identity.agentSessionId) {
+          return c.json({
+            error: 'unavailable_assignee_session',
+            message: 'the selected Session is not resumable yet; complete one agent turn before assigning it',
+          }, 409)
+        }
+      }
+      patch.assignee = assignee.data
     }
     if ('agent' in fields) {
       const raw = fields['agent']
@@ -123,31 +140,6 @@ export function createIssuesRoutes(svc: WorkspaceService): Hono {
         patch.agent = agent
       }
     }
-    if ('execution' in fields) {
-      const execution = issueExecutionSchema.safeParse(fields['execution'])
-      if (!execution.success) {
-        return c.json({
-          error: 'invalid_execution',
-          message: 'execution must be {mode:"fresh"} or {mode:"resume",resumeId}',
-        }, 400)
-      }
-      if (execution.data.mode === 'resume') {
-        const identity = svc.resumeRegistry.get(execution.data.resumeId)
-        if (!identity || identity.wsId !== wsId) {
-          return c.json({
-            error: 'invalid_execution_owner',
-            message: 'resumeId must identify a product Session in this Workspace',
-          }, 400)
-        }
-        if (!identity.agentSessionId) {
-          return c.json({
-            error: 'unavailable_execution_owner',
-            message: 'the selected Session is not resumable yet; complete one agent turn before assigning it',
-          }, 409)
-        }
-      }
-      patch.execution = execution.data
-    }
     if ('what' in fields) {
       const what = fields['what']
       if (typeof what !== 'string' || what.trim().length === 0) {
@@ -159,7 +151,7 @@ export function createIssuesRoutes(svc: WorkspaceService): Hono {
       patch.what = what.trim()
     }
     if (Object.keys(patch).length === 0) {
-      return c.json({ error: 'no_fields', message: 'provide at least one of status, priority, assignee, agent, execution, what' }, 400)
+      return c.json({ error: 'no_fields', message: 'provide at least one of status, priority, assignee, agent, what' }, 400)
     }
 
     try {

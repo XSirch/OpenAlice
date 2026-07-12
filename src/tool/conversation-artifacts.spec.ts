@@ -85,14 +85,14 @@ describe('inbox_ask', () => {
 })
 
 function issueContext(opts: {
-  execution?: { mode: 'fresh' } | { mode: 'resume'; resumeId: string }
+  assignee?: string
   runs?: Array<{ taskId: string; resumeId: string }>
 } = {}) {
   const ask = dispatchedAsk()
   const detail = {
     issue: {
       id: 'audit', title: 'Audit', body: '', status: 'todo', priority: 'none',
-      assignee: 'ws:peer', execution: opts.execution ?? { mode: 'fresh' },
+      assignee: opts.assignee ?? 'workspace',
     },
     runs: (opts.runs ?? []).map((run) => ({
       ...run,
@@ -130,7 +130,7 @@ describe('issue_ask', () => {
 
   it('asks the declared stable owner by resumeId', async () => {
     const { ctx, ask } = issueContext({
-      execution: { mode: 'resume', resumeId: 'resume-owner' },
+      assignee: 'session:resume-owner',
     })
     await run(issueAskFactory.build(ctx), { id: 'audit', owner: true, prompt: 'status?' })
     expect(ask).toHaveBeenCalledWith(expect.objectContaining({
@@ -144,7 +144,7 @@ describe('issue_ask', () => {
       id: 'audit', owner: true, prompt: 'status?',
     })).resolves.toMatchObject({
       ok: false,
-      error: expect.stringContaining('has no stable owner'),
+      error: expect.stringContaining('has no stable Session owner'),
     })
     expect(ask).not.toHaveBeenCalled()
   })
