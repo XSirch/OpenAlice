@@ -48,6 +48,7 @@ interface PublishedPackOptions {
   catalogVersion?: string
   catalogPlatform?: NodeJS.Platform
   catalogArch?: string
+  assetVersion?: string
   apiVersion?: number
   includeAsset?: boolean
 }
@@ -72,7 +73,7 @@ async function publishCcxtPack(options: PublishedPackOptions = {}) {
   const catalogName = brokerPackCatalogFileName(version)
   const asset = {
     engine: 'ccxt',
-    version,
+    version: options.assetVersion ?? version,
     apiVersion: options.apiVersion ?? 1,
     file: archiveName,
     entry: 'dist/index.js',
@@ -185,6 +186,31 @@ describe('broker-pack installer', () => {
     await expect(getBrokerPackLocalStatus('ccxt')).resolves.toMatchObject({ installed: true, source: 'downloaded' })
   })
 
+  it('repairs a corrupt content-addressed release without mutating it in place', async () => {
+    const { version } = await publishCcxtPack()
+    const { installBrokerPack, getBrokerPackLocalStatus } = await loadInstaller()
+    await installBrokerPack('ccxt')
+    const { brokerPackEngineRoot, resolveActiveBrokerPack } = await import('../../core/broker-packs.js')
+    const before = await resolveActiveBrokerPack('ccxt')
+    await writeFile(resolve(before!.root, 'package.json'), JSON.stringify({
+      name: '@traderalice/uta-broker-alpaca', version, type: 'module',
+    }))
+
+    await expect(getBrokerPackLocalStatus('ccxt')).resolves.toMatchObject({
+      installed: false, source: 'broken', reason: expect.stringMatching(/package identity/i),
+    })
+    await expect(installBrokerPack('ccxt')).resolves.toMatchObject({ installed: true, source: 'downloaded' })
+
+    const after = await resolveActiveBrokerPack('ccxt')
+    expect(after?.pointer.release).not.toBe(before?.pointer.release)
+    expect(after?.pointer.release).toMatch(/-repair-/)
+    expect(await readdir(resolve(brokerPackEngineRoot('ccxt'), 'releases'))).toHaveLength(2)
+    await expect(getBrokerPackLocalStatus('ccxt')).resolves.toMatchObject({ installed: true, source: 'downloaded' })
+
+    await expect(installBrokerPack('ccxt')).resolves.toMatchObject({ installed: true })
+    expect(await readdir(resolve(brokerPackEngineRoot('ccxt'), 'releases'))).toHaveLength(2)
+  })
+
   it.each([
     ['OpenAlice version', { catalogVersion: '0.0.0-other' }],
     ['platform', { catalogPlatform: process.platform === 'win32' ? 'linux' : 'win32' }],
@@ -201,6 +227,13 @@ describe('broker-pack installer', () => {
     const { installBrokerPack } = await loadInstaller()
 
     await expect(installBrokerPack('ccxt')).rejects.toThrow(/API 2 is unsupported/i)
+  })
+
+  it('rejects an asset version that disagrees with its otherwise compatible catalog', async () => {
+    await publishCcxtPack({ assetVersion: '0.0.0-other' })
+    const { installBrokerPack } = await loadInstaller()
+
+    await expect(installBrokerPack('ccxt')).rejects.toThrow(/asset targets OpenAlice 0\.0\.0-other/i)
   })
 
   it('rejects an archive whose package identity does not match the engine', async () => {
@@ -235,6 +268,24 @@ describe('broker-pack installer', () => {
     const { installBrokerPack } = await loadInstaller()
 
     await expect(installBrokerPack('ccxt')).rejects.toThrow(/already running/i)
+  })
+
+  it('serializes simultaneous installs and leaves one valid active release', async () => {
+    await publishCcxtPack()
+    const { installBrokerPack } = await loadInstaller()
+
+    const results = await Promise.allSettled([
+      installBrokerPack('ccxt'),
+      installBrokerPack('ccxt'),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'rejected')).toEqual([
+      expect.objectContaining({ reason: expect.objectContaining({ message: expect.stringMatching(/already running/i) }) }),
+    ])
+    const { brokerPackEngineRoot, resolveActiveBrokerPack } = await import('../../core/broker-packs.js')
+    await expect(resolveActiveBrokerPack('ccxt')).resolves.toMatchObject({ manifest: { engine: 'ccxt' } })
+    expect(await readdir(brokerPackEngineRoot('ccxt'))).not.toContain('.install.lock')
   })
 
   it('recovers an abandoned incomplete lock after its stale window', async () => {

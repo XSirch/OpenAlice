@@ -33,6 +33,11 @@ async function activateCcxtModule(release: string, source: string) {
   const releaseRoot = resolve(engineRoot, 'releases', release)
   await mkdir(resolve(releaseRoot, 'dist'), { recursive: true })
   await writeFile(resolve(releaseRoot, 'dist/index.js'), source)
+  await writeFile(resolve(releaseRoot, 'package.json'), JSON.stringify({
+    name: '@traderalice/uta-broker-ccxt',
+    version: getCurrentVersion(),
+    type: 'module',
+  }))
   await writeFile(resolve(releaseRoot, 'broker-pack.json'), JSON.stringify({
     schemaVersion: 1,
     apiVersion: 1,
@@ -111,6 +116,20 @@ describe('broker engine registry', () => {
     await expect(loadBrokerEngine('ccxt')).resolves.toMatchObject({
       configSchema: expect.any(Object),
       createBroker: expect.any(Function),
+    })
+  })
+
+  it('wraps a corrupt active pointer as an actionable unavailable-pack error', async () => {
+    const engineRoot = resolve(home, 'runtime/broker-packs/ccxt')
+    await mkdir(engineRoot, { recursive: true })
+    await writeFile(resolve(engineRoot, 'active.json'), '{not-json')
+    const { loadBrokerEngine } = await import('./registry.js')
+
+    await expect(loadBrokerEngine('ccxt')).rejects.toMatchObject({
+      name: 'BrokerPackUnavailableError',
+      code: 'BROKER_PACK_UNAVAILABLE',
+      engine: 'ccxt',
+      message: expect.stringMatching(/is invalid/i),
     })
   })
 })

@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -80,10 +80,16 @@ async function verifyAsset(asset: BrokerPackReleaseAsset, root: string): Promise
   const packageRoot = resolve(root, asset.engine)
   await mkdir(packageRoot)
   await tar.x({ file: archive, cwd: packageRoot, strict: true, preservePaths: false })
-  const pkg = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8')) as { name?: unknown; version?: unknown }
+  const pkg = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8')) as {
+    name?: unknown
+    version?: unknown
+    dependencies?: Record<string, unknown>
+    optionalDependencies?: Record<string, unknown>
+  }
   if (pkg.name !== `@traderalice/uta-broker-${asset.engine}` || pkg.version !== packageJson.version) {
     throw new Error(`${asset.engine} archive package identity mismatch`)
   }
+  await verifyPortableDeployment(asset.engine, packageRoot, pkg)
 
   const [realRoot, realEntry] = await Promise.all([
     realpath(packageRoot),
@@ -96,6 +102,49 @@ async function verifyAsset(asset: BrokerPackReleaseAsset, root: string): Promise
   verifyModuleInCleanProcess(asset.engine, realEntry, packageRoot)
   await rm(packageRoot, { recursive: true, force: true })
   console.log(`[broker-packs] verified ${asset.engine} (${formatBytes(asset.size)})`)
+}
+
+async function verifyPortableDeployment(
+  engine: InstallableBrokerEngine,
+  packageRoot: string,
+  pkg: { dependencies?: Record<string, unknown>; optionalDependencies?: Record<string, unknown> },
+): Promise<void> {
+  for (const [name, spec] of Object.entries({ ...pkg.dependencies, ...pkg.optionalDependencies })) {
+    if (name.startsWith('@traderalice/')) throw new Error(`${engine} archive contains an unbundled workspace dependency: ${name}`)
+    if (typeof spec !== 'string' || /^(?:file|link|workspace):/.test(spec) || spec.includes('file://')) {
+      throw new Error(`${engine} archive contains a non-portable dependency spec: ${name}@${String(spec)}`)
+    }
+  }
+
+  const forbiddenMetadata = [
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+    'node_modules/.modules.yaml',
+    'node_modules/.pnpm-workspace-state-v1.json',
+    'node_modules/.pnpm/lock.yaml',
+    'node_modules/@traderalice',
+    'node_modules/.pnpm/node_modules/@traderalice',
+  ]
+  for (const relativePath of forbiddenMetadata) {
+    if (await pathExists(resolve(packageRoot, relativePath))) {
+      throw new Error(`${engine} archive contains workspace/deployment metadata: ${relativePath}`)
+    }
+  }
+  const virtualStore = resolve(packageRoot, 'node_modules', '.pnpm')
+  const workspaceEntries = (await readdir(virtualStore)).filter((name) => name.startsWith('@traderalice+'))
+  if (workspaceEntries.length > 0) {
+    throw new Error(`${engine} archive contains workspace package paths: ${workspaceEntries.join(', ')}`)
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
 }
 
 function verifyModuleInCleanProcess(engine: InstallableBrokerEngine, entry: string, cwd: string): void {

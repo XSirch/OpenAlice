@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { access, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { basename, resolve, sep } from 'node:path'
@@ -14,6 +14,7 @@ import {
   brokerPackEngineRoot,
   brokerPackReleasesRoot,
   resolveActiveBrokerPack,
+  resolveBrokerPackRelease,
   type BrokerPackActivePointer,
   type InstalledBrokerPackManifest,
   type InstallableBrokerEngine,
@@ -64,7 +65,7 @@ export async function installBrokerPack(engine: InstallableBrokerEngine): Promis
     const catalog = await fetchCatalog(catalogUrl)
     const asset = catalog.packs.find((row) => row.engine === engine)
     if (!asset) throw new Error(`No ${engine} broker pack is published for ${process.platform}-${process.arch}`)
-    validateAsset(asset)
+    validateAsset(asset, getCurrentVersion())
     assertBrokerPackRequirements(asset, {
       platform: process.platform,
       glibcVersion: runtimeGlibcVersion(),
@@ -85,8 +86,7 @@ export async function installBrokerPack(engine: InstallableBrokerEngine): Promis
     await validateExtractedPackage(extracted, engine, asset)
 
     const contentId = actualSha.slice(0, 16)
-    const release = `${safePart(asset.version)}-${contentId}`
-    const finalRoot = resolve(brokerPackReleasesRoot(engine), release)
+    const preferredRelease = `${safePart(asset.version)}-${contentId}`
     const installedAt = new Date().toISOString()
     const manifest: InstalledBrokerPackManifest = {
       schemaVersion: BROKER_PACK_SCHEMA_VERSION,
@@ -101,12 +101,7 @@ export async function installBrokerPack(engine: InstallableBrokerEngine): Promis
     await writeFile(resolve(extracted, 'broker-pack.json'), JSON.stringify(manifest, null, 2) + '\n')
 
     await mkdir(brokerPackReleasesRoot(engine), { recursive: true })
-    try {
-      await rename(extracted, finalRoot)
-    } catch (err) {
-      if (!isCode(err, 'EEXIST') && !isCode(err, 'ENOTEMPTY')) throw err
-      await access(resolve(finalRoot, asset.entry))
-    }
+    const release = await activateImmutableRelease(extracted, engine, preferredRelease, asset, contentId)
 
     const pointer: BrokerPackActivePointer = {
       schemaVersion: BROKER_PACK_SCHEMA_VERSION,
@@ -142,12 +137,88 @@ async function fetchCatalog(url: string): Promise<BrokerPackReleaseCatalog> {
   return raw as BrokerPackReleaseCatalog
 }
 
-function validateAsset(asset: BrokerPackReleaseAsset): void {
+function validateAsset(asset: BrokerPackReleaseAsset, currentVersion: string): void {
+  if (asset.version !== currentVersion) throw new Error(`Broker-pack asset targets OpenAlice ${asset.version}; expected ${currentVersion}`)
   if (asset.apiVersion !== BROKER_PACK_API_VERSION) throw new Error(`Broker-pack API ${asset.apiVersion} is unsupported`)
   if (!/^[A-Za-z0-9._-]+$/.test(asset.file) || basename(asset.file) !== asset.file) throw new Error('Invalid broker-pack asset name')
   if (!/^[a-f0-9]{64}$/.test(asset.sha256)) throw new Error('Invalid broker-pack checksum')
   if (!Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > MAX_PACK_BYTES) throw new Error('Invalid broker-pack size')
   if (!asset.entry || asset.entry.startsWith('/') || asset.entry.includes('..')) throw new Error('Invalid broker-pack entry')
+}
+
+async function activateImmutableRelease(
+  extracted: string,
+  engine: InstallableBrokerEngine,
+  preferredRelease: string,
+  asset: BrokerPackReleaseAsset,
+  contentId: string,
+): Promise<string> {
+  const active = await resolveActiveBrokerPack(engine).catch(() => null)
+  if (
+    active
+    && active.manifest.contentId === contentId
+    && active.manifest.entry === asset.entry
+    && active.manifest.version === asset.version
+  ) {
+    return active.pointer.release
+  }
+
+  if (await releaseMatches(engine, preferredRelease, asset, contentId)) return preferredRelease
+
+  const preferredRoot = resolve(brokerPackReleasesRoot(engine), preferredRelease)
+  if (!await pathExists(preferredRoot)) {
+    try {
+      await rename(extracted, preferredRoot)
+      return preferredRelease
+    } catch (err) {
+      // A destination may appear between the existence check and rename. This
+      // is also how Windows reports a rename onto an existing directory.
+      if (await releaseMatches(engine, preferredRelease, asset, contentId)) return preferredRelease
+      if (!await pathExists(preferredRoot)) throw err
+    }
+  }
+
+  // Never mutate a corrupt immutable release in place: the running UTA may
+  // still have its native files open on Windows. Install a fresh repair release
+  // and switch active.json only after the replacement is complete.
+  const repairRelease = await nextRepairReleaseId(engine, preferredRelease)
+  await rename(extracted, resolve(brokerPackReleasesRoot(engine), repairRelease))
+  return repairRelease
+}
+
+async function releaseMatches(
+  engine: InstallableBrokerEngine,
+  release: string,
+  asset: BrokerPackReleaseAsset,
+  contentId: string,
+): Promise<boolean> {
+  try {
+    const existing = await resolveBrokerPackRelease(engine, release)
+    return existing.manifest.contentId === contentId
+      && existing.manifest.entry === asset.entry
+      && existing.manifest.version === asset.version
+  } catch {
+    return false
+  }
+}
+
+async function nextRepairReleaseId(engine: InstallableBrokerEngine, base: string): Promise<string> {
+  const stamp = `${Date.now()}-${process.pid}`
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const release = `${base}-repair-${stamp}-${attempt}`
+    if (!await pathExists(resolve(brokerPackReleasesRoot(engine), release))) return release
+  }
+  throw new Error(`Unable to allocate a repair release for ${engine}`)
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch (err) {
+    if (isCode(err, 'ENOENT')) return false
+    throw err
+  }
 }
 
 async function download(url: string, target: string, expectedSize: number): Promise<void> {
@@ -161,16 +232,21 @@ async function download(url: string, target: string, expectedSize: number): Prom
 }
 
 async function validateExtractedPackage(root: string, engine: InstallableBrokerEngine, asset: BrokerPackReleaseAsset): Promise<void> {
-  const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')) as { name?: unknown; version?: unknown }
-  if (pkg.name !== `@traderalice/uta-broker-${engine}`) throw new Error(`Broker-pack package name mismatch for ${engine}`)
-  if (pkg.version !== asset.version) throw new Error(`Broker-pack package version mismatch for ${engine}`)
-  const [realRoot, realEntry] = await Promise.all([
+  const packagePath = resolve(root, 'package.json')
+  const [realRoot, realPackage, realEntry] = await Promise.all([
     realpath(root),
+    realpath(packagePath),
     realpath(resolve(root, asset.entry)),
   ])
+  if (realPackage === realRoot || !realPackage.startsWith(`${realRoot}${sep}`)) {
+    throw new Error(`Broker-pack package metadata escapes the extracted package for ${engine}`)
+  }
   if (realEntry === realRoot || !realEntry.startsWith(`${realRoot}${sep}`)) {
     throw new Error(`Broker-pack entry escapes the extracted package for ${engine}`)
   }
+  const pkg = JSON.parse(await readFile(packagePath, 'utf8')) as { name?: unknown; version?: unknown }
+  if (pkg.name !== `@traderalice/uta-broker-${engine}`) throw new Error(`Broker-pack package name mismatch for ${engine}`)
+  if (pkg.version !== asset.version) throw new Error(`Broker-pack package version mismatch for ${engine}`)
 }
 
 function resolveCatalogUrl(): string {

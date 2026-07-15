@@ -99,7 +99,16 @@ export function createTradingConfigRoutes(ctx: EngineContext) {
       const requiredBy = new Map<string, string[]>()
       for (const account of accounts) {
         if (account.enabled === false) continue
-        const engine = getBrokerPreset(account.presetId).engine
+        let engine: string
+        try {
+          engine = getBrokerPreset(account.presetId).engine
+        } catch (err) {
+          console.warn(
+            `[trading-config] unable to map UTA ${account.id} to a Broker Pack:`,
+            err instanceof Error ? err.message : err,
+          )
+          continue
+        }
         const rows = requiredBy.get(engine) ?? []
         rows.push(account.label ?? account.id)
         requiredBy.set(engine, rows)

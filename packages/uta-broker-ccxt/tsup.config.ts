@@ -9,6 +9,7 @@ export default defineConfig({
   sourcemap: true,
   splitting: false,
   skipNodeModulesBundle: true,
+  noExternal: [/^@traderalice\//, /^@bufbuild\/protobuf(?:\/|$)/],
   esbuildOptions: (options) => {
     options.conditions = ['openalice-source', ...(options.conditions ?? [])]
   },

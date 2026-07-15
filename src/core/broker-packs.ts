@@ -3,7 +3,7 @@
  * Alice installs and activates immutable releases; UTA only resolves them.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { runtimePath } from './paths.js'
 import { getCurrentVersion } from './version.js'
@@ -46,6 +46,12 @@ export interface ResolvedBrokerPack {
   manifest: InstalledBrokerPackManifest
 }
 
+export interface ResolvedBrokerPackRelease {
+  root: string
+  entry: string
+  manifest: InstalledBrokerPackManifest
+}
+
 export function isInstallableBrokerEngine(value: string): value is InstallableBrokerEngine {
   return (INSTALLABLE_BROKER_ENGINES as readonly string[]).includes(value)
 }
@@ -72,12 +78,35 @@ export async function resolveActiveBrokerPack(engine: InstallableBrokerEngine): 
   }
 
   const pointer = parseActivePointer(pointerRaw, engine)
+  const release = await resolveBrokerPackRelease(engine, pointer.release)
+  return { ...release, pointer }
+}
+
+export async function resolveBrokerPackRelease(
+  engine: InstallableBrokerEngine,
+  release: string,
+): Promise<ResolvedBrokerPackRelease> {
+  if (!/^[A-Za-z0-9._-]+$/.test(release)) {
+    throw new Error(`Invalid broker-pack release id for ${engine}`)
+  }
   const releasesRoot = brokerPackReleasesRoot(engine)
-  const root = resolve(releasesRoot, pointer.release)
+  const root = resolve(releasesRoot, release)
   assertChild(releasesRoot, root, 'release')
 
+  const manifestPath = resolve(root, 'broker-pack.json')
+  const packagePath = resolve(root, 'package.json')
+  const [realReleasesRoot, realRoot, realManifest, realPackage] = await Promise.all([
+    realpath(releasesRoot),
+    realpath(root),
+    realpath(manifestPath),
+    realpath(packagePath),
+  ])
+  assertChild(realReleasesRoot, realRoot, 'release')
+  assertChild(realRoot, realManifest, 'manifest')
+  assertChild(realRoot, realPackage, 'package')
+
   const manifest = parseInstalledManifest(
-    JSON.parse(await readFile(resolve(root, 'broker-pack.json'), 'utf8')),
+    JSON.parse(await readFile(manifestPath, 'utf8')),
     engine,
   )
   const currentVersion = getCurrentVersion()
@@ -86,9 +115,15 @@ export async function resolveActiveBrokerPack(engine: InstallableBrokerEngine): 
       `Installed broker pack ${engine} targets OpenAlice ${manifest.version}; ${currentVersion} is running`,
     )
   }
-  const entry = resolve(root, manifest.entry)
-  assertChild(root, entry, 'entry')
-  return { root, entry, pointer, manifest }
+  const pkg = JSON.parse(await readFile(packagePath, 'utf8')) as { name?: unknown; version?: unknown }
+  if (pkg.name !== `@traderalice/uta-broker-${engine}` || pkg.version !== manifest.version) {
+    throw new Error(`Installed broker pack ${engine} has an invalid package identity`)
+  }
+  const declaredEntry = resolve(root, manifest.entry)
+  assertChild(root, declaredEntry, 'entry')
+  const realEntry = await realpath(declaredEntry)
+  assertChild(realRoot, realEntry, 'entry')
+  return { root, entry: declaredEntry, manifest }
 }
 
 function parseActivePointer(raw: unknown, engine: InstallableBrokerEngine): BrokerPackActivePointer {

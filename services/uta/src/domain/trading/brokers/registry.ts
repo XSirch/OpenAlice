@@ -15,6 +15,7 @@ import {
   BROKER_PACK_API_VERSION,
   isInstallableBrokerEngine,
   resolveActiveBrokerPack,
+  type ResolvedBrokerPack,
   type InstallableBrokerEngine,
 } from '@/core/broker-packs.js'
 import { appResourcesHome } from '@/core/paths.js'
@@ -74,7 +75,15 @@ async function loadBrokerEngineUncached(engine: BrokerEngine): Promise<BrokerEng
   }
   if (!isInstallableBrokerEngine(engine)) throw new Error(`Unknown broker engine "${engine}"`)
 
-  const installed = await resolveActiveBrokerPack(engine)
+  let installed: ResolvedBrokerPack | null
+  try {
+    installed = await resolveActiveBrokerPack(engine)
+  } catch (err) {
+    throw new BrokerPackUnavailableError(
+      engine,
+      `Installed broker pack "${engine}" is invalid: ${err instanceof Error ? err.message : String(err)}`,
+    )
+  }
   if (installed) {
     try {
       return validateModule(engine, await import(pathToFileURL(installed.entry).href))

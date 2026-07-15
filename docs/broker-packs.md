@@ -40,9 +40,11 @@ configSchema: ZodType
 createBroker(config): IBroker
 ```
 
-The wrapper workspaces live under `packages/uta-broker-*`. They bundle only
-OpenAlice's engine adapter code; third-party packages remain external within
-each deployed Pack. `services/uta/src/domain/trading/brokers/registry.ts`
+The wrapper workspaces live under `packages/uta-broker-*`. They bundle the
+OpenAlice-owned adapter/protocol code needed at runtime; third-party broker SDKs
+remain external within each deployed Pack. Release assembly removes workspace
+links, pnpm lock/workspace metadata, and build-machine paths before archiving.
+`services/uta/src/domain/trading/brokers/registry.ts`
 statically imports only Mock, then loads one active Pack by file URL when an
 account actually needs that engine.
 
@@ -84,8 +86,12 @@ which performs this transaction:
 
 Failure before pointer replacement leaves the previous active release intact.
 An installation lock rejects concurrent mutation of the same engine. Pack
-directories are replaceable machine/runtime state: backup `data/`, credentials,
-and Workspaces, then reinstall Packs after moving to an incompatible machine.
+reinstallation reuses a matching content-addressed release. If that release is
+corrupt, Alice installs a separate immutable `-repair-...` release and switches
+the pointer; it does not overwrite files that a Windows UTA process may still
+have open. Pack directories are replaceable machine/runtime state: backup
+`data/`, credentials, and Workspaces, then reinstall Packs after moving to an
+incompatible machine.
 
 Linux catalogs may declare a minimum glibc version. The current Longbridge GNU
 artifact requires glibc 2.39, so older Ubuntu/WSL systems are rejected before
@@ -106,9 +112,10 @@ Linux x64; publishes the files with the desktop release; mirrors them to the
 download CDN; and verifies every catalog and referenced archive.
 
 The build command also extracts every generated archive, verifies its catalog
-membership, size, SHA-256, package identity, and entry containment, then imports
-the entry in a clean Node process. `pnpm broker-packs:verify` repeats that
-acceptance check against an existing `dist/broker-packs/` directory.
+membership, size, SHA-256, package identity, entry containment, and absence of
+workspace/deployment metadata, then imports the entry in a clean Node process.
+`pnpm broker-packs:verify` repeats that acceptance check against an existing
+`dist/broker-packs/` directory.
 
 Desktop package acceptance rejects `ccxt`, `longbridge`, its native binding,
 and `@alpacahq/alpaca-trade-api` if they reappear under packaged

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 
@@ -28,6 +28,9 @@ async function writeActivePack(options: {
   version?: string
   apiVersion?: number
   entry?: string
+  packageName?: string
+  packageVersion?: string
+  writeEntry?: boolean
 } = {}) {
   const { getCurrentVersion } = await import('./version.js')
   const release = options.release ?? '0.80.0-testcontent'
@@ -49,7 +52,14 @@ async function writeActivePack(options: {
     contentId: 'testcontent',
     installedAt: '2026-07-15T00:00:00.000Z',
   }))
-  await writeFile(resolve(releaseRoot, 'dist/index.js'), 'export const ok = true\n')
+  await writeFile(resolve(releaseRoot, 'package.json'), JSON.stringify({
+    name: options.packageName ?? '@traderalice/uta-broker-ccxt',
+    version: options.packageVersion ?? options.version ?? getCurrentVersion(),
+    type: 'module',
+  }))
+  if (options.writeEntry !== false) {
+    await writeFile(resolve(releaseRoot, 'dist/index.js'), 'export const ok = true\n')
+  }
   return { engineRoot, releaseRoot }
 }
 
@@ -115,4 +125,35 @@ describe('resolveActiveBrokerPack', () => {
 
     await expect(resolveActiveBrokerPack('ccxt')).rejects.toThrow(/entry escapes/i)
   })
+
+  it('rejects a missing entry or mismatched package identity as a broken release', async () => {
+    await writeActivePack({ writeEntry: false })
+    const { resolveActiveBrokerPack } = await import('./broker-packs.js')
+    await expect(resolveActiveBrokerPack('ccxt')).rejects.toThrow(/ENOENT/i)
+
+    await writeActivePack({ packageName: '@traderalice/uta-broker-alpaca' })
+    await expect(resolveActiveBrokerPack('ccxt')).rejects.toThrow(/invalid package identity/i)
+  })
+
+  if (process.platform !== 'win32') {
+    it('rejects an entry symlink that resolves outside the immutable release', async () => {
+      const { releaseRoot } = await writeActivePack({ writeEntry: false })
+      const outside = resolve(home, 'outside.js')
+      await writeFile(outside, 'export const escaped = true\n')
+      await symlink(outside, resolve(releaseRoot, 'dist/index.js'))
+      const { resolveActiveBrokerPack } = await import('./broker-packs.js')
+
+      await expect(resolveActiveBrokerPack('ccxt')).rejects.toThrow(/entry escapes/i)
+    })
+
+    it('rejects a release directory symlink that escapes the engine release root', async () => {
+      const { releaseRoot } = await writeActivePack()
+      const outside = resolve(home, 'outside-release')
+      await rename(releaseRoot, outside)
+      await symlink(outside, releaseRoot, 'dir')
+      const { resolveActiveBrokerPack } = await import('./broker-packs.js')
+
+      await expect(resolveActiveBrokerPack('ccxt')).rejects.toThrow(/release escapes/i)
+    })
+  }
 })

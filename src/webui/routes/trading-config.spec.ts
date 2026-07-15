@@ -123,6 +123,24 @@ describe('GET /broker-packs — optional engine requirements', () => {
       requiredBy: ['Main OKX'],
     }))
   })
+
+  it('keeps pack recovery UI available when a legacy account references a removed preset', async () => {
+    utaStore = [{
+      id: 'legacy-account', label: 'Legacy account', presetId: 'removed-preset', enabled: true,
+      presetConfig: {}, guards: [], asVendor: true,
+    }]
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { status, body } = await req(makeRoutes(), 'GET', '/broker-packs')
+
+    expect(status).toBe(200)
+    expect((body as { packs: unknown[] }).packs).toHaveLength(6)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('legacy-account'),
+      expect.stringMatching(/unknown broker preset/i),
+    )
+    warn.mockRestore()
+  })
 })
 
 describe('POST /broker-packs/:engine/install', () => {
