@@ -96,7 +96,9 @@ describe('OpenAlice local Runtime launcher', () => {
     expect(probeRuntime).toHaveBeenNthCalledWith(2, 'http://127.0.0.1:3002')
     expect(resolveRoot).not.toHaveBeenCalled()
     expect(launchBrowser).toHaveBeenCalledWith('http://127.0.0.1:3002')
-    expect(stdout.write).toHaveBeenCalledWith(expect.stringContaining('/tmp/user/.openalice'))
+    expect(stdout.write).toHaveBeenCalledWith(
+      expect.stringContaining(resolve('/tmp/user', '.openalice')),
+    )
   })
 
   it('prefers an owner-advertised web endpoint over persisted port configuration', async () => {

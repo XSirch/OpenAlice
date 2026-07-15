@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { composePnpmCommand } from './pnpm-command.mjs'
+import { composePnpmCommand, runPnpmSync } from './pnpm-command.mjs'
 
 describe('composePnpmCommand', () => {
   it('uses a direct shell-free pnpm invocation on POSIX', () => {
     expect(composePnpmCommand(['electron:build'], { platform: 'darwin' })).toEqual({
       command: 'pnpm',
       args: ['electron:build'],
+      windowsVerbatimArguments: false,
     })
   })
 
@@ -22,6 +23,7 @@ describe('composePnpmCommand', () => {
         '/c',
         'pnpm.cmd "-F" "@traderalice/desktop" "exec" "electron-builder"',
       ],
+      windowsVerbatimArguments: true,
     })
   })
 
@@ -35,5 +37,41 @@ describe('composePnpmCommand', () => {
     expect(spec.args.at(-1)).toBe(
       'pnpm.cmd "deploy" "--prod" "C:\\Users\\Alice Dev\\broker pack"',
     )
+    expect(spec.windowsVerbatimArguments).toBe(true)
   })
+})
+
+describe.runIf(process.platform === 'win32')('runPnpmSync on Windows', () => {
+  it('runs a quoted pnpm command through the installed Corepack shim', () => {
+    const result = runPnpmSync(['--version'], {
+      encoding: 'utf8',
+      env: process.env,
+    })
+
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(0)
+    expect(result.stdout).toMatch(/^\d+\.\d+\.\d+/)
+  }, 15_000)
+
+  it('preserves a leading config flag, spaces, and cmd metacharacters', () => {
+    const result = runPnpmSync([
+      '--config.inject-workspace-packages=true',
+      'exec',
+      'node',
+      '-e',
+      'process.stdout.write(JSON.stringify(process.argv.slice(1)))',
+      'C:\\Alice Work\\broker pack',
+      'alpha&beta',
+    ], {
+      encoding: 'utf8',
+      env: process.env,
+    })
+
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(0)
+    expect(JSON.parse(result.stdout)).toEqual([
+      'C:\\Alice Work\\broker pack',
+      'alpha&beta',
+    ])
+  }, 15_000)
 })

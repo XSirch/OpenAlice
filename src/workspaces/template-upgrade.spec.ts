@@ -71,7 +71,12 @@ beforeEach(async () => {
   };
 });
 
-afterEach(async () => rm(root, { recursive: true, force: true }));
+afterEach(async () => rm(root, {
+  recursive: true,
+  force: true,
+  maxRetries: 5,
+  retryDelay: 100,
+}));
 
 describe('TemplateUpgradeManager', () => {
   it('classifies incoming updates, local customizations, dual edits, and additions', async () => {
@@ -232,7 +237,7 @@ describe('TemplateUpgradeManager', () => {
         .toContain('# Chat');
       expect(plan.files.some((entry) => entry.path.startsWith('.agents/skills/'))).toBe(true);
     }
-  });
+  }, 15_000);
 });
 
 describe('isManagedTemplatePath', () => {

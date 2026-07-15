@@ -5,7 +5,6 @@ import { createReadStream } from 'node:fs'
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, resolve } from 'node:path'
-import { spawnSync } from 'node:child_process'
 import * as tar from 'tar'
 import {
   BROKER_PACK_API_VERSION,
@@ -19,7 +18,7 @@ import {
   type BrokerPackRequirement,
   type BrokerPackReleaseCatalog,
 } from '../src/core/broker-pack-catalog.js'
-import { composePnpmCommand } from './pnpm-command.mjs'
+import { runPnpmSync } from './pnpm-command.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '..')
 const packageJson = JSON.parse(await readFile(resolve(repoRoot, 'package.json'), 'utf8')) as { version: string }
@@ -78,12 +77,11 @@ try {
 }
 
 function deployPackage(packageName: string, target: string): void {
-  const command = composePnpmCommand([
+  const result = runPnpmSync([
     '--config.inject-workspace-packages=true',
     '--filter', packageName,
     'deploy', '--prod', target,
-  ])
-  const result = spawnSync(command.command, command.args, {
+  ], {
     cwd: repoRoot,
     stdio: 'inherit',
     env: process.env,
