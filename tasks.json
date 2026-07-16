@@ -105,7 +105,7 @@
         {
           "id": "AINV-T115",
           "title": "Validar restart e recovery do transporte inbound",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T114"],
           "scope": ["services/connector/src", "src/services/connector-client", "scripts"],
           "acceptance_criteria": ["Remover descarte de updates pendentes somente quando o journal for seguro", "Cobrir interrupção em cada transição", "Nenhum update aceito é perdido ou entregue duas vezes"],

@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Recover persisted/forwarded inbound work after Connector restart and retain
+  pending Telegram updates now that journal deduplication protects replay.
 - Add an authenticated, correlation-preserving Connector-to-Alice inbound
   bridge with process-local idempotency protection.
 - Add bounded generic inbound dispatch with transient-only retry, timeout, and

@@ -21,4 +21,14 @@ describe('ConnectorInboundDispatcher', () => {
     await expect(new ConnectorInboundDispatcher({ journal: store, target: { deliver } }).dispatch(persisted)).resolves.toMatchObject({ state: 'dead_letter', attempts: 1 })
     expect(deliver).toHaveBeenCalledOnce()
   })
+  it('recovers an interruption after forwarding without re-delivering completed work', async () => {
+    const store = await journal(); const first = (await store.persist(message)).entry
+    const forwarded = await store.transition(first.dedupeKey, 'forwarded')
+    const completed = await store.persist({ ...message, correlationId: 'done', external: { ...message.external, updateId: 'done' } })
+    await store.transition(completed.entry.dedupeKey, 'forwarded'); await store.transition(completed.entry.dedupeKey, 'completed')
+    const deliver = vi.fn(async () => undefined)
+    await new ConnectorInboundDispatcher({ journal: store, target: { deliver } }).recover()
+    expect(deliver).toHaveBeenCalledTimes(1)
+    expect((await store.entries()).find((entry) => entry.dedupeKey === forwarded.dedupeKey)).toMatchObject({ state: 'completed' })
+  })
 })

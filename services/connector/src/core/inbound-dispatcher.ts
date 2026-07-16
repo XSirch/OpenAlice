@@ -49,7 +49,9 @@ export class ConnectorInboundDispatcher {
 
   async recover(): Promise<InboundJournalEntry[]> {
     const pending = (await this.options.journal.entries())
-      .filter((entry) => entry.state === 'persisted' || entry.state === 'retry_scheduled')
+      // A crash after `forwarded` but before the bridge response is ambiguous;
+      // replay it through the Alice correlation gate rather than losing it.
+      .filter((entry) => entry.state === 'persisted' || entry.state === 'forwarded' || entry.state === 'retry_scheduled')
     return Promise.all(pending.map((entry) => this.dispatch(entry)))
   }
 }

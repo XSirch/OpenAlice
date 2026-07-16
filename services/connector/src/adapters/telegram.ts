@@ -57,7 +57,9 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
     await bot.init()
     if (this.ownerUserId && this.chatId) this.tracker.healthy(this.ownerUserId)
     else this.tracker.awaitingLink()
-    void bot.start({ drop_pending_updates: true }).catch((error) => {
+    // Inbound envelopes are journaled/deduplicated before dispatch, so pending
+    // updates are safe to replay after a Connector restart.
+    void bot.start().catch((error) => {
       this.tracker.degraded(error)
       console.warn('[connector] Telegram polling stopped:', error instanceof Error ? error.message : error)
     })
