@@ -6,6 +6,10 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Decide the structured-router boundary: local rules remain the fast path and
+  execution block, while a future narrow direct client handles validated
+  ambiguity. The live OpenRouter measurement is explicitly blocked pending an
+  owner-created Custom experiment credential; no runtime integration is added.
 - Add owner-authorized `/new` conversation rotation for Telegram and Discord.
   The Connector authenticates the rotation request to Alice and retains the
   previous Session history.

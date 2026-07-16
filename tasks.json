@@ -153,7 +153,7 @@
         {
           "id": "AINV-T300",
           "title": "Avaliar arquitetura do structured router com OpenRouter",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006"],
           "scope": ["docs/alice-invest-architecture.md", "src/ai-providers", "src/workspaces"],
           "acceptance_criteria": ["Comparar runtime nativo Pi/opencode, cliente direto e regras locais", "Medir latência, custo, JSON Schema, retries, contexto, telemetria, isolamento, testes, manutenção e fallback", "Produzir ADR ou decisão atualizada"],

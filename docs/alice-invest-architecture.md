@@ -193,22 +193,23 @@ task count. Invalid output fails closed with clarification.
 
 ## OpenRouter is a decision gate
 
-OpenRouter integration is not decided by this document. `AINV-T300` first
-compares three structured-router implementations: (A) Pi or opencode through
-their native `openai-chat` runtime configuration, (B) a direct Alice Invest
-client with schema-validated output, and (C) deterministic local rules with no
-model call. It measures latency, cost, valid JSON rate and real JSON Schema
-support, retry/timeout behavior, context control, telemetry, credential
-isolation, testability, maintenance cost, and fallback behavior. The result is
-an ADR before router implementation.
+`AINV-T300` records the decision in
+[`alice-invest-structured-router-adr.md`](alice-invest-structured-router-adr.md).
+Local rules own the fast path and all execution blocks. A direct, narrow Alice
+Invest client is the selected structured-router path for ambiguity; it validates
+its schema before dispatch and cannot run tools. Pi and opencode retain their
+native model loops for user-facing Workspace work, rather than serving as a
+synchronous router API.
 
 The existing `Custom` credential preset already permits the initial functional
 spike with `baseUrl: https://openrouter.ai/api/v1` and
 `wireShape: openai-chat`; Pi and opencode already support that wire. A dedicated
-OpenRouter visual preset is useful only if the ADR justifies it and never blocks
-the spike. Any selected path keeps keys write-only/sealed and role models
-configurable rather than hard-coded. Environment variables may import headless
-deployment settings but must converge on the same vault/config boundary.
+OpenRouter visual preset is deferred and never blocks the spike. Any selected
+path keeps keys write-only/sealed and role models configurable rather than
+hard-coded. Environment variables may import headless deployment settings but
+must converge on the same vault/config boundary. Live measurements remain
+blocked until an owner creates a dedicated Custom experiment credential; no
+existing credential may be inspected or repurposed.
 
 Calls record purpose, requested/resolved model, tokens, provider cost, latency,
 run ID, and `resumeId` when available. They never record keys or sensitive
