@@ -3,7 +3,7 @@ import { cors } from 'hono/cors'
 import { createAdaptorServer, serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { rm } from 'node:fs/promises'
-import { uiBundlePath } from '@/core/paths.js'
+import { dataPath, uiBundlePath } from '@/core/paths.js'
 import type { Plugin, EngineContext } from '../core/types.js'
 import { SessionStore } from '../core/session.js'
 import { readWebSubchannels } from '../core/config.js'
@@ -13,6 +13,9 @@ import { createConfigRoutes, createMarketDataRoutes } from './routes/config.js'
 import { createConnectorRoutes } from './routes/connectors.js'
 import { createConnectorInboundRoutes } from './routes/connector-inbound.js'
 import { ConnectorInboundReceiver } from '../core/connector-inbound-receiver.js'
+import { ExternalConversationBindingStore } from '../core/external-conversation-bindings.js'
+import { ExternalConversationDispatcher, workspaceConversationDispatchTarget } from '../workspaces/external-conversation-dispatch.js'
+import { createWorkspaceConversationControl } from '../workspaces/conversation-control.js'
 import { createScheduleRoutes } from './routes/schedule.js'
 import { createIssuesRoutes } from './routes/issues.js'
 import { createInquiryRoutes } from './routes/inquiries.js'
@@ -206,7 +209,20 @@ export class WebPlugin implements Plugin {
     app.route('/api/auth', createAuthRoutes({ trustedProxies }))
     // Process-to-process HMAC authentication is intentionally separate from
     // browser/session auth and accepts no user-facing traffic.
-    const inboundReceiver = new ConnectorInboundReceiver()
+    const workspaceService = this.workspaceServiceRef?.current ?? this.workspaceService
+    if (!workspaceService) throw new Error('Workspace service is unavailable for Connector inbound bridge')
+    const conversationBindings = new ExternalConversationBindingStore(dataPath('config', 'external-conversation-bindings.json'))
+    const conversationDispatcher = new ExternalConversationDispatcher(
+      workspaceConversationDispatchTarget(createWorkspaceConversationControl(workspaceService)),
+      ctx.inboxStore,
+    )
+    const inboundReceiver = new ConnectorInboundReceiver(async (message) => {
+      const binding = await conversationBindings.resolve(message.connectorId, message.external.conversationId, message.external.senderId)
+      if (!binding) throw new Error('external conversation is not bound to a Session')
+      const identity = workspaceService.resumeRegistry.get(binding.resumeId)
+      if (!identity) throw new Error('bound Session is unavailable')
+      await conversationDispatcher.dispatch({ resumeId: binding.resumeId, workspaceId: identity.wsId, prompt: message.content.text })
+    })
     app.route('/api/connector-inbound', createConnectorInboundRoutes((message) => inboundReceiver.receive(message)))
     app.use('*', createAuthMiddleware({
       trustedProxies,
