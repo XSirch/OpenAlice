@@ -1,7 +1,7 @@
 # Workspace Manager
 
 This guide owns the launcher-level Agent that audits and coordinates every
-active Workspace. It covers identity, cwd, WebPi startup, CLI inventory, UI
+active Workspace. It covers identity, cwd, Agent runtime startup, CLI inventory, UI
 entry points, and the boundary that prevents the manager from becoming another
 business desk.
 
@@ -21,9 +21,9 @@ such as:
 - Which Workspace should receive a new task, direct edit, or template upgrade?
 
 It is not a normal Chat Workspace. The UI gives it a distinct entry and a
-management-specific quick start. The runtime is fixed to Pi rendered through
-WebPi, so the user gets a controllable browser conversation without pretending
-that the manager owns a TUI desk.
+management-specific quick start. Its runtime picker consumes the same registered
+Agent list, saved default, install state, and readiness contract as Quick Chat.
+Pi uses WebPi; Claude, Codex, and OpenCode retain their native TUI surfaces.
 
 ## Identity and Cwd
 
@@ -41,13 +41,17 @@ The distinction is load-bearing:
   configuration, and unrelated runtime files.
 
 Manager Session and resume identities still use the ordinary durable registries
-under the reserved id. A launcher restart can therefore reopen the exact Pi
-conversation in WebPi without inventing a new business Workspace.
+under the reserved id. A launcher restart can therefore reopen the exact native
+conversation without inventing a new business Workspace.
 
 ## Runtime Contract
 
-Every WebPi start, including resume after restart, appends a launcher-owned
-system contract and loads `default/skills/workspace-manager`. The contract says:
+Every Manager runtime receives the same launcher-owned role contract. Pi appends
+it as a system prompt and loads `default/skills/workspace-manager` on every WebPi
+start, including resume after restart. Native TUIs receive the contract in the
+fresh interactive seed because those CLIs do not share one portable system-
+prompt flag; their durable native transcript carries it across later resumes.
+The contract says:
 
 - inspect and coordinate the active floor;
 - use the embedded `alice-workspace` CLI instead of raw localhost APIs;
@@ -60,7 +64,8 @@ system contract and loads `default/skills/workspace-manager`. The contract says:
 
 WebPi explicitly approves this launcher-owned cwd. There is no TUI trust prompt
 to render, and entering the dedicated manager surface is the user's visible
-approval for the bundled skill and control-plane directory.
+approval for the bundled skill and control-plane directory. Native runtimes keep
+their existing login, provider-injection, install, and trust behavior.
 
 ## CLI Surface
 
@@ -105,7 +110,8 @@ apply remains preview-first.
 - `src/tool/workspace-list.ts` — active floor inventory.
 - `src/server/cli.ts` and `src/server/cli-commands.ts` — embedded CLI exposure.
 - `src/webui/routes/workspaces.ts` — manager status, quick start, and resume.
-- `ui/src/pages/WorkspaceManagerPage.tsx` — distinct quick start and WebPi shell.
+- `ui/src/lib/agentRuntime.ts` — shared Quick Chat/Manager runtime resolution.
+- `ui/src/pages/WorkspaceManagerPage.tsx` — runtime picker and WebPi/TUI shell.
 - `ui/src/components/workspace/ChatWorkspaceSection.tsx` — Chat sidebar entry.
 
 ## Verification
@@ -120,11 +126,13 @@ pnpm vitest run src/tool/workspace-list.spec.ts \
   src/webui/routes/workspaces.spec.ts
 ```
 
-Then use the real `/chat/manager` route with a configured Pi credential:
+Then use the real `/chat/manager` route with at least two available runtimes:
 
-1. inventory the active floor and confirm real `peer list` tool use;
-2. compare a harmless `--ws-id` reconstruction with an exact `--resume-id`
+1. verify the runtime picker agrees with Quick Chat and preserves the saved default;
+2. start one Pi/WebPi and one native-TUI Manager Session, then reopen both;
+3. inventory the active floor and confirm real `peer list` tool use;
+4. compare a harmless `--ws-id` reconstruction with an exact `--resume-id`
    continuation and verify their resolution modes remain visible;
-3. preview a peer template upgrade without `--apply`;
-4. confirm no business artifact appeared at the floor root;
-5. reload the manager conversation and confirm the same resume identity opens.
+5. preview a peer template upgrade without `--apply`;
+6. confirm no business artifact appeared at the floor root;
+7. reload the manager conversation and confirm the same resume identity opens.

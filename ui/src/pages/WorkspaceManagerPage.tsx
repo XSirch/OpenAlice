@@ -5,47 +5,87 @@ import {
   ArrowUp,
   Bot,
   Building2,
+  Check,
+  ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Code2,
+  Cpu,
   GitMerge,
   KeyRound,
   Loader2,
   Network,
   RefreshCw,
+  Sparkles,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
+import '@xterm/xterm/css/xterm.css'
 
 import { preferencesApi } from '../api/preferences'
 import type { QuickChatPreferences } from '../api/preferences'
 import {
+  getAgentRuntimeReadiness,
   getWorkspaceManager,
   listAgentCredentials,
   MANAGER_WORKSPACE_ID,
   openWebPiSession,
+  probeAgentRuntimeReadiness,
   quickStartWorkspaceManager,
+  resumeSession,
   type ManagerWorkspaceSnapshot,
   type SavedCredential,
 } from '../components/workspace/api'
+import { TerminalView } from '../components/workspace/Terminal'
 import { WebPiView } from '../components/workspace/WebPiView'
+import { useWorkspaces } from '../contexts/workspaces-context'
+import { isLoginlessAgent, resolveAgentRuntime } from '../lib/agentRuntime'
 import { useWorkspace } from '../tabs/store'
 import type { ViewSpec } from '../tabs/types'
+import { keyMapForAgent } from '../components/workspace/terminalInput'
 
 type ManagerSpec = Extract<ViewSpec, { kind: 'workspace-manager' }>
 
 const SUGGESTION_ICONS = [ClipboardCheck, UsersRound, GitMerge, RefreshCw] as const
+const AGENT_ICONS: Record<string, LucideIcon> = {
+  claude: Sparkles,
+  codex: Cpu,
+  opencode: Code2,
+  pi: Bot,
+}
 
 export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
   const { t } = useTranslation()
+  const { agents, defaultAgent, setDefaultAgent } = useWorkspaces()
   const openOrFocus = useWorkspace((state) => state.openOrFocus)
   const [manager, setManager] = useState<ManagerWorkspaceSnapshot | null>(null)
   const [credentials, setCredentials] = useState<SavedCredential[] | null>(null)
   const [credentialSlug, setCredentialSlug] = useState<string | null>(null)
+  const [runtimeReadiness, setRuntimeReadiness] = useState<Awaited<ReturnType<typeof getAgentRuntimeReadiness>> | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [launching, setLaunching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const openingRef = useRef<string | null>(null)
+  const agentBoxRef = useRef<HTMLDivElement>(null)
+
+  const runtimeAgents = useMemo(() => agents.filter((agent) => agent.kind !== 'utility'), [agents])
+  const effectiveAgent = resolveAgentRuntime(runtimeAgents, selectedAgent, defaultAgent, runtimeReadiness)
+  const selectedRuntime = runtimeAgents.find((agent) => agent.id === effectiveAgent) ?? null
+  const SelectedRuntimeIcon = selectedRuntime ? AGENT_ICONS[selectedRuntime.id] : undefined
+  const needsCredential = isLoginlessAgent(effectiveAgent)
+  const selectedReadiness = effectiveAgent ? runtimeReadiness?.agents[effectiveAgent] ?? null : null
+  const selectedRuntimeUsesGlobalConfig = selectedReadiness?.ready === true && (
+    selectedReadiness.source === 'global-config' ||
+    selectedReadiness.source === 'global-login' ||
+    selectedReadiness.source === 'managed-runtime'
+  )
+  const needsProviderSetup = needsCredential && !selectedRuntimeUsesGlobalConfig && credentials?.length === 0
+  const credentialSelectionReady = !needsCredential || selectedRuntimeUsesGlobalConfig || (
+    credentials !== null && credentialSlug !== null
+  )
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -60,33 +100,65 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
 
   useEffect(() => {
     void refresh()
+    void getAgentRuntimeReadiness()
+      .then(setRuntimeReadiness)
+      .catch(() => setRuntimeReadiness(null))
+  }, [refresh])
+
+  useEffect(() => {
+    if (!effectiveAgent || !isLoginlessAgent(effectiveAgent)) {
+      setCredentials([])
+      setCredentialSlug(null)
+      return
+    }
+    let live = true
+    setCredentials(null)
     void Promise.all([
-      listAgentCredentials('pi').catch(() => []),
+      listAgentCredentials(effectiveAgent).catch(() => []),
       preferencesApi.getQuickChat().catch((): QuickChatPreferences => ({ lastCredentialByAgent: {}, recentChatWorkspaceId: null })),
     ]).then(([available, preferences]) => {
+      if (!live) return
       setCredentials(available)
-      const remembered = preferences.lastCredentialByAgent.pi
+      const remembered = preferences.lastCredentialByAgent[effectiveAgent]
       setCredentialSlug(
         remembered && available.some((credential) => credential.slug === remembered)
           ? remembered
           : available[0]?.slug ?? null,
       )
     })
-  }, [refresh])
+    return () => { live = false }
+  }, [effectiveAgent])
+
+  useEffect(() => {
+    if (!agentMenuOpen) return
+    const onDown = (event: MouseEvent) => {
+      if (agentBoxRef.current && !agentBoxRef.current.contains(event.target as Node)) {
+        setAgentMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [agentMenuOpen])
 
   const sessionId = spec.params.sessionId
   const session = sessionId
     ? manager?.sessions.find((candidate) => candidate.id === sessionId) ?? null
     : null
 
-  // A manager conversation is always a WebPi conversation. After a backend
-  // restart its durable record is paused; opening the URL resumes that exact
-  // Pi session with the manager system contract re-applied.
+  // After a backend restart the durable record is paused. Pi reopens through
+  // WebPi with the manager contract re-applied; other agents resume in their
+  // native terminal surface.
   useEffect(() => {
     if (!sessionId || !session || openingRef.current === sessionId) return
-    if (session.state === 'running' && session.surface === 'webpi') return
+    const usesWebPi = session.agent === 'pi'
+    if (session.state === 'running' && (usesWebPi ? session.surface === 'webpi' : session.surface !== 'webpi')) return
     openingRef.current = sessionId
-    void openWebPiSession(MANAGER_WORKSPACE_ID, sessionId)
+    const opening = usesWebPi
+      ? openWebPiSession(MANAGER_WORKSPACE_ID, sessionId).then(() => undefined)
+      : resumeSession(MANAGER_WORKSPACE_ID, sessionId).then((result) => {
+          if (result === null) throw new Error(t('workspaceManager.resumeError'))
+        })
+    void opening
       .then(() => refresh())
       .catch((cause) => setError(cause instanceof Error ? cause.message : t('workspaceManager.resumeError')))
       .finally(() => { openingRef.current = null })
@@ -102,11 +174,34 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
   const submit = async (): Promise<void> => {
     const prompt = draft.trim()
     if (!prompt || launching) return
-    if (credentials?.length && !credentialSlug) return
+    if (!credentialSelectionReady) return
+    if (!effectiveAgent) {
+      setAgentMenuOpen(true)
+      return
+    }
     setLaunching(true)
     setError(null)
     try {
-      const result = await quickStartWorkspaceManager(prompt, credentialSlug ?? undefined)
+      let readiness = runtimeReadiness
+      let runtimeRow = readiness?.agents[effectiveAgent] ?? null
+      if (runtimeRow?.ready !== true) {
+        readiness = await probeAgentRuntimeReadiness(effectiveAgent)
+        setRuntimeReadiness(readiness)
+        runtimeRow = readiness.agents[effectiveAgent] ?? null
+      }
+      if (runtimeRow?.ready !== true) {
+        if (runtimeRow?.repairTarget === 'ai-provider' || needsProviderSetup) {
+          openOrFocus({ kind: 'settings', params: { category: 'ai-provider' } })
+          return
+        }
+        setError(runtimeRow?.message ?? t('chatLanding.runtimeNotReady'))
+        return
+      }
+      const result = await quickStartWorkspaceManager(
+        prompt,
+        effectiveAgent,
+        needsCredential ? credentialSlug ?? undefined : undefined,
+      )
       setManager(result.manager)
       setDraft('')
       openOrFocus({ kind: 'workspace-manager', params: { sessionId: result.session.id } })
@@ -147,16 +242,26 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
             </div>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-bg px-2 py-1 text-[10px] font-medium text-text-muted">
-            <Bot size={11} /> Pi · WebPi
+            <Bot size={11} /> {runtimeLabel(session.agent, agents)} · {session.agent === 'pi' ? 'WebPi' : 'TUI'}
           </span>
         </header>
         <div className="min-h-0 flex-1 p-2 md:p-3">
-          <WebPiView
-            wsId={MANAGER_WORKSPACE_ID}
-            sessionId={sessionId}
-            label={t('workspaceManager.title')}
-            onSessionLost={() => void refresh()}
-          />
+          {session.agent === 'pi' ? (
+            <WebPiView
+              wsId={MANAGER_WORKSPACE_ID}
+              sessionId={sessionId}
+              label={t('workspaceManager.title')}
+              onSessionLost={() => void refresh()}
+            />
+          ) : (
+            <TerminalView
+              wsId={MANAGER_WORKSPACE_ID}
+              sessionId={sessionId}
+              label={`${t('workspaceManager.title')} · ${session.name}`}
+              keyMap={keyMapForAgent(session.agent)}
+              onSessionLost={() => void refresh()}
+            />
+          )}
         </div>
       </div>
     )
@@ -185,7 +290,11 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
           </div>
           <div className="workspace-manager-stats grid grid-cols-2 gap-2">
             <ManagerStat icon={Building2} label={t('workspaceManager.scope')} value={loading ? '—' : String(manager?.activeWorkspaceCount ?? 0)} />
-            <ManagerStat icon={Bot} label={t('workspaceManager.runtime')} value="Pi · WebPi" />
+            <ManagerStat
+              icon={Bot}
+              label={t('workspaceManager.runtime')}
+              value={selectedRuntime?.displayName ?? t('chatLanding.selectAgent')}
+            />
           </div>
         </div>
 
@@ -200,10 +309,52 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
           />
           <div className="workspace-manager-composer-footer mt-3 flex flex-col gap-2 border-t border-border/60 pt-3">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-bg-tertiary px-2.5 py-1.5 text-[11px] text-text-muted">
-                <Bot size={12} /> Pi · WebPi
-              </span>
-              {credentials && credentials.length > 0 ? (
+              <div ref={agentBoxRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setAgentMenuOpen((open) => !open)}
+                  disabled={runtimeAgents.length === 0}
+                  aria-haspopup="menu"
+                  aria-expanded={agentMenuOpen}
+                  aria-label={t('chatLanding.selectAgent')}
+                  className="oa-pressable inline-flex min-h-8 max-w-48 items-center gap-1.5 rounded-md bg-bg-tertiary px-2.5 py-1 text-[11px] text-text-muted hover:text-text disabled:opacity-50"
+                >
+                  {SelectedRuntimeIcon ? <SelectedRuntimeIcon size={12} /> : <Bot size={12} />}
+                  <span className="truncate">{selectedRuntime?.displayName ?? t('chatLanding.selectAgent')}</span>
+                  <ChevronDown size={12} className="opacity-60" />
+                </button>
+                {agentMenuOpen && runtimeAgents.length > 0 && (
+                  <div
+                    role="menu"
+                    className="oa-popover-enter absolute bottom-full left-0 z-10 mb-1 min-w-48 rounded-lg border border-border/70 bg-bg-secondary py-1 shadow-lg"
+                  >
+                    {runtimeAgents.map((agent) => {
+                      const Icon = AGENT_ICONS[agent.id]
+                      const active = agent.id === effectiveAgent
+                      const missing = agent.installed === false
+                      return (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setSelectedAgent(agent.id)
+                            void setDefaultAgent(agent.id)
+                            setAgentMenuOpen(false)
+                          }}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-bg-tertiary ${active ? 'text-accent' : missing ? 'text-text-muted' : 'text-text'}`}
+                        >
+                          {Icon ? <Icon size={14} className="shrink-0" /> : <span className="w-3.5 shrink-0" />}
+                          <span className="min-w-0 flex-1 truncate">{agent.displayName}</span>
+                          {missing && <span className="shrink-0 text-[10px] text-text-muted">{t('chatLanding.agentNotInstalled')}</span>}
+                          {active && <Check size={14} className="shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              {needsCredential && credentials && credentials.length > 0 ? (
                 <label className="relative inline-flex min-w-0 items-center gap-1.5 rounded-md bg-bg-tertiary px-2.5 py-1.5 text-[11px] text-text-muted">
                   <KeyRound size={12} className="shrink-0" />
                   <select
@@ -212,7 +363,9 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
                     onChange={(event) => {
                       const next = event.target.value || null
                       setCredentialSlug(next)
-                      void preferencesApi.rememberQuickChatCredential('pi', next).catch(() => undefined)
+                      if (isLoginlessAgent(effectiveAgent)) {
+                        void preferencesApi.rememberQuickChatCredential(effectiveAgent, next).catch(() => undefined)
+                      }
                     }}
                     className="max-w-44 appearance-none truncate bg-transparent pr-3 text-text outline-none"
                   >
@@ -223,7 +376,7 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
                     ))}
                   </select>
                 </label>
-              ) : credentials ? (
+              ) : needsProviderSetup ? (
                 <button
                   type="button"
                   onClick={() => openOrFocus({ kind: 'settings', params: { category: 'ai-provider' } })}
@@ -236,7 +389,7 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={!draft.trim() || launching || credentials === null || (credentials.length > 0 && !credentialSlug)}
+              disabled={!draft.trim() || launching || !credentialSelectionReady}
               className="oa-pressable inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-accent px-4 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
             >
               {launching ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />}
@@ -290,7 +443,9 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
                   <span className={`h-2 w-2 shrink-0 rounded-full ${record.state === 'running' ? 'bg-green' : 'bg-text-muted/30'}`} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium text-text">{record.title ?? record.name}</span>
-                    <span className="mt-0.5 block text-[10px] text-text-muted">{new Date(record.lastActiveAt).toLocaleString()}</span>
+                    <span className="mt-0.5 block text-[10px] text-text-muted">
+                      {runtimeLabel(record.agent, agents)} · {record.agent === 'pi' ? 'WebPi' : 'TUI'} · {new Date(record.lastActiveAt).toLocaleString()}
+                    </span>
                   </span>
                   <ChevronRight size={14} className="shrink-0 text-text-muted/50" />
                 </button>
@@ -303,6 +458,10 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
       </div>
     </div>
   )
+}
+
+function runtimeLabel(agentId: string, agents: readonly { id: string; displayName: string }[]): string {
+  return agents.find((agent) => agent.id === agentId)?.displayName ?? agentId
 }
 
 function ManagerStat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {

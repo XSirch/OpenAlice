@@ -44,11 +44,9 @@ import {
 } from '../api/config'
 import { preferencesApi } from '../api/preferences'
 import { WORKSPACE_DEFAULTS_CHANGED_EVENT } from '../lib/workspaceAiEvents'
+import { isLoginlessAgent, resolveAgentRuntime } from '../lib/agentRuntime'
 
-/** Agent runtimes with no login of their own — they need an injected AI config
- *  to start (claude/codex carry their own CLI login). Mirrors the backend's
- *  LOGINLESS_AGENTS; only these surface the credential picker. */
-const LOGINLESS_AGENTS = new Set(['opencode', 'pi'])
+export { resolveAgentRuntime as resolveChatAgent } from '../lib/agentRuntime'
 
 function workspaceActivityMs(workspace: Pick<Workspace, 'createdAt' | 'sessions'>): number {
   const sessionActivity = workspace.sessions
@@ -84,30 +82,6 @@ const AGENT_ICONS: Record<string, LucideIcon> = {
   codex: Cpu,
   opencode: Code2,
   pi: Bot,
-}
-
-/** Resolve the runtime that should power a quick chat without turning the
- *  first message into a mandatory setup form. Explicit and saved choices win;
- *  otherwise a verified runtime is the safest default. When readiness is
- *  still stale (the first-run guide may have probed after this page mounted),
- *  the only installed runtime is unambiguous and can be selected directly. */
-export function resolveChatAgent(
-  agents: readonly Pick<AgentInfo, 'id' | 'installed'>[],
-  selectedAgent: string | null,
-  defaultAgent: string | null,
-  runtimeReadiness: AgentRuntimeReadinessSnapshot | null,
-): string | null {
-  const hasAgent = (agentId: string | null): agentId is string => (
-    agentId !== null && agents.some((agent) => agent.id === agentId)
-  )
-  if (hasAgent(selectedAgent)) return selectedAgent
-  if (hasAgent(defaultAgent)) return defaultAgent
-
-  const readyAgent = agents.find((agent) => runtimeReadiness?.agents[agent.id]?.ready === true)
-  if (readyAgent) return readyAgent.id
-
-  const installedAgents = agents.filter((agent) => agent.installed !== false)
-  return installedAgents.length === 1 ? installedAgents[0].id : null
 }
 
 /** Keep the provider pill truthful for an existing workspace. A ready
@@ -261,7 +235,7 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
   // Prefer explicit and persisted choices, then remove first-message friction
   // when the host has one clear usable runtime. The picker remains available
   // and persists any later user choice.
-  const effectiveAgent = resolveChatAgent(
+  const effectiveAgent = resolveAgentRuntime(
     targetCliAgents,
     selectedAgent,
     defaultAgent,
@@ -283,7 +257,7 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
   // ── Loginless-runtime credential picker (opencode/pi) ─────────────────────
   // opencode/pi have no login of their own, so a quick-chat send must seed them
   // with a vault credential. claude/codex skip all of this (own CLI login).
-  const needsCred = effectiveAgent !== null && LOGINLESS_AGENTS.has(effectiveAgent)
+  const needsCred = isLoginlessAgent(effectiveAgent)
   // The loginless-runtime credential set (null = not yet loaded). opencode and
   // pi are both provider-agnostic and share one compatibility set (any wire), so
   // a single preloaded list serves both — see the mount-time fetch below.
