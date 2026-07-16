@@ -120,7 +120,7 @@
         {
           "id": "AINV-T200",
           "title": "Persistir binding de conversa externa para resumeId",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T115"],
           "scope": ["src/workspaces", "src/core", "src/migrations"],
           "acceptance_criteria": ["connector+chat+owner resolve um resumeId estável", "Binding não expõe IDs nativos", "Alterações usam migração idempotente"],

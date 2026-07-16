@@ -1,0 +1,2 @@
+import type { Migration } from '../types.js'
+export const migration: Migration = { id: '0026_external_conversation_bindings', appVersion: '0.81.0-beta', introducedAt: '2026-07-16', affects: ['external-conversation-bindings.json'], summary: 'Seed private external conversation to resumeId bindings.', up: async (ctx) => { if (await ctx.readJson('external-conversation-bindings.json') === undefined) await ctx.writeJson('external-conversation-bindings.json', { version: 1, bindings: [] }) } }

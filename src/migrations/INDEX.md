@@ -25,3 +25,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0023_google_native_credentials` | 0.81.0-beta | 2026-07-16 | ai-provider-manager.json | Route saved Google Gemini credentials through the native API so current AQ authorization keys work. |
 | `0024_alice_invest_config` | 0.81.0-beta | 2026-07-16 | alice-invest.json | Seed the fail-closed Alice Invest configuration. |
 | `0025_connector_inbound_journal` | 0.81.0-beta | 2026-07-16 | connector-inbound-journal.json | Seed the private Connector inbound journal used for durable deduplication. |
+| `0026_external_conversation_bindings` | 0.81.0-beta | 2026-07-16 | external-conversation-bindings.json | Seed private external conversation to resumeId bindings. |
