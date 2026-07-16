@@ -410,7 +410,7 @@
         {
           "id": "AINV-T802",
           "title": "Avaliar evidências do shadow mode B3",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T800"],
           "scope": ["src/domain/alice-invest/readiness", "docs/alice-invest-runbook.md"],
           "acceptance_criteria": ["Avaliar taxa, duplicação, stale, indisponibilidade, MFE/MAE, custos, slippage e lookahead somente para B3", "B3 sem fonte realtime comprovada permanece research_only"],
