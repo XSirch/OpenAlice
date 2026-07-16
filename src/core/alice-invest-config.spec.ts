@@ -28,7 +28,12 @@ describe('Alice Invest config store', () => {
     const config = await loadModule()
     await expect(config.readAliceInvestConfig()).resolves.toMatchObject({
       execution_enabled: false,
-      readiness: { global: 'not_ready' },
+      readiness: {
+        global: 'not_ready',
+        fixed_income: 'research_only',
+        b3_signals: 'research_only',
+        crypto_signals: 'research_only',
+      },
       kill_switches: { telegram_inbound_enabled: false },
     })
   })

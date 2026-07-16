@@ -15,6 +15,11 @@ freshness, stale/outage counts, dedupe and lifecycle transitions. Enable paper
 alerts only after the relevant readiness capability is paper_alerts; Inbox
 persists before Connector delivery. Never treat outbound delivery as evidence.
 
+As of the 2026-07-16 backlog audit, no temporal shadow run is recorded for B3
+or crypto. The implemented fixture/temporary-ledger cycles are infrastructure
+only. Do not represent them as a provider validation, a shadow result, or an
+operational readiness promotion.
+
 ## Recovery
 
 Disable the relevant switch on stale data, provider error or suspicious output.

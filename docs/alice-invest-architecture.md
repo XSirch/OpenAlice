@@ -2,6 +2,34 @@
 
 Status: proposed foundation. This document enables no runtime behavior.
 
+## Audit status (2026-07-16)
+
+This document describes intended architecture as well as implemented seams. The
+authoritative delivery state is `tasks.json`: an implementation or fixture test
+is not operational evidence. There is currently no owner-configured real B3
+source, read-only crypto source, temporal shadow execution, real Telegram E2E,
+or real OpenRouter probe. Consequently readiness remains `not_ready` globally
+and `research_only` for fixed income, B3 signals, and crypto signals.
+
+The current readiness core is boolean-only and therefore an implementation,
+not a capability-promotion authority. Its replacement must persist evidence in
+this shape before any readiness is derived:
+
+```ts
+interface ReadinessEvidence {
+  capability: 'global' | 'fixed_income' | 'b3_signals' | 'crypto_signals'
+  criterion: string
+  status: 'passed' | 'failed' | 'blocked' | 'not_run'
+  observedAt: string
+  source: string
+  validationRunId: string
+  details?: string
+}
+```
+
+No arbitrary boolean, fixture, UI switch, or outbound connector availability
+may raise a capability. Execution remains structurally disabled.
+
 ## Purpose and boundary
 
 Alice Invest is a private, single-owner investment assistant delivered through

@@ -6,6 +6,14 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Reassess Alice Invest completion claims: distinguish `implemented`,
+  `validated`, `done`, and externally `blocked` work; reopen unproven external
+  and temporal validation gaps without promoting readiness.
+- Split B3 source evidence from real intraday validation, shadow infrastructure
+  from temporal execution, and monitor/Telegram/OpenRouter work into separately
+  verifiable tasks. Execution remains disabled and B3/crypto remain
+  `research_only`.
+
 - Expose a sanitized read-only readiness snapshot in the Alice Invest operations tab.
 - Add Alice Invest operational, signals, deployment and integration runbooks.
 - Add a read-only Alice Invest operational tab for capability readiness, switches and health.

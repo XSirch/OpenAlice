@@ -24,15 +24,15 @@ export const aliceInvestEnabledReadinessSchema = z.enum([
 
 const readinessByCapabilitySchema = z.object({
   global: aliceInvestEnabledReadinessSchema.default('not_ready'),
-  fixed_income: aliceInvestEnabledReadinessSchema.default('not_ready'),
-  crypto_signals: aliceInvestEnabledReadinessSchema.default('not_ready'),
-  b3_signals: aliceInvestEnabledReadinessSchema.default('not_ready'),
+  fixed_income: aliceInvestEnabledReadinessSchema.default('research_only'),
+  crypto_signals: aliceInvestEnabledReadinessSchema.default('research_only'),
+  b3_signals: aliceInvestEnabledReadinessSchema.default('research_only'),
 }).strict()
 const defaultReadinessByCapability = {
   global: 'not_ready',
-  fixed_income: 'not_ready',
-  crypto_signals: 'not_ready',
-  b3_signals: 'not_ready',
+  fixed_income: 'research_only',
+  crypto_signals: 'research_only',
+  b3_signals: 'research_only',
 } as const
 
 const killSwitchesSchema = z.object({
