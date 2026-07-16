@@ -58,6 +58,7 @@ export function UrlAdopter() {
         <Route path="/market/:assetClass/:symbol" element={<AdoptMarketDetail />} />
         <Route path="/trading-as-git" element={<AdoptStatic spec={{ kind: 'trading-as-git', params: {} }} />} />
         <Route path="/connectors" element={<AdoptStatic spec={{ kind: 'connectors', params: {} }} />} />
+        <Route path="/alice-invest" element={<AdoptStatic spec={{ kind: 'alice-invest', params: {} }} />} />
 
         {/* Settings — one entry per category */}
         <Route path="/settings" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'general' } }} />} />
@@ -283,6 +284,7 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'file-viewer':        return 'workspaces'
     case 'trading-as-git':     return 'trading-as-git'
     case 'connectors':         return 'connectors'
+    case 'alice-invest':       return 'settings'
     case 'portfolio':
     case 'uta-detail':         return 'portfolio'
     case 'issue':

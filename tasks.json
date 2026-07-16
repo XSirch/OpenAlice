@@ -528,7 +528,7 @@
         {
           "id": "AINV-T1002",
           "title": "Adicionar UI operacional e controles administrativos",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T1001"],
           "scope": ["src/webui", "ui/src"],
           "acceptance_criteria": ["Exibir readiness por capability, health e switches sem expor segredo", "UI não oferece execução financeira"],

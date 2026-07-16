@@ -31,6 +31,7 @@ export type ViewSpec =
   | { kind: 'portfolio';      params: Record<string, never> }
   | { kind: 'trading-as-git'; params: Record<string, never> }
   | { kind: 'connectors';     params: Record<string, never> }
+  | { kind: 'alice-invest';  params: Record<string, never> }
   | { kind: 'issue';          params: Record<string, never> }
   | { kind: 'issue-detail';   params: { wsId: string; id: string } }
   | { kind: 'tracked-issue-detail'; params: { wsId: string; id: string } }

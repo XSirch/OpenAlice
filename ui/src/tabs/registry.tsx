@@ -22,6 +22,7 @@ import { TradingPage } from '../pages/TradingPage'
 import { MCPPage } from '../pages/MCPPage'
 import { ConnectorsPage } from '../pages/ConnectorsPage'
 import { ConnectorStatusPage } from '../pages/ConnectorStatusPage'
+import { AliceInvestPage } from '../pages/AliceInvestPage'
 import { MarketDataPage } from '../pages/MarketDataPage'
 import { NewsCollectorPage } from '../pages/NewsCollectorPage'
 import { UTADetailPage } from '../pages/UTADetailPage'
@@ -121,6 +122,7 @@ const connectorsModule: ViewModule<'connectors'> = {
   toUrl: () => '/connectors',
   Component: () => <ConnectorStatusPage />,
 }
+const aliceInvestModule: ViewModule<'alice-invest'> = { kind: 'alice-invest', title: () => 'Alice Invest', toUrl: () => '/alice-invest', Component: () => <AliceInvestPage /> }
 
 const issueModule: ViewModule<'issue'> = {
   kind: 'issue',
@@ -518,6 +520,7 @@ const VIEWS = {
   portfolio: portfolioModule,
   'trading-as-git': tradingAsGitModule,
   connectors: connectorsModule,
+  'alice-invest': aliceInvestModule,
   issue: issueModule,
   'issue-detail': issueDetailModule,
   'tracked-issue-detail': trackedIssueDetailModule,
