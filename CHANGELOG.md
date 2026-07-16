@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Connect the fast path and validated structured transport in a correlation-
+  preserving router that fails safely to clarification.
 - Define an allowlisted router-decision schema with bounded tasks and explicit
   clarification; it contains no executable tool destination.
 - Validate structured-router output fail-closed, with redacted telemetry and

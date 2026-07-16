@@ -208,7 +208,7 @@
         {
           "id": "AINV-T402",
           "title": "Implementar router segundo a ADR",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T302", "AINV-T401"],
           "scope": ["src/domain/alice-invest/router", "src/workspaces/templates/alice-invest"],
           "acceptance_criteria": ["Usar apenas o mecanismo aprovado no spike", "Roteamento preserva correlação e limites", "Falha pede clarificação ou falha segura"],
