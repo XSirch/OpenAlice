@@ -7,7 +7,8 @@ export interface B3StrategyInput { symbol:string; shortTerm: SignalObservation[]
 export function evaluateB3TrendStrategy(input:B3StrategyInput): SignalCandidate | null {
   if (input.shortTerm.length < 3 || input.longTerm.length < 5) return null
   const all=[...input.shortTerm,...input.longTerm]
-  if (all.some(item=>item.symbol!==input.symbol || !fresh(item,input.now,input.maxAgeSeconds))) return null
+  const latestObservation=input.shortTerm.at(-1)!
+  if (all.some(item=>item.symbol!==input.symbol || item.capability!=='realtime') || !fresh(latestObservation,input.now,input.maxAgeSeconds)) return null
   const short=sma(input.shortTerm), long=sma(input.longTerm), latest=new Decimal(input.shortTerm.at(-1)!.close)
   if (!short.gt(long) || !latest.gt(short)) return null
   const source=input.shortTerm.at(-1)!

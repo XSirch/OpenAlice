@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a reproducible B3 strategy backtest over versioned fixtures with explicit
+  America/Sao_Paulo session checks, next-session fills, fees, slippage and
+  no-lookahead signal decisions.
 - Add a pure Telegram signal formatter that renders only validated structured
   signal data, preserves Decimal precision, states validity/invalidation and
   explicitly confirms that no order is sent or result guaranteed.

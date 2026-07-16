@@ -366,7 +366,7 @@
         {
           "id": "AINV-T707",
           "title": "Implementar backtests e testes sem lookahead para B3",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T702", "AINV-T704"],
           "scope": ["src/domain/alice-invest/signals", "src/domain/analysis"],
           "acceptance_criteria": ["Cobrir custos e slippage da B3, timezone America/Sao_Paulo e ausência de lookahead", "Usar estratégia, fonte e fixtures B3 versionadas com resultados reproduzíveis"],
