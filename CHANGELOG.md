@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a transparent B3 trailing SMA-crossover candidate strategy that emits
+  only on fresh realtime input and remains silent for delayed or stale data.
 - Add trailing annualized volatility to the existing no-lookahead indicator
   suite, which already covers SMA, EMA, RSI, MACD, ATR, VWAP, bands, ROC and volume.
 - Define strict observation, candidate and informational-signal contracts with

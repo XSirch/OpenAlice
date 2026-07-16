@@ -1,0 +1,4 @@
+import { describe, expect, it } from 'vitest'
+import { evaluateB3TrendStrategy } from './b3-strategy.js'
+const now=new Date('2026-07-16T12:00:00Z'); const bar=(close:string,capability:'realtime'|'delayed'='realtime')=>({symbol:'PETR4',source:'fixture',sourceTimestamp:'2026-07-16T11:59:50.000Z',receivedAt:now.toISOString(),capability,close})
+describe('B3 trend strategy',()=>{it('uses only supplied trailing multi-timeframe bars',()=>{const out=evaluateB3TrendStrategy({symbol:'PETR4',shortTerm:[bar('10'),bar('11'),bar('12')],longTerm:[bar('8'),bar('9'),bar('9'),bar('10'),bar('11')],now,maxAgeSeconds:30});expect(out).toMatchObject({strategyId:'b3-trend-crossover',status:'eligible'})});it('does not emit for delayed or stale data',()=>{expect(evaluateB3TrendStrategy({symbol:'PETR4',shortTerm:[bar('10','delayed'),bar('11'),bar('12')],longTerm:[bar('8'),bar('9'),bar('9'),bar('10'),bar('11')],now,maxAgeSeconds:30})).toBeNull()})})

@@ -320,7 +320,7 @@
         {
           "id": "AINV-T702",
           "title": "Implementar primeira estratégia B3",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T610", "AINV-T701"],
           "scope": ["src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Estratégia B3 é transparente, versionada e exige fonte realtime válida", "Não produz sinal se a fonte estiver delayed, eod ou stale"],
