@@ -375,7 +375,7 @@
         {
           "id": "AINV-T708",
           "title": "Implementar backtests e testes sem lookahead para cripto",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T703", "AINV-T704"],
           "scope": ["src/domain/alice-invest/signals", "src/domain/analysis"],
           "acceptance_criteria": ["Cobrir custos e slippage spot, operação 24/7 e ausência de lookahead", "Usar estratégia, fonte e fixtures cripto versionadas com resultados reproduzíveis"],

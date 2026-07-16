@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a reproducible 24/7 spot-crypto backtest with versioned candles,
+  next-candle fills, fees, slippage and no-lookahead signal decisions.
 - Add a reproducible B3 strategy backtest over versioned fixtures with explicit
   America/Sao_Paulo session checks, next-session fills, fees, slippage and
   no-lookahead signal decisions.
