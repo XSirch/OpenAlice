@@ -510,7 +510,7 @@
         {
           "id": "AINV-T1000",
           "title": "Consolidar auditoria e correlação",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T910"],
           "scope": ["src/core", "services/connector", "src/domain/alice-invest"],
           "acceptance_criteria": ["Correlacionar mensagem, rota, run, tools, fonte, risco, sinal, Inbox e entrega", "Redaction e retenção seguem a política inicial"],
