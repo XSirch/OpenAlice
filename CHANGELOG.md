@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a fail-closed normalized market-observation contract: timestamps and
+  source are mandatory, quote fields are retained when available, and an
+  unproven source remains `unknown` rather than realtime.
 - Define strict fixed-income product contracts for issuer, rate, dates,
   liquidity, FGC, fees and assumptions; CDI is retained solely as a reference
   rate, never as a product.

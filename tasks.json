@@ -256,7 +256,7 @@
         {
           "id": "AINV-T600",
           "title": "Definir observação normalizada e política de frescor",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006"],
           "scope": ["src/domain/market-data/bars", "src/domain/alice-invest/market-data"],
           "acceptance_criteria": ["Registrar fonte, sourceTimestamp, receivedAt, ageSeconds e capability", "Conservar bid, ask, spread e volume quando disponíveis", "Sem evidência suficiente, capability não é presumida realtime"],
