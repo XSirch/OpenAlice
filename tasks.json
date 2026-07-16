@@ -440,7 +440,7 @@
         {
           "id": "AINV-T805",
           "title": "Projetar evidência B3 no readiness core",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T802", "AINV-T804"],
           "scope": ["src/domain/alice-invest/readiness"],
           "acceptance_criteria": ["Promover somente b3_signals quando shadow B3, fonte realtime/freshness e demais gates forem válidos", "Registrar bloqueio B3 sem alterar crypto_signals"],
@@ -450,7 +450,7 @@
         {
           "id": "AINV-T806",
           "title": "Projetar evidência cripto no readiness core",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T803", "AINV-T804"],
           "scope": ["src/domain/alice-invest/readiness"],
           "acceptance_criteria": ["Promover somente crypto_signals quando shadow cripto, fonte/freshness e demais gates forem válidos", "Registrar bloqueio cripto sem alterar b3_signals"],
