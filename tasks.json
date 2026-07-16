@@ -339,7 +339,7 @@
         {
           "id": "AINV-T704",
           "title": "Implementar Risk Validator",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006", "AINV-T700"],
           "scope": ["src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Rejeitar reward/risk, stale, spread, liquidez, cooldown e limites", "LLM nunca libera rejeição determinística", "Bloquear derivativos, margem, alavancagem e execução"],

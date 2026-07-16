@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a deterministic fail-closed signal risk validator for freshness, spread,
+  liquidity, reward/risk, cooldown, limits and prohibited operational capabilities.
 - Add a transparent spot-only crypto crossover candidate strategy that rejects
   stale data and cannot model derivatives, margin or leverage.
 - Add a transparent B3 trailing SMA-crossover candidate strategy that emits
