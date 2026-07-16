@@ -6,6 +6,7 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a monitor ADR selecting Guardian-supervised scheduled Issues for v1.
 - Add a 24/7 spot-crypto shadow recorder with fail-closed source gates and no delivery path.
 - Add B3 shadow-mode signal recording with source/session gates, idempotent
   ledger creation and explicit no-delivery behavior.

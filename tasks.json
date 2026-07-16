@@ -466,7 +466,7 @@
         {
           "id": "AINV-T900",
           "title": "Avaliar arquitetura e frequência do monitor de sinais",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T705"],
           "scope": ["docs/alice-invest-architecture.md", "src/workspaces", "scripts/guardian"],
           "acceptance_criteria": ["Comparar Issues agendadas e serviço determinístico supervisionado", "Determinar frequência, sinais ativos, polling/WebSocket, custo, gaps, mercado fechado, dados realtime, restart, health e recursos", "Usar evidência de pelo menos um shadow mode antes de concluir a decisão", "Produzir decisão antes de implementação"],
