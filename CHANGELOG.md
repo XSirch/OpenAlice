@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Persist and deduplicate inbound Connector envelopes atomically, retaining
+  pending work while compacting only terminal journal records.
 - Define the Connector inbound lifecycle, acknowledgement boundary, and stable
   update/message dedupe key before durable storage is introduced.
 - Define the strict, versioned generic Connector inbound-text contract with

@@ -36,6 +36,7 @@ import { migration as migration_0021_workspace_departure_catalog } from './0021_
 import { migration as migration_0022_connector_service_config } from './0022_connector_service_config/index.js'
 import { migration as migration_0023_google_native_credentials } from './0023_google_native_credentials/index.js'
 import { migration as migration_0024_alice_invest_config } from './0024_alice_invest_config/index.js'
+import { migration as migration_0025_connector_inbound_journal } from './0025_connector_inbound_journal/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -55,4 +56,5 @@ export const REGISTRY: Migration[] = [
   migration_0022_connector_service_config,
   migration_0023_google_native_credentials,
   migration_0024_alice_invest_config,
+  migration_0025_connector_inbound_journal,
 ]

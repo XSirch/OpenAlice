@@ -78,7 +78,7 @@
         {
           "id": "AINV-T112",
           "title": "Implementar persistência e deduplicação inbound",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T111"],
           "scope": ["services/connector/src/core", "src/migrations"],
           "acceptance_criteria": ["Persistir envelope antes do dispatch", "Reinício não reprocessa update/message concluído", "Limites de journal preservam itens pendentes"],

@@ -17,6 +17,7 @@ import { ConnectorConfigStore } from './config-store.js'
 import { discordConnectorRegistration } from './adapters/discord.js'
 import { telegramConnectorRegistration } from './adapters/telegram.js'
 import { ConnectorIOJournal } from './core/io-journal.js'
+import { ConnectorInboundJournal } from './core/inbound-journal.js'
 import { dataPath } from '@/core/paths.js'
 
 const CONNECTOR_PORT = Number(process.env['OPENALICE_CONNECTOR_PORT'] ?? 47334)
@@ -34,6 +35,10 @@ async function main(): Promise<void> {
     path: dataPath('logs', 'connector-io.jsonl'),
     warn: (message) => console.warn(`[connector] ${message}`),
   })
+  // Created now for the inbound adapters introduced in later transport tasks.
+  // Its constructor is side-effect free; the first inbound message creates the
+  // private state file atomically.
+  const inboundJournal = new ConnectorInboundJournal(dataPath('config', 'connector-inbound-journal.json'))
 
   const manager = new DeliveryManager({
     registry,
@@ -47,6 +52,7 @@ async function main(): Promise<void> {
   const app = new Hono()
   app.get('/__connector/health', (c) => c.json(manager.health()))
   app.get('/v1/definitions', (c) => c.json({ connectors: registry.definitions() }))
+  app.get('/v1/inbound/journal', async (c) => c.json({ entries: await inboundJournal.entries() }))
   app.post('/v1/notifications/inbox', async (c) => {
     const notification = inboxNotificationSchema.parse(await c.req.json())
     return c.json(connectorDeliveryReceiptSchema.parse(manager.enqueue(notification)), 202)

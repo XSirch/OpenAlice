@@ -24,3 +24,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0022_connector_service_config` | 0.81.0-beta | 2026-07-13 | connectors.json, connector-service.json, ports.json | Move external notifications into sealed Connector Service config and retire legacy Web/MCP-Ask connector meanings. |
 | `0023_google_native_credentials` | 0.81.0-beta | 2026-07-16 | ai-provider-manager.json | Route saved Google Gemini credentials through the native API so current AQ authorization keys work. |
 | `0024_alice_invest_config` | 0.81.0-beta | 2026-07-16 | alice-invest.json | Seed the fail-closed Alice Invest configuration. |
+| `0025_connector_inbound_journal` | 0.81.0-beta | 2026-07-16 | connector-inbound-journal.json | Seed the private Connector inbound journal used for durable deduplication. |
