@@ -287,7 +287,7 @@
         {
           "id": "AINV-T612",
           "title": "Configurar universo e gates de mercado",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T600"],
           "scope": ["src/domain/alice-invest/market-data", "src/workspaces/templates/alice-invest"],
           "acceptance_criteria": ["Universos B3 e cripto são limitados e configuráveis", "Calendário, estado de mercado, liquidez e capability são gates explícitos", "Nenhum scan varre todos os ativos"],
