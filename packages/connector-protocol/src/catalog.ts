@@ -38,6 +38,7 @@ export const DISCORD_CONNECTOR_DEFINITION: ConnectorDefinition = {
       { name: 'link', description: 'Link this Discord account as the owner.' },
       { name: 'status', description: 'Show connector health.' },
       { name: 'test', description: 'Send a test notification.' },
+      { name: 'new', description: 'Start a new linked conversation.' },
     ],
   }
 
@@ -76,6 +77,7 @@ export const TELEGRAM_CONNECTOR_DEFINITION: ConnectorDefinition = {
       { name: 'link', description: 'Link this private chat as the owner.' },
       { name: 'status', description: 'Show connector health.' },
       { name: 'test', description: 'Send a test notification.' },
+      { name: 'new', description: 'Start a new linked conversation.' },
     ],
   }
 
