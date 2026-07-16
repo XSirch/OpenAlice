@@ -39,6 +39,11 @@ proceed after the security foundation without waiting for Telegram, OpenRouter,
 or the router. Likewise, market scanning depends on validated data, the signal
 engine, risk validation, and readiness — never on fixed income.
 
+Fork governance is a prerequisite for the first functional task: the initial
+path is architecture (`AINV-T000`), executable backlog (`AINV-T001`), fork
+governance (`AINV-T005`), security foundation (`AINV-T006`), then the generic
+inbound contract (`AINV-T110`).
+
 ## Current architecture
 
 Guardian supervises Alice, optional UTA, and optional Connector Service. Alice
@@ -142,6 +147,13 @@ reply. `/new` replaces only the binding; it does not delete history. Bounds
 cover UTF-8 size, timeouts, attempts, pending count/age, and visible dead-letter
 state. Agent-unavailable replies also go through Inbox.
 
+The inbound transport is not ready at authenticated bridging alone. Its journal,
+retry/dead-letter handling, and restart/recovery validation must complete before
+an external conversation can bind to a `resumeId` or dispatch a Workspace
+Session. The binding and dispatch sequence is therefore: contract, state
+machine, persistence, retry/dead-letter, authenticated bridge, recovery,
+`resumeId` binding, then Session/Inbox dispatch.
+
 Only private text from the `/link`-learned owner/chat is accepted. Authorization
 is checked in the adapter and Alice boundary. `/help`, `/portfolio`,
 `/settings`, and `/alerts` may be local commands; no execution command exists.
@@ -241,18 +253,42 @@ Before Telegram alerts, scans run in shadow mode: candidates and lifecycle
 events are recorded but not sent. Shadow evidence records entry, target, stop,
 trailing stop, expiry, invalidation, subsequent outcome, MFE/MAE, configured
 costs/slippage, duplicate rate, stale rejections, provider outages, and
-no-lookahead checks. B3 and crypto results remain separate. Only satisfactory
-shadow evidence can make an eligible capability `paper_alerts`; existing
-Telegram outbound support alone is never evidence for that state.
+no-lookahead checks. B3 and crypto are independent pipelines and reports; they
+never share one performance metric or readiness gate:
 
-The active-signal monitor is also a decision gate. Its spike compares scheduled
+```text
+B3: source B3 -> strategy B3 -> backtest B3 -> shadow B3
+  -> evidence B3 -> readiness b3_signals -> alert B3
+
+Crypto: source crypto -> strategy crypto -> backtest crypto -> shadow crypto
+  -> evidence crypto -> readiness crypto_signals -> alert crypto
+```
+
+Only satisfactory evidence for the relevant market can make that capability
+`paper_alerts`; existing Telegram outbound support alone is never evidence for
+that state. A blocked B3 capability cannot prevent crypto from advancing, and
+the inverse is equally true.
+
+The readiness core is implemented before alerts and is independent of UI and
+the final runbook. It projects global, fixed-income, B3, and crypto states;
+enforces the `paper_alerts` ceiling; checks source/freshness, risk validation,
+formatter, execution-disabled, and owner/recovery prerequisites; and reports a
+fail-closed blocking reason. Market-specific evidence is then projected
+separately, so each alert checks its own capability (`b3_signals` or
+`crypto_signals`) instead of a global readiness claim. P10 only exposes and
+validates this logic operationally; it does not create it.
+
+The active-signal monitor is also a decision gate. Its spike can use shadow
+evidence from either market, without waiting for both. It compares scheduled
 Issues (appropriate for low frequency/load) with a deterministic Guardian-
 supervised service (only when higher frequency requires it). It measures needed
 frequency, maximum active signals, polling/WebSocket choice, provider cost,
 gaps, crossings between checks, realtime-data need, restart/idempotency,
-health, resources, and closed-market behavior. Neither option may call an LLM
-continuously, sleep inside an agent, execute orders, or change original signal
-numbers retroactively.
+health, resources, and closed-market behavior. The resulting generic monitor
+checks the readiness of each signal's market; it does not require B3 to monitor
+crypto or crypto to monitor B3. Neither option may call an LLM continuously,
+sleep inside an agent, execute orders, or change original signal numbers
+retroactively.
 
 ## Data model
 
@@ -354,13 +390,18 @@ after its proportional validation. Conflicts are resolved periodically rather
 than accumulated, secrets never enter Git, and no large change is committed
 directly to `master`.
 
-Deliver focused increments: security/governance; inbound schema and state
+`AINV-T005` must be complete before Alice Invest functional code begins. That
+rule preserves the fork's upstream compatibility discipline before new generic
+Connector, Workspace, or market-data seams are introduced.
+
+Deliver focused increments: governance/security; inbound schema and state
 machine; transport recovery; Session binding; OpenRouter ADR and selected
 integration; router; fixed income; freshness/source validation; signal
-contracts/risk/strategies/backtests; shadow evidence; alert/monitor ADR and
-implementation; observability, documentation, and readiness. Generic contracts
-stay backward-compatible with outbound-only installations. Every persisted
-change has an idempotent migration and recovery test.
+contracts/risk/strategies; independent B3/crypto backtests, shadow evidence,
+and readiness projections; market-specific alerts; monitor ADR and
+implementation; observability, documentation, and operational readiness.
+Generic contracts stay backward-compatible with outbound-only installations.
+Every persisted change has an idempotent migration and recovery test.
 
 ## Test strategy
 

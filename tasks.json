@@ -43,7 +43,7 @@
           "id": "AINV-T006",
           "title": "Definir schema de configuração e invariantes básicos de segurança",
           "status": "pending",
-          "depends_on": ["AINV-T001"],
+          "depends_on": ["AINV-T005"],
           "scope": ["src/domain/alice-invest", "src/core", "docs/alice-invest-security.md"],
           "acceptance_criteria": ["Schema central inicia em not_ready", "execution_enabled aceita exclusivamente false", "Definir kill switches de inbound, scans, notificações e monitor", "Definir redaction, limites de payload, política de caminhos/permissões, correlação e fail-closed"],
           "validation": ["Testes de parsing e invariantes fail-closed", "Testes de redaction e limites", "npx tsc --noEmit", "pnpm test"],
@@ -121,7 +121,7 @@
           "id": "AINV-T200",
           "title": "Persistir binding de conversa externa para resumeId",
           "status": "pending",
-          "depends_on": ["AINV-T114"],
+          "depends_on": ["AINV-T115"],
           "scope": ["src/workspaces", "src/core", "src/migrations"],
           "acceptance_criteria": ["connector+chat+owner resolve um resumeId estável", "Binding não expõe IDs nativos", "Alterações usam migração idempotente"],
           "validation": ["Testes de binding, restart e isolamento de proprietário", "pnpm build:migration-index", "pnpm test"]
@@ -130,7 +130,7 @@
           "id": "AINV-T201",
           "title": "Despachar conversa inbound para Session e Inbox",
           "status": "pending",
-          "depends_on": ["AINV-T200", "AINV-T114"],
+          "depends_on": ["AINV-T200"],
           "scope": ["src/workspaces", "src/core/inbox-store.ts", "src/server"],
           "acceptance_criteria": ["Uma conversa é serializada por resumeId", "Resposta e indisponibilidade do agente são entregues via Inbox", "Origem de Session/run é server-stamped"],
           "validation": ["Integração inbound para Session, Inbox e outbound gravado", "Testes de concorrência e timeout"]
@@ -365,12 +365,21 @@
         },
         {
           "id": "AINV-T707",
-          "title": "Implementar backtests e testes sem lookahead",
+          "title": "Implementar backtests e testes sem lookahead para B3",
           "status": "pending",
-          "depends_on": ["AINV-T702", "AINV-T703", "AINV-T704"],
+          "depends_on": ["AINV-T702", "AINV-T704"],
           "scope": ["src/domain/alice-invest/signals", "src/domain/analysis"],
-          "acceptance_criteria": ["Backtests são separados para B3 e cripto", "Cobrir custos, slippage, timezone e ausência de lookahead"],
-          "validation": ["Suites determinísticas com fixtures versionadas"]
+          "acceptance_criteria": ["Cobrir custos e slippage da B3, timezone America/Sao_Paulo e ausência de lookahead", "Usar estratégia, fonte e fixtures B3 versionadas com resultados reproduzíveis"],
+          "validation": ["Suite determinística B3 com fixtures versionadas"]
+        },
+        {
+          "id": "AINV-T708",
+          "title": "Implementar backtests e testes sem lookahead para cripto",
+          "status": "pending",
+          "depends_on": ["AINV-T703", "AINV-T704"],
+          "scope": ["src/domain/alice-invest/signals", "src/domain/analysis"],
+          "acceptance_criteria": ["Cobrir custos e slippage spot, operação 24/7 e ausência de lookahead", "Usar estratégia, fonte e fixtures cripto versionadas com resultados reproduzíveis"],
+          "validation": ["Suite determinística cripto com fixtures versionadas"]
         }
       ]
     },
@@ -380,32 +389,73 @@
       "tasks": [
         {
           "id": "AINV-T800",
-          "title": "Executar scans em shadow mode",
+          "title": "Executar shadow mode B3",
           "status": "pending",
-          "depends_on": ["AINV-T612", "AINV-T702", "AINV-T703", "AINV-T704", "AINV-T705", "AINV-T707"],
+          "depends_on": ["AINV-T612", "AINV-T702", "AINV-T704", "AINV-T705", "AINV-T707"],
           "scope": ["src/workspaces/templates/alice-invest", "src/domain/alice-invest/scans", "src/domain/alice-invest/signals"],
-          "acceptance_criteria": ["Scans geram e acompanham sinais sem Telegram", "Registrar entrada, alvo, stop, trailing, expiração, invalidação, MFE, MAE, custos e slippage", "Separar B3 e cripto"],
-          "validation": ["Integração Issue-headless-ledger sem Inbox Telegram", "Testes de scan vazio, stale e duplicação"],
-          "readiness_impact": "research_only"
+          "acceptance_criteria": ["Gerar e acompanhar sinais B3 sem Telegram", "Registrar entrada, alvo, stop, trailing, expiração, invalidação, MFE, MAE, custos e slippage B3", "Medir stale, indisponibilidade, duplicação e resultado reproduzível"],
+          "validation": ["Integração Issue-headless-ledger B3 sem Inbox Telegram", "Testes de scan vazio, stale e duplicação B3"],
+          "readiness_impact": "b3_signals: research_only"
         },
         {
           "id": "AINV-T801",
-          "title": "Avaliar resultados dos sinais em shadow mode",
+          "title": "Executar shadow mode cripto",
           "status": "pending",
-          "depends_on": ["AINV-T800"],
-          "scope": ["src/domain/alice-invest/signals", "docs/alice-invest-signals.md"],
-          "acceptance_criteria": ["Medir taxa, duplicação, rejeições stale, indisponibilidade de fornecedor, MFE/MAE e lookahead", "Comparar B3 e cripto sem agregação enganosa"],
-          "validation": ["Relatório reproduzível baseado no ledger"]
+          "depends_on": ["AINV-T612", "AINV-T703", "AINV-T704", "AINV-T705", "AINV-T708"],
+          "scope": ["src/workspaces/templates/alice-invest", "src/domain/alice-invest/scans", "src/domain/alice-invest/signals", "docs/alice-invest-signals.md"],
+          "acceptance_criteria": ["Gerar e acompanhar sinais cripto sem Telegram", "Registrar entrada, alvo, stop, trailing, expiração, invalidação, MFE, MAE, custos e slippage spot", "Medir stale, indisponibilidade, duplicação e resultado reproduzível"],
+          "validation": ["Integração Issue-headless-ledger cripto sem Inbox Telegram", "Testes de scan vazio, stale e duplicação cripto"],
+          "readiness_impact": "crypto_signals: research_only"
         },
         {
           "id": "AINV-T802",
-          "title": "Produzir evidências de readiness para paper alerts",
+          "title": "Avaliar evidências do shadow mode B3",
+          "status": "pending",
+          "depends_on": ["AINV-T800"],
+          "scope": ["src/domain/alice-invest/readiness", "docs/alice-invest-runbook.md"],
+          "acceptance_criteria": ["Avaliar taxa, duplicação, stale, indisponibilidade, MFE/MAE, custos, slippage e lookahead somente para B3", "B3 sem fonte realtime comprovada permanece research_only"],
+          "validation": ["Relatório B3 reproduzível baseado no ledger"],
+          "readiness_impact": "b3_signals: paper_alerts eligible after evidence"
+        },
+        {
+          "id": "AINV-T803",
+          "title": "Avaliar evidências do shadow mode cripto",
           "status": "pending",
           "depends_on": ["AINV-T801"],
           "scope": ["src/domain/alice-invest/readiness", "docs/alice-invest-runbook.md"],
-          "acceptance_criteria": ["Avaliar capabilities global, renda fixa, cripto e B3 separadamente", "B3 sem fonte realtime comprovada permanece research_only", "Não promove estado acima de paper_alerts"],
-          "validation": ["Verificar evidências de shadow, dados, risco, formatter e execução false"],
-          "readiness_impact": "paper_alerts eligible after evidence"
+          "acceptance_criteria": ["Avaliar taxa, duplicação, stale, indisponibilidade, MFE/MAE, custos, slippage e lookahead somente para cripto", "Não promover estado acima de paper_alerts"],
+          "validation": ["Relatório cripto reproduzível baseado no ledger"],
+          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence"
+        },
+        {
+          "id": "AINV-T804",
+          "title": "Implementar readiness core por capability",
+          "status": "pending",
+          "depends_on": ["AINV-T006", "AINV-T704", "AINV-T706"],
+          "scope": ["src/domain/alice-invest/readiness"],
+          "acceptance_criteria": ["Projetar global, fixed_income, crypto_signals e b3_signals independentemente", "Limitar estados a paper_alerts e falhar fechado", "Avaliar fonte/freshness, Risk Validator, formatter, execution false e owner/recovery para Telegram", "Registrar razão de bloqueio sem depender de UI ou runbook"],
+          "validation": ["Testes de promoção e bloqueio por capability", "Testes de B3 bloqueado com cripto elegível e inverso", "npx tsc --noEmit", "pnpm test"],
+          "readiness_impact": "paper_alerts maximum"
+        },
+        {
+          "id": "AINV-T805",
+          "title": "Projetar evidência B3 no readiness core",
+          "status": "pending",
+          "depends_on": ["AINV-T802", "AINV-T804"],
+          "scope": ["src/domain/alice-invest/readiness"],
+          "acceptance_criteria": ["Promover somente b3_signals quando shadow B3, fonte realtime/freshness e demais gates forem válidos", "Registrar bloqueio B3 sem alterar crypto_signals"],
+          "validation": ["Testes de evidência B3 elegível, stale e fonte delayed"],
+          "readiness_impact": "b3_signals: paper_alerts eligible after evidence"
+        },
+        {
+          "id": "AINV-T806",
+          "title": "Projetar evidência cripto no readiness core",
+          "status": "pending",
+          "depends_on": ["AINV-T803", "AINV-T804"],
+          "scope": ["src/domain/alice-invest/readiness"],
+          "acceptance_criteria": ["Promover somente crypto_signals quando shadow cripto, fonte/freshness e demais gates forem válidos", "Registrar bloqueio cripto sem alterar b3_signals"],
+          "validation": ["Testes de evidência cripto elegível, stale e fornecedor indisponível"],
+          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence"
         }
       ]
     },
@@ -417,29 +467,38 @@
           "id": "AINV-T900",
           "title": "Avaliar arquitetura e frequência do monitor de sinais",
           "status": "pending",
-          "depends_on": ["AINV-T705", "AINV-T800"],
+          "depends_on": ["AINV-T705"],
           "scope": ["docs/alice-invest-architecture.md", "src/workspaces", "scripts/guardian"],
-          "acceptance_criteria": ["Comparar Issues agendadas e serviço determinístico supervisionado", "Determinar frequência, sinais ativos, polling/WebSocket, custo, gaps, mercado fechado, dados realtime, restart, health e recursos", "Produzir decisão antes de implementação"],
+          "acceptance_criteria": ["Comparar Issues agendadas e serviço determinístico supervisionado", "Determinar frequência, sinais ativos, polling/WebSocket, custo, gaps, mercado fechado, dados realtime, restart, health e recursos", "Usar evidência de pelo menos um shadow mode antes de concluir a decisão", "Produzir decisão antes de implementação"],
           "validation": ["Medição com fixtures/carga representativa", "Revisão contra Guardian e scheduler"],
           "deliverables": ["ADR do monitor"],
           "requires_adr": true
         },
         {
           "id": "AINV-T910",
-          "title": "Enviar alertas paper somente após shadow mode",
+          "title": "Enviar alertas paper de B3",
           "status": "pending",
-          "depends_on": ["AINV-T202", "AINV-T706", "AINV-T802"],
+          "depends_on": ["AINV-T202", "AINV-T706", "AINV-T805"],
           "scope": ["src/domain/alice-invest", "src/core/inbox-store.ts", "services/connector"],
-          "acceptance_criteria": ["Alertas dependem de capability paper_alerts elegível e signal_notifications_enabled", "Inbox continua a fronteira durável", "Nenhum alerta envia ordem ou libera execução"],
-          "validation": ["Integração ledger-Inbox-Connector com fixture", "Testes de kill switch e readiness"]
+          "acceptance_criteria": ["Enviar somente quando b3_signals for paper_alerts e signal_notifications_enabled", "Inbox continua a fronteira durável", "Nenhum alerta envia ordem ou libera execução"],
+          "validation": ["Integração B3 ledger-Inbox-Connector com fixture", "Testes de kill switch e readiness B3"]
         },
         {
           "id": "AINV-T911",
+          "title": "Enviar alertas paper de cripto",
+          "status": "pending",
+          "depends_on": ["AINV-T202", "AINV-T706", "AINV-T806"],
+          "scope": ["src/domain/alice-invest/signals", "src/workspaces", "scripts/guardian"],
+          "acceptance_criteria": ["Enviar somente quando crypto_signals for paper_alerts e signal_notifications_enabled", "B3 em research_only não bloqueia cripto", "Nenhum alerta envia ordem ou libera execução"],
+          "validation": ["Integração cripto ledger-Inbox-Connector com fixture", "Testes de kill switch e readiness cripto"]
+        },
+        {
+          "id": "AINV-T912",
           "title": "Implementar monitor conforme ADR",
           "status": "pending",
-          "depends_on": ["AINV-T900", "AINV-T802", "AINV-T910"],
+          "depends_on": ["AINV-T900", "AINV-T804"],
           "scope": ["src/domain/alice-invest/signals", "src/workspaces", "scripts/guardian"],
-          "acceptance_criteria": ["Nunca chama LLM continuamente ou usa sleep em agente", "Transições são idempotentes e não alteram sinal original", "Se serviço separado, é supervisionado, healthchecked e sem porta pública"],
+          "acceptance_criteria": ["Monitor genérico verifica readiness da capability do sinal", "B3 bloqueado não impede monitorar cripto e inverso", "Nunca chama LLM continuamente ou usa sleep em agente", "Transições são idempotentes e não alteram sinal original"],
           "validation": ["Testes de gap, alvo/stop entre verificações, trailing, restart e mercado fechado", "pnpm test:e2e"]
         }
       ]
@@ -479,18 +538,18 @@
           "id": "AINV-T1003",
           "title": "Documentar operação, segurança, deploy e runbook",
           "status": "pending",
-          "depends_on": ["AINV-T911", "AINV-T1002"],
+          "depends_on": ["AINV-T912", "AINV-T1002"],
           "scope": ["docs/alice-invest-telegram.md", "docs/alice-invest-openrouter.md", "docs/alice-invest-fixed-income.md", "docs/alice-invest-market-data.md", "docs/alice-invest-signals.md", "docs/alice-invest-security.md", "docs/alice-invest-deployment.md", "docs/alice-invest-runbook.md"],
           "acceptance_criteria": ["Cobrir setup, link, modelos, scans, shadow, logs, switches, recovery, backup, update e troubleshooting", "Preservar topologia Guardian-Alice-UTA opcional-Connector"],
           "validation": ["Walkthrough isolado do runbook", "pnpm docker:smoke"]
         },
         {
           "id": "AINV-T1004",
-          "title": "Implementar readiness gate limitado a paper_alerts",
+          "title": "Expor e validar readiness operacional",
           "status": "pending",
-          "depends_on": ["AINV-T802", "AINV-T910", "AINV-T1003"],
+          "depends_on": ["AINV-T804", "AINV-T1003"],
           "scope": ["src/domain/alice-invest/readiness", "src/webui", "ui/src"],
-          "acceptance_criteria": ["Estados futuros validated_alerts, read_only_broker e live_execution não podem ser ativados", "Readiness é por capability e execution_enabled continua false", "Outbound sem shadow não satisfaz paper_alerts"],
+          "acceptance_criteria": ["Exibir evidências e bloqueios por capability", "Validar integração completa sem substituir a lógica central", "Estados futuros validated_alerts, read_only_broker e live_execution não podem ser ativados", "Outbound sem shadow não satisfaz paper_alerts"],
           "validation": ["Suite de integração/recovery", "npx tsc --noEmit", "pnpm test", "pnpm test:e2e", "cd ui && npx tsc -b", "pnpm docker:smoke"],
           "readiness_impact": "paper_alerts maximum"
         }

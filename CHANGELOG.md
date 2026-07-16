@@ -16,6 +16,10 @@ All notable changes to OpenAlice will be documented in this file.
 - Move basic security controls to the foundation and add decision gates for
   OpenRouter, validated B3 intraday data, shadow mode, and signal monitoring;
   no runtime functionality is enabled.
+- Require completed inbound recovery before Session binding, decouple B3 and
+  crypto backtests/shadow/readiness/alerts, and move the readiness core before
+  alert delivery. Fork governance now precedes functional implementation; no
+  runtime functionality is enabled.
 
 ### 🏗️ Architecture — UTA-split v1
 
