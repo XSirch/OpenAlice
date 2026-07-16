@@ -1,0 +1,5 @@
+import { describe,expect,it } from 'vitest'
+import { mkdtemp } from 'node:fs/promises';import { join } from 'node:path';import { tmpdir } from 'node:os'
+import { SignalLedger } from './ledger.js'
+const candidate={strategyId:'x',strategyVersion:'1',symbol:'BTC',observations:[{symbol:'BTC',source:'x',sourceTimestamp:'2026-01-01T00:00:00.000Z',receivedAt:'2026-01-01T00:00:00.000Z',capability:'realtime' as const,close:'1'}],targetPrice:'2',stopPrice:'0.5',validUntil:'2026-01-01T01:00:00.000Z',riskNotes:[],status:'eligible' as const};const event=(type:'created'|'invalidated'='created')=>({eventId:type==='created'?'e1':'e2',signalId:'s1',type,at:'2026-01-01T00:00:00.000Z',candidate})
+describe('signal ledger',()=>{it('is idempotent and projects latest lifecycle without mutating evidence',async()=>{const l=new SignalLedger(join(await mkdtemp(join(tmpdir(),'ledger-')),'signals.json'));expect(await l.append(event())).toMatchObject({duplicate:false});expect(await l.append(event())).toMatchObject({duplicate:true});await l.append(event('invalidated'));expect((await l.current()).get('s1')).toMatchObject({type:'invalidated',candidate:{targetPrice:'2'}})})})

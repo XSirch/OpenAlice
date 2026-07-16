@@ -1,0 +1,2 @@
+import type { Migration } from '../types.js'
+export const migration: Migration={id:'0027_alice_invest_signal_ledger',appVersion:'0.81.0-beta',introducedAt:'2026-07-16',affects:['alice-invest-signals.json'],summary:'Seed append-only Alice Invest signal ledger.',up:async ctx=>{if(await ctx.readJson('alice-invest-signals.json')===undefined)await ctx.writeJson('alice-invest-signals.json',{version:1,events:[]})}}

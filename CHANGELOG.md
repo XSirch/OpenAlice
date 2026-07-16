@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add an append-only, private signal ledger with idempotent event handling and
+  a current-state projection; migration 0027 seeds its persisted shape.
 - Add a deterministic fail-closed signal risk validator for freshness, spread,
   liquidity, reward/risk, cooldown, limits and prohibited operational capabilities.
 - Add a transparent spot-only crypto crossover candidate strategy that rejects

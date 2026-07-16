@@ -348,7 +348,7 @@
         {
           "id": "AINV-T705",
           "title": "Implementar ledger e projeção de sinais",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T700", "AINV-T704"],
           "scope": ["src/domain/alice-invest/signals", "src/migrations"],
           "acceptance_criteria": ["Lifecycle append-only e projeção atual são idempotentes", "Transições preservam números originais e evidência de observação"],
