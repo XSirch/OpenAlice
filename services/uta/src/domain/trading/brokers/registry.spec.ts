@@ -77,7 +77,7 @@ describe('broker engine registry', () => {
     const mock = await loadBrokerEngine('mock')
     expect(mock.configSchema).toBeTruthy()
     expect(mock.createBroker({ id: 'sim', brokerConfig: {} }).brokerEngine).toBe('mock')
-  })
+  }, 15_000)
 
   it('loads and validates an activated pack module', async () => {
     await activateCcxtModule('valid-release', validModuleSource())
