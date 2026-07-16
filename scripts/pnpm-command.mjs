@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 /**
  * Compose a shell-free pnpm child-process command on POSIX and the equivalent
@@ -18,7 +20,8 @@ export function composePnpmCommand(commandArgs, options = {}) {
     }
   }
 
-  const commandLine = ['pnpm.cmd', ...commandArgs.map(quoteCmdArgument)].join(' ')
+  const pnpmCommand = options.windowsPnpmCommand ?? resolveWindowsPnpmCommand()
+  const commandLine = [pnpmCommand, ...commandArgs.map(quoteCmdArgument)].join(' ')
   return {
     command: env.ComSpec ?? env.COMSPEC ?? 'cmd.exe',
     args: ['/d', '/s', '/c', commandLine],
@@ -26,6 +29,18 @@ export function composePnpmCommand(commandArgs, options = {}) {
     // second time makes the quotes around pnpm arguments literal on Windows.
     windowsVerbatimArguments: true,
   }
+}
+
+function resolveWindowsPnpmCommand() {
+  const nodeDirectory = dirname(process.execPath)
+  if (existsSync(join(nodeDirectory, 'pnpm.cmd'))) {
+    return 'pnpm.cmd'
+  }
+
+  // Corepack can be present without its global shims being enabled (for
+  // example in a locked-down Windows installation). Invoke it directly so
+  // release tooling remains usable without modifying the system PATH.
+  return 'corepack.cmd pnpm'
 }
 
 /**

@@ -14,7 +14,11 @@ describe('composePnpmCommand', () => {
   it('routes the Corepack pnpm.cmd shim through ComSpec on Windows', () => {
     expect(composePnpmCommand(
       ['-F', '@traderalice/desktop', 'exec', 'electron-builder'],
-      { platform: 'win32', env: { ComSpec: 'C:\\Windows\\System32\\cmd.exe' } },
+      {
+        platform: 'win32',
+        env: { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+        windowsPnpmCommand: 'pnpm.cmd',
+      },
     )).toEqual({
       command: 'C:\\Windows\\System32\\cmd.exe',
       args: [
@@ -30,7 +34,7 @@ describe('composePnpmCommand', () => {
   it('keeps a Windows deploy target with spaces in one cmd argument', () => {
     const spec = composePnpmCommand(
       ['deploy', '--prod', 'C:\\Users\\Alice Dev\\broker pack'],
-      { platform: 'win32', env: {} },
+      { platform: 'win32', env: {}, windowsPnpmCommand: 'pnpm.cmd' },
     )
 
     expect(spec.command).toBe('cmd.exe')
@@ -38,6 +42,14 @@ describe('composePnpmCommand', () => {
       'pnpm.cmd "deploy" "--prod" "C:\\Users\\Alice Dev\\broker pack"',
     )
     expect(spec.windowsVerbatimArguments).toBe(true)
+  })
+
+  it('falls back to Corepack when the pnpm shim is unavailable', () => {
+    expect(composePnpmCommand(['--version'], {
+      platform: 'win32',
+      env: {},
+      windowsPnpmCommand: 'corepack.cmd pnpm',
+    }).args.at(-1)).toBe('corepack.cmd pnpm "--version"')
   })
 })
 

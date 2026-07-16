@@ -11,7 +11,7 @@
  * (e.g. a preset adding a field the engine doesn't know about).
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   BROKER_PRESET_CATALOG,
   getBrokerPreset,
@@ -30,6 +30,11 @@ import {
   BUILTIN_BROKER_PRESETS,
 } from '@traderalice/uta-protocol'
 import { loadBrokerEngine } from './registry.js'
+
+// This suite verifies preset-to-schema translation. Loading Longbridge's
+// Rust-NAPI binding is unrelated to that contract and can be unavailable on
+// developer machines even when its TypeScript pack is installed.
+vi.mock('longbridge', () => ({}))
 
 // ==================== Sample data per preset ====================
 
