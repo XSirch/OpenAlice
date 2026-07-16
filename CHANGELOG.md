@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Define strict observation, candidate and informational-signal contracts with
+  decimal strings, provenance, validity and `BUY` as the sole initial side.
 - Add bounded B3/crypto universes and explicit scan gates for switch, session,
   realtime capability and Decimal liquidity.
 - Add fail-closed crypto source evidence checks for fresh spot-only data; no

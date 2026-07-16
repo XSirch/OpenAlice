@@ -302,7 +302,7 @@
         {
           "id": "AINV-T700",
           "title": "Definir contratos de observação, candidato e sinal",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T600"],
           "scope": ["src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Valores monetários e razões usam Decimal ou strings", "Contratos preservam estratégia, versão, fontes, validade, risco e status", "BUY informativo é o único sentido inicial"],
