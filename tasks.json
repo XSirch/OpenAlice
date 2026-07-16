@@ -42,7 +42,7 @@
         {
           "id": "AINV-T006",
           "title": "Definir schema de configuração e invariantes básicos de segurança",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T005"],
           "scope": ["src/domain/alice-invest", "src/core", "docs/alice-invest-security.md"],
           "acceptance_criteria": ["Schema central inicia em not_ready", "execution_enabled aceita exclusivamente false", "Definir kill switches de inbound, scans, notificações e monitor", "Definir redaction, limites de payload, política de caminhos/permissões, correlação e fail-closed"],

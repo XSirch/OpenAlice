@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add the fail-closed Alice Invest safety foundation: private configuration,
+  disabled execution, default-off switches, payload/path limits, and migration
+  seeding. No runtime capability is enabled.
 - Define fork governance before functional Alice Invest work: XSirch/OpenAlice
   is the sole automatic remote, while any TraderAlice/OpenAlice synchronization
   requires explicit owner authorization.

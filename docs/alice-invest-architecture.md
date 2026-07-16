@@ -120,6 +120,10 @@ foundation owns payload limits, redaction, correlation IDs, file-path and
 permission policy, and parsing tests that fail closed. Advanced audit views,
 aggregate metrics, and operational UI deliberately arrive later.
 
+The configuration is a private atomic file under `data/config/`, seeded by an
+idempotent migration. It contains no credentials: provider and connector
+secrets continue to use the existing sealed stores.
+
 Product-specific code belongs in an isolated domain/template/skills: proposed
 `src/domain/alice-invest/`, `src/workspaces/templates/alice-invest/`, and
 `default/skills/alice-invest-*`. It owns Brazilian fixed income, router policy,
