@@ -519,7 +519,7 @@
         {
           "id": "AINV-T1001",
           "title": "Adicionar métricas e health operacional",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T1000"],
           "scope": ["src/core", "services/connector", "src/domain/alice-invest"],
           "acceptance_criteria": ["Medir mensagens, dedupe, latência, modelos, scans, risco, alertas, stale, fornecedor e monitor", "Labels não são sensíveis ou ilimitados"],
