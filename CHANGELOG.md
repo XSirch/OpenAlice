@@ -4,6 +4,13 @@ All notable changes to OpenAlice will be documented in this file.
 
 ## [Unreleased]
 
+### Alice Invest
+
+- Add the Alice Invest architecture diagnosis and phased executable backlog.
+- Keep the initial product read-only and cap readiness at `paper_alerts`; this
+  documentation increment enables no Telegram, model, signal, or execution
+  behavior.
+
 ### 🏗️ Architecture — UTA-split v1
 
 Split the trading domain into a dedicated UTA service co-located with

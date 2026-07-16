@@ -1,0 +1,246 @@
+{
+  "project": "Alice Invest",
+  "version": 1,
+  "delivery_mode": "serial",
+  "maximum_readiness": "paper_alerts",
+  "status_values": ["pending", "in_progress", "done", "blocked"],
+  "phases": [
+    {
+      "id": "AINV-P0",
+      "title": "Arquitetura e fundação",
+      "tasks": [
+        {
+          "id": "AINV-T000",
+          "title": "Diagnosticar a arquitetura e registrar limites do Alice Invest",
+          "status": "done",
+          "depends_on": [],
+          "scope": ["docs/alice-invest-architecture.md"],
+          "acceptance_criteria": ["Documentar arquitetura, reuso, mudanças, fluxos, segurança, dados, riscos, decisões, migração, testes e non-goals", "Manter UTA como autoridade exclusiva de trading e readiness máxima paper_alerts"],
+          "validation": ["Revisar contra os owner guides de estrutura, Connector, automação, proveniência e market data"]
+        },
+        {
+          "id": "AINV-T001",
+          "title": "Criar backlog executável e critérios de entrega",
+          "status": "done",
+          "depends_on": ["AINV-T000"],
+          "scope": ["tasks.json", "CHANGELOG.md"],
+          "acceptance_criteria": ["Cobrir AINV-P0 a AINV-P10 com dependências, escopo, aceite e validação", "Atualizar status no início e fim de cada tarefa"],
+          "validation": ["Parsear JSON", "Verificar IDs únicos e dependências existentes"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P1",
+      "title": "Telegram bidirecional",
+      "tasks": [
+        {
+          "id": "AINV-T010",
+          "title": "Adicionar contrato genérico de mensagem inbound",
+          "status": "pending",
+          "depends_on": ["AINV-T001"],
+          "scope": ["packages/connector-protocol/src", "services/connector/src/core", "services/connector/src/adapters/telegram.ts"],
+          "acceptance_criteria": ["Contrato versionado e limitado aceita texto normalizado", "Telegram aceita apenas DM do proprietário vinculado", "Core não ramifica por plataforma"],
+          "validation": ["Typecheck do connector-protocol", "Testes de schema, autorização e limites"]
+        },
+        {
+          "id": "AINV-T011",
+          "title": "Persistir, deduplicar e recuperar updates inbound",
+          "status": "pending",
+          "depends_on": ["AINV-T010"],
+          "scope": ["services/connector/src/core", "services/connector/src/adapters/telegram.ts", "src/migrations"],
+          "acceptance_criteria": ["Persistir antes de encaminhar", "Deduplicar update/message IDs após restart", "Não descartar pendências silenciosamente", "Expor fila limitada, retry e erro"],
+          "validation": ["Testes de restart e duplicação", "pnpm test:connector-replay", "pnpm test:connector-service", "pnpm build:migration-index"]
+        },
+        {
+          "id": "AINV-T012",
+          "title": "Criar bridge inbound autenticado Connector para Alice",
+          "status": "pending",
+          "depends_on": ["AINV-T011"],
+          "scope": ["packages/connector-protocol/src", "services/connector/src", "src/services/connector-client", "src/server", "scripts/guardian"],
+          "acceptance_criteria": ["Transporte loopback autenticado", "Correlação ponta a ponta", "Falha transitória não duplica dispatch", "Health não expõe segredo"],
+          "validation": ["Testes de contrato, autenticação e recovery", "pnpm test:guardian-recovery"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P2",
+      "title": "Orquestrador de mensagens",
+      "tasks": [
+        {
+          "id": "AINV-T020",
+          "title": "Persistir binding Telegram para Workspace Session",
+          "status": "pending",
+          "depends_on": ["AINV-T012"],
+          "scope": ["src/workspaces", "src/core", "src/migrations"],
+          "acceptance_criteria": ["connector+chat+owner resolve resumeId estável", "Serializar mensagens por conversa", "/new rotaciona sem apagar histórico", "Inbox recebe proveniência server-stamped"],
+          "validation": ["Testes de binding, restart, concorrência e /new", "npx tsc --noEmit", "pnpm test"]
+        },
+        {
+          "id": "AINV-T021",
+          "title": "Implementar fast path e Invest Message Router",
+          "status": "pending",
+          "depends_on": ["AINV-T020", "AINV-T031"],
+          "scope": ["src/domain/alice-invest/router", "src/tool", "src/workspaces/templates/alice-invest"],
+          "acceptance_criteria": ["Pedidos claros evitam chamada extra", "Ações obedecem JSON Schema", "Pedidos operacionais são bloqueados", "Saída inválida falha fechada", "Router não analisa investimentos"],
+          "validation": ["Testes de parser, fast path, ambiguidade, multi-intent, bloqueio e schema", "npx tsc --noEmit", "pnpm test"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P3",
+      "title": "OpenRouter",
+      "tasks": [
+        {
+          "id": "AINV-T030",
+          "title": "Adicionar preset OpenRouter ao vault e runtimes",
+          "status": "pending",
+          "depends_on": ["AINV-T001"],
+          "scope": ["src/ai-providers", "src/core/config.ts", "src/workspaces", "ui/src"],
+          "acceptance_criteria": ["Chave selada e write-only", "Endpoint openai-chat sem modelo fixo", "Modelos por responsabilidade configuráveis", "API/UI nunca retornam chave"],
+          "validation": ["Testes de preset, config, redaction e injection", "cd ui && npx tsc -b", "npx tsc --noEmit"]
+        },
+        {
+          "id": "AINV-T031",
+          "title": "Validar structured output, resiliência e telemetria OpenRouter",
+          "status": "pending",
+          "depends_on": ["AINV-T030"],
+          "scope": ["src/domain/alice-invest/ai", "src/workspaces", "src/core"],
+          "acceptance_criteria": ["Timeout/retry/backoff/fallback limitados", "Limites de contexto e custo", "JSON inválido é erro explícito", "Telemetria segura registra finalidade, modelos, tokens, custo, latência e correlação"],
+          "validation": ["Servidor fake cobre 429, 5xx, timeout, JSON inválido e fallback", "Teste de segredo ausente em logs", "Probe real opt-in registrado como executado ou skipped"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P4",
+      "title": "Renda fixa",
+      "tasks": [
+        {
+          "id": "AINV-T040",
+          "title": "Criar motor Decimal de renda fixa brasileira",
+          "status": "pending",
+          "depends_on": ["AINV-T021"],
+          "scope": ["src/domain/alice-invest/fixed-income", "src/tool", "default/skills", "src/workspaces/templates/alice-invest"],
+          "acceptance_criteria": ["Calcular bruto/líquido, IR, IOF, CDI, CDB versus LCI/LCA, retorno real, emissores e FGC", "Tratar CDI como referência", "Explicar hipóteses, lacunas, liquidez e riscos sem garantia"],
+          "validation": ["Testes Decimal de arredondamento, IR/IOF, datas e equivalência", "npx tsc --noEmit", "pnpm test"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P5",
+      "title": "Dados de mercado",
+      "tasks": [
+        {
+          "id": "AINV-T050",
+          "title": "Adicionar observação normalizada e política de frescor",
+          "status": "pending",
+          "depends_on": ["AINV-T001"],
+          "scope": ["src/domain/market-data/bars", "src/domain/alice-invest/market-data", "src/tool"],
+          "acceptance_criteria": ["Carregar origem, timestamps, idade e capability", "Preservar bid/ask/spread/volume", "Bloquear sinal stale ou capability inadequada"],
+          "validation": ["Testes de timestamp, timezone, spread e freshness", "Testes focados de BarService", "pnpm test"]
+        },
+        {
+          "id": "AINV-T051",
+          "title": "Configurar fontes read-only e universo B3/crypto",
+          "status": "pending",
+          "depends_on": ["AINV-T050"],
+          "scope": ["src/domain/alice-invest/market-data", "src/domain/market-data", "src/workspaces/templates/alice-invest"],
+          "acceptance_criteria": ["Universos e liquidez configuráveis", "Fonte atrasada não é realtime", "Crypto spot read-only sem saque/margem/futuros/alavancagem", "MT5 futuro segue BarService read-only"],
+          "validation": ["Testes de fonte, universo e capability", "Smoke CLI read-only com fixtures", "pnpm test"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P6",
+      "title": "Motor de sinais",
+      "tasks": [
+        {
+          "id": "AINV-T060",
+          "title": "Criar contratos, indicadores e estratégias versionadas",
+          "status": "pending",
+          "depends_on": ["AINV-T050"],
+          "scope": ["src/domain/analysis", "src/domain/alice-invest/signals"],
+          "acceptance_criteria": ["Usar Decimal/strings monetárias", "Declarar ID, versão, mercados, timeframes e parâmetros", "Gerar candidatos com poucas estratégias transparentes"],
+          "validation": ["Testes de indicadores e estratégias", "Testes no-lookahead e multi-timeframe", "Backtests com fixtures versionadas"]
+        },
+        {
+          "id": "AINV-T061",
+          "title": "Implementar Risk Validator, ledger e formatter Telegram",
+          "status": "pending",
+          "depends_on": ["AINV-T060", "AINV-T051"],
+          "scope": ["src/domain/alice-invest/signals", "src/tool"],
+          "acceptance_criteria": ["Rejeitar reward/risk, stale, spread, liquidez, cooldown e limites", "LLM não libera rejeição", "Formatter usa sinal estruturado", "Mensagem declara nenhuma ordem enviada"],
+          "validation": ["Testes de reward/risk, stop, alvo, cooldown, duplicação e formatter", "Testes de precisão/slippage", "pnpm test"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P7",
+      "title": "Automação e alertas",
+      "tasks": [
+        {
+          "id": "AINV-T070",
+          "title": "Criar scan horário como Issue do Workspace",
+          "status": "pending",
+          "depends_on": ["AINV-T061", "AINV-T040"],
+          "scope": ["src/workspaces/templates/alice-invest", "default/skills", "src/domain/alice-invest/scans"],
+          "acceptance_criteria": ["Cron 08:00-16:00 úteis em America/Sao_Paulo", "Verificar calendário/mercado/freshness", "LLM somente para shortlist", "Sem oportunidade é sucesso silencioso"],
+          "validation": ["Testes de cron, feriado, mercado fechado e scan vazio", "Integração Issue-headless-signal-Inbox-Connector", "pnpm test:e2e"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P8",
+      "title": "Monitor de sinais ativos",
+      "tasks": [
+        {
+          "id": "AINV-T080",
+          "title": "Monitorar sinais ativos deterministicamente",
+          "status": "pending",
+          "depends_on": ["AINV-T070"],
+          "scope": ["src/domain/alice-invest/signals", "src/workspaces/templates/alice-invest"],
+          "acceptance_criteria": ["Alvo/stop/trailing/expiração/invalidação idempotentes", "Sem LLM contínua ou sleep loop", "Atualizações relevantes via Inbox", "Restart não perde transições"],
+          "validation": ["Testes de gaps, alvo+stop, trailing, concorrência e restart", "pnpm test:e2e"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P9",
+      "title": "Segurança, observabilidade e auditoria",
+      "tasks": [
+        {
+          "id": "AINV-T090",
+          "title": "Adicionar kill switches, auditoria e métricas",
+          "status": "pending",
+          "depends_on": ["AINV-T080"],
+          "scope": ["src/domain/alice-invest", "src/core", "services/connector", "src/webui", "ui/src"],
+          "acceptance_criteria": ["execution_enabled aceita somente false", "Kill switches falham seguros", "Auditoria liga mensagem, rota, run, tools, fontes, risco, sinal e entrega", "Métricas não têm labels sensíveis"],
+          "validation": ["Testes de kill switch/redaction", "Inspeção de logs com fixtures", "cd ui && npx tsc -b", "pnpm test"]
+        }
+      ]
+    },
+    {
+      "id": "AINV-P10",
+      "title": "Validação e readiness",
+      "tasks": [
+        {
+          "id": "AINV-T100",
+          "title": "Documentar operação, segurança e deploy",
+          "status": "pending",
+          "depends_on": ["AINV-T090"],
+          "scope": ["docs/alice-invest-telegram.md", "docs/alice-invest-openrouter.md", "docs/alice-invest-fixed-income.md", "docs/alice-invest-market-data.md", "docs/alice-invest-signals.md", "docs/alice-invest-security.md", "docs/alice-invest-deployment.md", "docs/alice-invest-runbook.md", "docs/docker-deployment.md"],
+          "acceptance_criteria": ["Runbook cobre setup, /link, modelos, scans, logs, alertas, switches, recovery, backup, update e troubleshooting", "Docker preserva topologia e não expõe portas desnecessárias"],
+          "validation": ["Walkthrough isolado", "pnpm docker:smoke", "Verificar ausência de segredos em imagem/config"]
+        },
+        {
+          "id": "AINV-T101",
+          "title": "Implementar readiness gate até paper_alerts",
+          "status": "pending",
+          "depends_on": ["AINV-T100"],
+          "scope": ["src/domain/alice-invest/readiness", "src/webui", "ui/src", "docs/alice-invest-runbook.md"],
+          "acceptance_criteria": ["Estados/evidências explícitos", "paper_alerts exige todos os critérios", "Não habilitar estado superior", "execution_enabled permanece false"],
+          "validation": ["Suite de recovery/integração", "npx tsc --noEmit", "pnpm test", "pnpm test:e2e", "cd ui && npx tsc -b", "pnpm docker:smoke"]
+        }
+      ]
+    }
+  ]
+}
