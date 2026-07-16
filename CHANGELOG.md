@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Validate structured-router output fail-closed, with redacted telemetry and
+  explicit fallback for malformed JSON or schema mismatch.
 - Add a narrow direct structured-router transport with bounded context,
   timeout and transient retry; it has no tool, Session or vault access.
 - Add a fail-closed normalized market-observation contract: timestamps and

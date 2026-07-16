@@ -15,4 +15,14 @@ describe('StructuredRouterClient', () => {
     const request = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 429 })).mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 })) as unknown as typeof fetch
     await expect(new StructuredRouterClient(config, request).complete('x')).resolves.toMatchObject({ attempts: 2 })
   })
+  it('does not retry a non-transient response', async () => {
+    const request = vi.fn().mockResolvedValue(new Response('{}', { status: 400 })) as unknown as typeof fetch
+    await expect(new StructuredRouterClient(config, request).complete('x')).rejects.toThrow('400')
+    expect(request).toHaveBeenCalledOnce()
+  })
+  it('retries timeout and 5xx failures', async () => {
+    const timeout = Object.assign(new Error('timed out'), { name: 'TimeoutError' })
+    const request = vi.fn().mockRejectedValueOnce(timeout).mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 })) as unknown as typeof fetch
+    await expect(new StructuredRouterClient(config, request).complete('x')).resolves.toMatchObject({ attempts: 2 })
+  })
 })

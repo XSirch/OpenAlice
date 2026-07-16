@@ -16,6 +16,10 @@ export interface StructuredRouterResponse {
 }
 export type FetchLike = typeof fetch
 
+class ProviderError extends Error {
+  constructor(message: string, readonly transient: boolean) { super(message) }
+}
+
 /** Narrow OpenAI-chat transport. It has no tools, Session access, or logging. */
 export class StructuredRouterClient {
   constructor(private readonly config: StructuredRouterClientConfig, private readonly request: FetchLike = fetch) {}
@@ -31,19 +35,22 @@ export class StructuredRouterClient {
           body: JSON.stringify({ model: this.config.model, messages: [{ role: 'user', content: prompt }], temperature: 0 }),
           signal: AbortSignal.timeout(this.config.timeoutMs),
         })
-        const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } }
         if (!response.ok) {
-          const error = Object.assign(new Error(`Structured router provider failed: ${response.status}`), { transient: response.status === 429 || response.status >= 500 })
-          if (!error.transient) throw error
+          const error = new ProviderError(`Structured router provider failed: ${response.status}`, response.status === 429 || response.status >= 500)
+          if (!error.transient || attempt === this.config.maxAttempts) throw error
           lastError = error; continue
         }
+        const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } }
         return { text: payload.choices?.[0]?.message?.content ?? '', model: this.config.model, attempts: attempt, latencyMs: Date.now() - started, inputTokens: payload.usage?.prompt_tokens, outputTokens: payload.usage?.completion_tokens }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Structured router request failed')
-        if (attempt === this.config.maxAttempts) throw lastError
+        if (!isTransientError(lastError) || attempt === this.config.maxAttempts) throw lastError
       }
     }
     throw lastError ?? new Error('Structured router request failed')
   }
 }
 function ensureTrailingSlash(value: string): string { return value.endsWith('/') ? value : `${value}/` }
+function isTransientError(error: Error): boolean {
+  return error instanceof ProviderError ? error.transient : error.name === 'TimeoutError' || error.name === 'AbortError' || error instanceof TypeError
+}

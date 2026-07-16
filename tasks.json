@@ -175,7 +175,7 @@
         {
           "id": "AINV-T302",
           "title": "Validar structured output e fallback da integração escolhida",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T301"],
           "scope": ["src/domain/alice-invest/ai", "src/workspaces"],
           "acceptance_criteria": ["JSON inválido falha explicitamente", "Fallback não altera classificação de risco", "Telemetria registra somente campos permitidos"],
