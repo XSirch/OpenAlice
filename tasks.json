@@ -495,7 +495,7 @@
         {
           "id": "AINV-T912",
           "title": "Implementar monitor conforme ADR",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T900", "AINV-T804"],
           "scope": ["src/domain/alice-invest/signals", "src/workspaces", "scripts/guardian"],
           "acceptance_criteria": ["Monitor genérico verifica readiness da capability do sinal", "B3 bloqueado não impede monitorar cripto e inverso", "Nunca chama LLM continuamente ou usa sleep em agente", "Transições são idempotentes e não alteram sinal original"],
