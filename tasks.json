@@ -138,7 +138,7 @@
         {
           "id": "AINV-T202",
           "title": "Adicionar comandos locais de ciclo de conversa",
-          "status": "in_progress",
+          "status": "done",
           "depends_on": ["AINV-T201"],
           "scope": ["services/connector/src/adapters/telegram.ts", "src/workspaces", "src/server"],
           "acceptance_criteria": ["/new rotaciona binding sem apagar histórico", "Comandos de ajuda/status respeitam proprietário", "Nenhum comando operacional é aceito"],

@@ -116,6 +116,12 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       const probeId = await context.sendTest(this.id)
       await reply(`Test notification sent. Probe: ${probeId}`)
     })
+    context.commands.register('new', async ({ userId, chatId, reply }) => {
+      if (!this.isOwner(userId)) return reply('This command is only available to the linked owner.')
+      if (!chatId) throw new Error('Telegram private chat ID is missing')
+      await context.rotateConversation(this.id, userId, chatId)
+      await reply('Started a new conversation. Previous history is retained.')
+    })
   }
 
   private isOwner(userId: string): boolean {

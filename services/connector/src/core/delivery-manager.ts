@@ -25,6 +25,7 @@ export interface DeliveryManagerOptions {
   updateAdapterSettings(id: string, patch: Record<string, string | number | boolean>): Promise<void>
   startedAt?: string
   recorder?: ConnectorIORecorder
+  rotateConversation?(connectorId: string, ownerId: string, conversationId: string): Promise<void>
 }
 
 /**
@@ -148,6 +149,10 @@ export class DeliveryManager {
       updateSettings: (patch) => this.options.updateAdapterSettings(id, patch),
       getServiceStatus: () => this.health().status,
       sendTest: (connectorId) => this.sendTest(connectorId),
+      rotateConversation: (connectorId, ownerId, conversationId) => {
+        if (!this.options.rotateConversation) throw new Error('Conversation rotation is unavailable')
+        return this.options.rotateConversation(connectorId, ownerId, conversationId)
+      },
     }
     await adapter.start(config, context)
     this.adapters.set(id, adapter)

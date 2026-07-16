@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add owner-authorized `/new` conversation rotation for Telegram and Discord.
+  The Connector authenticates the rotation request to Alice and retains the
+  previous Session history.
 - Route authenticated inbound conversations through their bound resumed Session,
   with per-conversation serialization and Inbox unavailability fallback.
 - Recover persisted/forwarded inbound work after Connector restart and retain

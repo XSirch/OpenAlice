@@ -9,4 +9,13 @@ describe('Connector inbound route', () => {
     expect((await app.request('/', { method: 'POST', body, headers: { 'x-openalice-connector-signature': await signConnectorInbound('c1', body) } })).status).toBe(202)
     expect(receive).toHaveBeenCalledOnce()
   })
+  it('rotates a bound conversation only with a valid signature', async () => {
+    const rotate = vi.fn(async () => undefined)
+    const app = createConnectorInboundRoutes(vi.fn(async () => undefined), rotate)
+    const input = { correlationId: 'rotate-c1', connectorId: 'test', ownerId: 'owner', conversationId: 'chat' }
+    const body = JSON.stringify(input)
+    expect((await app.request('/rotate', { method: 'POST', body })).status).toBe(401)
+    expect((await app.request('/rotate', { method: 'POST', body, headers: { 'x-openalice-connector-signature': await signConnectorInbound(input.correlationId, body) } })).status).toBe(202)
+    expect(rotate).toHaveBeenCalledWith({ connectorId: 'test', ownerId: 'owner', conversationId: 'chat' })
+  })
 })

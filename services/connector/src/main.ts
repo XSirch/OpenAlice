@@ -18,6 +18,7 @@ import { discordConnectorRegistration } from './adapters/discord.js'
 import { telegramConnectorRegistration } from './adapters/telegram.js'
 import { ConnectorIOJournal } from './core/io-journal.js'
 import { ConnectorInboundJournal } from './core/inbound-journal.js'
+import { rotateAliceConversation } from './core/alice-inbound-client.js'
 import { dataPath } from '@/core/paths.js'
 
 const CONNECTOR_PORT = Number(process.env['OPENALICE_CONNECTOR_PORT'] ?? 47334)
@@ -46,6 +47,9 @@ async function main(): Promise<void> {
     startedAt,
     recorder: journal,
     updateAdapterSettings: (id, patch) => configStore.patchAdapter(id, patch),
+    rotateConversation: (connectorId, ownerId, conversationId) => rotateAliceConversation(
+      process.env['OPENALICE_URL'] ?? 'http://127.0.0.1:3002', connectorId, ownerId, conversationId,
+    ),
   })
   await manager.start()
 

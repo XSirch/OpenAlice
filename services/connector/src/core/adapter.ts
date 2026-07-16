@@ -27,6 +27,7 @@ export interface ConnectorAdapterContext {
   updateSettings(patch: Record<string, string | number | boolean>): Promise<void>
   getServiceStatus(): string
   sendTest(connectorId: string): Promise<string>
+  rotateConversation(connectorId: string, ownerId: string, conversationId: string): Promise<void>
 }
 
 export interface ConnectorAdapter {

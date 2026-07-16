@@ -13,7 +13,7 @@ import { createConfigRoutes, createMarketDataRoutes } from './routes/config.js'
 import { createConnectorRoutes } from './routes/connectors.js'
 import { createConnectorInboundRoutes } from './routes/connector-inbound.js'
 import { ConnectorInboundReceiver } from '../core/connector-inbound-receiver.js'
-import { ExternalConversationBindingStore } from '../core/external-conversation-bindings.js'
+import { ExternalConversationBindingStore, rotateExternalConversationBinding } from '../core/external-conversation-bindings.js'
 import { ExternalConversationDispatcher, workspaceConversationDispatchTarget } from '../workspaces/external-conversation-dispatch.js'
 import { createWorkspaceConversationControl } from '../workspaces/conversation-control.js'
 import { createScheduleRoutes } from './routes/schedule.js'
@@ -223,7 +223,12 @@ export class WebPlugin implements Plugin {
       if (!identity) throw new Error('bound Session is unavailable')
       await conversationDispatcher.dispatch({ resumeId: binding.resumeId, workspaceId: identity.wsId, prompt: message.content.text })
     })
-    app.route('/api/connector-inbound', createConnectorInboundRoutes((message) => inboundReceiver.receive(message)))
+    app.route('/api/connector-inbound', createConnectorInboundRoutes(
+      (message) => inboundReceiver.receive(message),
+      async ({ connectorId, conversationId, ownerId }) => {
+        await rotateExternalConversationBinding(conversationBindings, workspaceService.resumeRegistry, connectorId, conversationId, ownerId)
+      },
+    ))
     app.use('*', createAuthMiddleware({
       trustedProxies,
       csrfTrustedOrigins,
