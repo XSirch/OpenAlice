@@ -390,7 +390,7 @@
         {
           "id": "AINV-T800",
           "title": "Executar shadow mode B3",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T612", "AINV-T702", "AINV-T704", "AINV-T705", "AINV-T707"],
           "scope": ["src/workspaces/templates/alice-invest", "src/domain/alice-invest/scans", "src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Gerar e acompanhar sinais B3 sem Telegram", "Registrar entrada, alvo, stop, trailing, expiração, invalidação, MFE, MAE, custos e slippage B3", "Medir stale, indisponibilidade, duplicação e resultado reproduzível"],

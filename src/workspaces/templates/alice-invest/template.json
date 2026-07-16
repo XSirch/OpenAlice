@@ -1,0 +1,8 @@
+{
+  "displayName": "Alice Invest",
+  "groupOrder": 30,
+  "description": "Private research-only investment workspace. Signal scans remain shadow-only and never send orders.",
+  "defaultAgents": ["claude", "codex"],
+  "injectPersona": true,
+  "upgradeStrategy": "managed-context"
+}
