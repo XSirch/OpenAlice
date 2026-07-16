@@ -129,7 +129,7 @@
         {
           "id": "AINV-T201",
           "title": "Despachar conversa inbound para Session e Inbox",
-          "status": "in_progress",
+          "status": "done",
           "depends_on": ["AINV-T200"],
           "scope": ["src/workspaces", "src/core/inbox-store.ts", "src/server"],
           "acceptance_criteria": ["Uma conversa é serializada por resumeId", "Resposta e indisponibilidade do agente são entregues via Inbox", "Origem de Session/run é server-stamped"],

@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Route authenticated inbound conversations through their bound resumed Session,
+  with per-conversation serialization and Inbox unavailability fallback.
 - Recover persisted/forwarded inbound work after Connector restart and retain
   pending Telegram updates now that journal deduplication protects replay.
 - Add an authenticated, correlation-preserving Connector-to-Alice inbound
