@@ -537,7 +537,7 @@
         {
           "id": "AINV-T1003",
           "title": "Documentar operação, segurança, deploy e runbook",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T912", "AINV-T1002"],
           "scope": ["docs/alice-invest-telegram.md", "docs/alice-invest-openrouter.md", "docs/alice-invest-fixed-income.md", "docs/alice-invest-market-data.md", "docs/alice-invest-signals.md", "docs/alice-invest-security.md", "docs/alice-invest-deployment.md", "docs/alice-invest-runbook.md"],
           "acceptance_criteria": ["Cobrir setup, link, modelos, scans, shadow, logs, switches, recovery, backup, update e troubleshooting", "Preservar topologia Guardian-Alice-UTA opcional-Connector"],
