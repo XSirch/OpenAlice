@@ -32,6 +32,7 @@ import { createInboxRoutes } from './routes/inbox.js'
 import { createEntityRoutes } from './routes/entities.js'
 import { createWikilinkRoutes } from './routes/wikilink.js'
 import { createVersionRoutes } from './routes/version.js'
+import { createAliceInvestRoutes } from './routes/alice-invest.js'
 import { createAuthRoutes } from './routes/auth.js'
 import { createPreferencesRoutes } from './routes/preferences.js'
 import { initializeWindowsWorkspaceShellPreference } from '../core/windows-workspace-shell.js'
@@ -267,6 +268,7 @@ export class WebPlugin implements Plugin {
     app.route('/api/persona', createPersonaRoutes())
     app.route('/api/inbox', createInboxRoutes({ inboxStore: ctx.inboxStore }))
     app.route('/api/version', createVersionRoutes())
+    app.route('/api/alice-invest', createAliceInvestRoutes())
 
     // ==================== Workspaces (launcher-style PTY) ====================
     // Self-contained subsystem ported from auto-quant-launcher. Owns its own

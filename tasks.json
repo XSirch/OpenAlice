@@ -546,7 +546,7 @@
         {
           "id": "AINV-T1004",
           "title": "Expor e validar readiness operacional",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T804", "AINV-T1003"],
           "scope": ["src/domain/alice-invest/readiness", "src/webui", "ui/src"],
           "acceptance_criteria": ["Exibir evidências e bloqueios por capability", "Validar integração completa sem substituir a lógica central", "Estados futuros validated_alerts, read_only_broker e live_execution não podem ser ativados", "Outbound sem shadow não satisfaz paper_alerts"],
