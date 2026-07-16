@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Define fork governance before functional Alice Invest work: XSirch/OpenAlice
+  is the sole automatic remote, while any TraderAlice/OpenAlice synchronization
+  requires explicit owner authorization.
 - Add the Alice Invest architecture diagnosis and phased executable backlog.
 - Keep the initial product read-only and cap readiness at `paper_alerts`; this
   documentation increment enables no Telegram, model, signal, or execution

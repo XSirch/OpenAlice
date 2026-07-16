@@ -380,19 +380,28 @@ Architectural decisions:
 
 ## Fork governance, migration, and delivery
 
-The fork policy is documented and refined by `AINV-T005`. `origin` is
-`XSirch/OpenAlice`; `upstream` is `TraderAlice/OpenAlice` when configured for
-reference. The intended maintenance loop is `git fetch upstream`, then an
-intentional merge of `upstream/master` into the fork's stable `master` (or a
-documented rebase alternative). Each Alice Invest task begins by recording the
-upstream reference commit, runs on one branch, and lands through one focused PR
-after its proportional validation. Conflicts are resolved periodically rather
-than accumulated, secrets never enter Git, and no large change is committed
-directly to `master`.
+`AINV-T005` defines the Alice Invest fork workflow. `origin` is always
+`XSirch/OpenAlice`; the canonical `TraderAlice/OpenAlice` repository is an
+upstream reference only. No remote is added, fetched, pushed, merged, rebased,
+or otherwise contacted automatically. Any upstream synchronization requires an
+explicit owner instruction at that time.
 
-`AINV-T005` must be complete before Alice Invest functional code begins. That
-rule preserves the fork's upstream compatibility discipline before new generic
-Connector, Workspace, or market-data seams are introduced.
+When explicitly authorized, synchronize intentionally: inspect the proposed
+upstream commit and diff first, record that reference in the task/PR, merge the
+selected upstream `master` commit into a dedicated fork branch, validate the
+result, then open one PR into the fork's stable `master`. Do not push to
+upstream. Resolve conflicts in that branch, never by overwriting fork changes.
+
+Routine Alice Invest work uses one task branch and one focused PR to
+`XSirch/OpenAlice:master`; commits identify one task and include proportional
+validation. `master` remains the integrated stable branch. Direct commits to it
+require an explicit owner instruction. Before starting a task, fetch only
+`origin`, inspect status/diff, record the current `origin/master` commit, and
+preserve unrelated changes. Credentials never enter Git.
+
+`AINV-T005` is complete before Alice Invest functional code begins. This keeps
+the fork's compatibility and delivery discipline in place before adding generic
+Connector, Workspace, or market-data seams.
 
 Deliver focused increments: governance/security; inbound schema and state
 machine; transport recovery; Session binding; OpenRouter ADR and selected

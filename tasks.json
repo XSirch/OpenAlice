@@ -31,10 +31,10 @@
         {
           "id": "AINV-T005",
           "title": "Definir sincronização com upstream e fluxo de branches do fork",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T001"],
-          "scope": ["docs/alice-invest-architecture.md", "docs/development-workflow.md"],
-          "acceptance_criteria": ["Documentar origin XSirch/OpenAlice e upstream TraderAlice/OpenAlice", "Definir master estável, branch e PR por tarefa, validações pré-merge, referência upstream e resolução periódica de conflitos", "Não alterar branches, remotes ou histórico durante a tarefa"],
+          "scope": ["docs/alice-invest-architecture.md", "tasks.json", "CHANGELOG.md"],
+          "acceptance_criteria": ["Documentar origin XSirch/OpenAlice e TraderAlice/OpenAlice como referência upstream somente sob autorização explícita", "Definir master estável, branch e PR por tarefa, validações pré-merge, referência upstream e resolução de conflitos", "Não alterar branches, remotes ou histórico durante a tarefa"],
           "validation": ["Revisão do fluxo contra docs/development-workflow.md", "Verificar que nenhuma credencial aparece no fluxo"],
           "deliverables": ["Política de sincronização e integração do fork"],
           "risks": ["Divergência do upstream e conflitos de contratos públicos"]
