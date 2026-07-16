@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a pure Telegram signal formatter that renders only validated structured
+  signal data, preserves Decimal precision, states validity/invalidation and
+  explicitly confirms that no order is sent or result guaranteed.
 - Add an append-only, private signal ledger with idempotent event handling and
   a current-state projection; migration 0027 seeds its persisted shape.
 - Add a deterministic fail-closed signal risk validator for freshness, spread,

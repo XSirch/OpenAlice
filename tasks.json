@@ -357,7 +357,7 @@
         {
           "id": "AINV-T706",
           "title": "Implementar formatter Telegram de sinal",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T705"],
           "scope": ["src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Texto deriva somente do sinal estruturado", "Inclui fonte, horário, validade, invalidação e aviso de nenhuma ordem", "Nunca promete resultado"],
