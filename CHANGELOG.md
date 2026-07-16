@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add bounded generic inbound dispatch with transient-only retry, timeout, and
+  durable dead-letter state.
 - Persist and deduplicate inbound Connector envelopes atomically, retaining
   pending work while compacting only terminal journal records.
 - Define the Connector inbound lifecycle, acknowledgement boundary, and stable

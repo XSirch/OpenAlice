@@ -87,7 +87,7 @@
         {
           "id": "AINV-T113",
           "title": "Implementar dispatcher, retry e dead-letter inbound",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T112"],
           "scope": ["services/connector/src/core"],
           "acceptance_criteria": ["Retry é limitado e apenas transitório", "Dead-letter é visível e não descarta silenciosamente", "Payloads respeitam timeout e limites"],
