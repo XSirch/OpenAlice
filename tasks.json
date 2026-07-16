@@ -241,7 +241,7 @@
         {
           "id": "AINV-T502",
           "title": "Implementar comparação e explicação estruturada de renda fixa",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T501"],
           "scope": ["src/domain/alice-invest/fixed-income", "src/tool", "default/skills"],
           "acceptance_criteria": ["Comparar CDB, LCI/LCA, Tesouro e fundos por retorno, liquidez, risco, prazo, emissor e FGC", "Explicitar hipóteses, lacunas e cenários sem garantia"],

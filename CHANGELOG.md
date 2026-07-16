@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a deterministic fixed-income comparison that exposes projected return,
+  liquidity, issuer, maturity, FGC, assumptions and gaps without recommendations.
 - Add Decimal-only fixed-income projection, including CDI/IPCA rates and the
   Brazilian regressive IR/IOF schedules.
 - Connect the fast path and validated structured transport in a correlation-
