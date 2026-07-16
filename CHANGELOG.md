@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Define strict fixed-income product contracts for issuer, rate, dates,
+  liquidity, FGC, fees and assumptions; CDI is retained solely as a reference
+  rate, never as a product.
 - Add a conservative local router fast path with allowlisted commands and
   pre-provider blocking for imperative execution requests.
 - Decide the structured-router boundary: local rules remain the fast path and

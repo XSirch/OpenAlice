@@ -223,7 +223,7 @@
         {
           "id": "AINV-T500",
           "title": "Definir contratos determinísticos de renda fixa",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006"],
           "scope": ["src/domain/alice-invest/fixed-income"],
           "acceptance_criteria": ["Modelar produto, emissor, taxa, datas, liquidez, FGC, taxas e hipóteses", "Tratar CDI como referência e não produto"],
