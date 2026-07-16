@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   ArrowUp,
   Bot,
   Building2,
-  ChevronRight,
   ClipboardCheck,
   GitMerge,
   Loader2,
@@ -17,12 +16,7 @@ import {
 import '@xterm/xterm/css/xterm.css'
 
 import {
-  getWorkspaceManager,
   MANAGER_WORKSPACE_ID,
-  openWebPiSession,
-  quickStartWorkspaceManager,
-  resumeSession,
-  type ManagerWorkspaceSnapshot,
 } from '../components/workspace/api'
 import {
   AgentLaunchDetails,
@@ -31,6 +25,7 @@ import {
 } from '../components/workspace/AgentLaunchControls'
 import { TerminalView } from '../components/workspace/Terminal'
 import { WebPiView } from '../components/workspace/WebPiView'
+import { ResumeCta } from '../components/workspace/ResumeCta'
 import { useWorkspaces } from '../contexts/workspaces-context'
 import { useAgentLaunchConfig, useAgentLaunchPreferences } from '../hooks/useAgentLaunchConfig'
 import { useWorkspace } from '../tabs/store'
@@ -43,15 +38,25 @@ const SUGGESTION_ICONS = [ClipboardCheck, UsersRound, GitMerge, RefreshCw] as co
 
 export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
   const { t } = useTranslation()
-  const { agents, defaultAgent, setDefaultAgent, openAgentConfig } = useWorkspaces()
+  const {
+    agents,
+    defaultAgent,
+    setDefaultAgent,
+    openAgentConfig,
+    workspaceManager: manager,
+    workspaceManagerLoaded,
+    workspaceManagerError,
+    refreshWorkspaceManager,
+    quickStartWorkspaceManager,
+    resumeSession,
+    openWebPiSession,
+  } = useWorkspaces()
   const openOrFocus = useWorkspace((state) => state.openOrFocus)
-  const [manager, setManager] = useState<ManagerWorkspaceSnapshot | null>(null)
   const [draft, setDraft] = useState('')
-  const [loading, setLoading] = useState(true)
   const [launching, setLaunching] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const openingRef = useRef<string | null>(null)
   const launchSelectorsRef = useRef<AgentLaunchSelectorsHandle>(null)
+  const loading = !workspaceManagerLoaded
 
   const runtimeAgents = useMemo(() => agents.filter((agent) => agent.kind !== 'utility'), [agents])
   const launchPreferences = useAgentLaunchPreferences()
@@ -65,44 +70,10 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
   })
   const effectiveAgent = launchConfig.effectiveAgent
 
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      setManager(await getWorkspaceManager())
-      setError(null)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('workspaceManager.loadError'))
-    } finally {
-      setLoading(false)
-    }
-  }, [t])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
   const sessionId = spec.params.sessionId
   const session = sessionId
     ? manager?.sessions.find((candidate) => candidate.id === sessionId) ?? null
     : null
-
-  // After a backend restart the durable record is paused. Pi reopens through
-  // WebPi with the manager contract re-applied; other agents resume in their
-  // native terminal surface.
-  useEffect(() => {
-    if (!sessionId || !session || openingRef.current === sessionId) return
-    const usesWebPi = session.agent === 'pi'
-    if (session.state === 'running' && (usesWebPi ? session.surface === 'webpi' : session.surface !== 'webpi')) return
-    openingRef.current = sessionId
-    const opening = usesWebPi
-      ? openWebPiSession(MANAGER_WORKSPACE_ID, sessionId).then(() => undefined)
-      : resumeSession(MANAGER_WORKSPACE_ID, sessionId).then((result) => {
-          if (result === null) throw new Error(t('workspaceManager.resumeError'))
-        })
-    void opening
-      .then(() => refresh())
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('workspaceManager.resumeError')))
-      .finally(() => { openingRef.current = null })
-  }, [refresh, session, sessionId, t])
 
   const suggestions = useMemo(() => [
     t('workspaceManager.suggestionAudit'),
@@ -136,7 +107,6 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
         effectiveAgent,
         launchConfig.launchCredentialSlug,
       )
-      setManager(result.manager)
       setDraft('')
       openOrFocus({ kind: 'workspace-manager', params: { sessionId: result.session.id } })
     } catch (cause) {
@@ -188,24 +158,31 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
             </div>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-bg px-2 py-1 text-[10px] font-medium text-text-muted">
-            <Bot size={11} /> {runtimeLabel(session.agent, agents)} · {session.agent === 'pi' ? 'WebPi' : 'TUI'}
+            <Bot size={11} /> {runtimeLabel(session.agent, agents)} · {session.surface === 'webpi' ? 'WebPi' : 'TUI'}
           </span>
         </header>
         <div className="min-h-0 flex-1 p-2 md:p-3">
-          {session.agent === 'pi' ? (
+          {session.state === 'paused' ? (
+            <ResumeCta
+              record={session}
+              onResume={() => void resumeSession(MANAGER_WORKSPACE_ID, session.id)}
+              onOpenWebPi={() => void openWebPiSession(MANAGER_WORKSPACE_ID, session.id)}
+            />
+          ) : session.agent === 'pi' && session.surface === 'webpi' ? (
             <WebPiView
               wsId={MANAGER_WORKSPACE_ID}
               sessionId={sessionId}
               label={t('workspaceManager.title')}
-              onSessionLost={() => void refresh()}
+              onSessionLost={() => void refreshWorkspaceManager()}
             />
           ) : (
             <TerminalView
               wsId={MANAGER_WORKSPACE_ID}
               sessionId={sessionId}
+              renderer={session.agent === 'opencode' ? 'dom' : 'auto'}
               label={`${t('workspaceManager.title')} · ${session.name}`}
               keyMap={keyMapForAgent(session.agent)}
-              onSessionLost={() => void refresh()}
+              onSessionLost={() => void refreshWorkspaceManager()}
             />
           )}
         </div>
@@ -276,63 +253,36 @@ export function WorkspaceManagerPage({ spec }: { spec: ManagerSpec }) {
           </div>
         </section>
 
-        {error && (
-          <div className="mt-3 rounded-lg border border-red/25 bg-red/10 px-3 py-2 text-[12px] text-red">{error}</div>
+        {(error ?? workspaceManagerError) && (
+          <div className="mt-3 rounded-lg border border-red/25 bg-red/10 px-3 py-2 text-[12px] text-red">
+            {error ?? workspaceManagerError}
+          </div>
         )}
 
-        <div className="workspace-manager-support-grid mt-7 grid min-w-0 gap-6">
-          <section className="workspace-manager-suggestions-section min-w-0">
-            <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted/70">
-              {t('workspaceManager.suggestions')}
-            </h2>
-            <div className="workspace-manager-suggestions grid min-w-0 gap-2">
-              {suggestions.map((suggestion, index) => {
-                const Icon = SUGGESTION_ICONS[index] ?? Network
-                return (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setDraft(suggestion)}
-                    className="oa-pressable group flex items-start gap-3 rounded-xl border border-border/70 bg-bg-secondary/45 p-3 text-left hover:border-accent/30 hover:bg-bg-secondary"
-                  >
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary text-text-muted group-hover:text-accent">
-                      <Icon size={14} />
-                    </span>
-                    <span className="text-[12px] leading-relaxed text-text-muted group-hover:text-text">{suggestion}</span>
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-3 text-[11px] leading-relaxed text-text-muted/65">{t('workspaceManager.guardrail')}</p>
-          </section>
-
-          <section className="min-w-0">
-            <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted/70">
-              {t('workspaceManager.recent')}
-            </h2>
-            <div className="overflow-hidden rounded-xl border border-border/70 bg-bg-secondary/35">
-              {manager?.sessions.length ? manager.sessions.slice(0, 5).map((record) => (
+        <section className="workspace-manager-suggestions-section mt-7 min-w-0">
+          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted/70">
+            {t('workspaceManager.suggestions')}
+          </h2>
+          <div className="workspace-manager-suggestions grid min-w-0 gap-2">
+            {suggestions.map((suggestion, index) => {
+              const Icon = SUGGESTION_ICONS[index] ?? Network
+              return (
                 <button
-                  key={record.id}
+                  key={suggestion}
                   type="button"
-                  onClick={() => openOrFocus({ kind: 'workspace-manager', params: { sessionId: record.id } })}
-                  className="oa-pressable flex w-full items-center gap-3 border-b border-border/55 px-3 py-2.5 text-left last:border-b-0 hover:bg-bg-tertiary/65"
+                  onClick={() => setDraft(suggestion)}
+                  className="oa-pressable group flex items-start gap-3 rounded-xl border border-border/70 bg-bg-secondary/45 p-3 text-left hover:border-accent/30 hover:bg-bg-secondary"
                 >
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${record.state === 'running' ? 'bg-green' : 'bg-text-muted/30'}`} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-medium text-text">{record.title ?? record.name}</span>
-                    <span className="mt-0.5 block text-[10px] text-text-muted">
-                      {runtimeLabel(record.agent, agents)} · {record.agent === 'pi' ? 'WebPi' : 'TUI'} · {new Date(record.lastActiveAt).toLocaleString()}
-                    </span>
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary text-text-muted group-hover:text-accent">
+                    <Icon size={14} />
                   </span>
-                  <ChevronRight size={14} className="shrink-0 text-text-muted/50" />
+                  <span className="text-[12px] leading-relaxed text-text-muted group-hover:text-text">{suggestion}</span>
                 </button>
-              )) : (
-                <p className="px-3 py-5 text-center text-[11px] text-text-muted/60">{t('workspaceManager.noRecent')}</p>
-              )}
-            </div>
-          </section>
-        </div>
+              )
+            })}
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-text-muted/65">{t('workspaceManager.guardrail')}</p>
+        </section>
       </div>
     </div>
   )

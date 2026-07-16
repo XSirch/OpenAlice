@@ -848,6 +848,82 @@ describe('WebPi surface routes', () => {
 });
 
 describe('Workspace manager surface routes', () => {
+  it('diagnoses a Manager Session through the reserved runtime workspace', async () => {
+    const meta = {
+      id: 'workspace-manager',
+      tag: 'Workspace Manager',
+      dir: '/floor/workspaces',
+      agents: ['opencode'],
+      createdAt: new Date(0).toISOString(),
+    };
+    const session = {
+      id: 'opencode-manager-test',
+      resumeId: 'resume-manager-test',
+      wsId: meta.id,
+      agent: 'opencode',
+      name: 'o1',
+      createdAt: '2026-07-16T00:00:00.000Z',
+      lastActiveAt: '2026-07-16T00:01:00.000Z',
+      state: 'running',
+      surface: 'terminal',
+      resumeHint: { kind: 'agent-session-id', value: 'native-opencode' },
+    };
+    const adapter = {
+      id: 'opencode',
+      capabilities: { resumeById: true, resumeLast: true },
+    };
+    const computeSpawnPlan = vi.fn(() => ({
+      spawnCwd: meta.dir,
+      envPWD: meta.dir,
+      transcriptDir: null,
+      projectKey: 'manager-key',
+      composedCommand: ['opencode', '--session', 'native-opencode'],
+      resumeMode: 'by-id',
+      nativeSessionId: 'native-opencode',
+    }));
+    const svc = {
+      registry: { get: vi.fn(() => undefined) },
+      resolveRuntimeWorkspace: vi.fn((id: string) => id === meta.id ? meta : undefined),
+      sessionRegistry: {
+        ensureLoaded: vi.fn(async () => undefined),
+        get: vi.fn((_wsId: string, id: string) => id === session.id ? session : undefined),
+      },
+      resumeRegistry: { get: vi.fn(() => ({ agentSessionId: 'native-opencode' })) },
+      adapters: { get: vi.fn(() => adapter) },
+      computeSpawnPlan,
+      pool: {
+        liveSessionsFor: vi.fn(() => [{
+          id: session.id,
+          pid: 92,
+          startedAt: 2,
+          agentSessionId: 'native-opencode',
+        }]),
+      },
+      config: { launcherRepoRoot: '/repo' },
+    } as unknown as WorkspaceService;
+
+    const result = await get(
+      createWorkspaceRoutes(svc),
+      `/workspace-manager/sessions/${session.id}/diagnostics`,
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      workspace: { id: 'workspace-manager', dir: '/floor/workspaces' },
+      record: { id: session.id, agent: 'opencode' },
+      wouldResume: {
+        mode: 'by-id',
+        nativeSessionId: 'native-opencode',
+        composedCommand: ['opencode', '--session', 'native-opencode'],
+      },
+    });
+    expect(computeSpawnPlan).toHaveBeenCalledWith(
+      meta,
+      adapter,
+      { sessionId: 'native-opencode' },
+    );
+  });
+
   it('starts a launcher-owned Pi conversation directly in WebPi with the manager contract', async () => {
     const meta = {
       id: 'workspace-manager',

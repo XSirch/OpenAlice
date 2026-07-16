@@ -3,7 +3,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { SessionRecord, Workspace } from '../components/workspace/api'
+import {
+  MANAGER_WORKSPACE_ID,
+  type ManagerWorkspaceSnapshot,
+  type SessionRecord,
+  type Workspace,
+} from '../components/workspace/api'
+import { i18n } from '../i18n'
 import { useWorkspaces } from './workspaces-context'
 import { WorkspacesProvider } from './WorkspacesContext'
 
@@ -17,7 +23,11 @@ const mocks = vi.hoisted(() => ({
   getWorkspaceDefaultAgent: vi.fn(),
   getIssueDefaultAgent: vi.fn(),
   openResumeSession: vi.fn(),
+  getWorkspaceManager: vi.fn(),
+  pauseSession: vi.fn(),
   resumeSession: vi.fn(),
+  openWebPiSession: vi.fn(),
+  deleteSession: vi.fn(),
 }))
 
 vi.mock('../tabs/store', () => {
@@ -42,7 +52,11 @@ vi.mock('../components/workspace/api', async (importOriginal) => {
     getWorkspaceDefaultAgent: mocks.getWorkspaceDefaultAgent,
     getIssueDefaultAgent: mocks.getIssueDefaultAgent,
     openResumeSession: mocks.openResumeSession,
+    getWorkspaceManager: mocks.getWorkspaceManager,
+    pauseSession: mocks.pauseSession,
     resumeSession: mocks.resumeSession,
+    openWebPiSession: mocks.openWebPiSession,
+    deleteSession: mocks.deleteSession,
   }
 })
 
@@ -83,6 +97,32 @@ function materializedSession(): SessionRecord {
   }
 }
 
+function managerSession(): SessionRecord {
+  return {
+    id: 'opencode-manager-session',
+    resumeId: 'resume-manager',
+    wsId: MANAGER_WORKSPACE_ID,
+    agent: 'opencode',
+    name: 'o1',
+    createdAt: '2026-07-16T00:00:00.000Z',
+    lastActiveAt: '2026-07-16T00:00:00.000Z',
+    state: 'paused',
+    surface: 'terminal',
+    pid: null,
+    startedAt: null,
+    title: 'Coordinate release owners',
+  }
+}
+
+function managerSnapshot(): ManagerWorkspaceSnapshot {
+  return {
+    id: MANAGER_WORKSPACE_ID,
+    tag: 'Workspace Manager',
+    activeWorkspaceCount: 1,
+    sessions: [managerSession()],
+  }
+}
+
 function Probe() {
   const { openHeadlessRun } = useWorkspaces()
   return (
@@ -92,15 +132,41 @@ function Probe() {
   )
 }
 
-beforeEach(() => {
+function ManagerProbe() {
+  const {
+    workspaceManager,
+    pauseSession,
+    resumeSession,
+    openWebPiSession,
+    requestDeleteSession,
+  } = useWorkspaces()
+  const session = workspaceManager?.sessions[0]
+  if (!session) return <span>Loading manager</span>
+  return (
+    <div>
+      <span>{session.title}</span>
+      <button type="button" onClick={() => void pauseSession(MANAGER_WORKSPACE_ID, session.id)}>Pause manager</button>
+      <button type="button" onClick={() => void resumeSession(MANAGER_WORKSPACE_ID, session.id)}>Resume manager</button>
+      <button type="button" onClick={() => void openWebPiSession(MANAGER_WORKSPACE_ID, session.id)}>Open manager WebPi</button>
+      <button type="button" onClick={() => requestDeleteSession(MANAGER_WORKSPACE_ID, session.id)}>Delete manager</button>
+    </div>
+  )
+}
+
+beforeEach(async () => {
   vi.clearAllMocks()
+  await i18n.changeLanguage('en')
   mocks.listWorkspaces.mockResolvedValue([workspace()])
   mocks.listTemplates.mockResolvedValue([])
   mocks.listAgents.mockResolvedValue([])
   mocks.getWorkspaceDefaultAgent.mockResolvedValue(null)
   mocks.getIssueDefaultAgent.mockResolvedValue(null)
   mocks.openResumeSession.mockResolvedValue({ session: materializedSession() })
+  mocks.getWorkspaceManager.mockResolvedValue(managerSnapshot())
+  mocks.pauseSession.mockResolvedValue(true)
   mocks.resumeSession.mockResolvedValue(null)
+  mocks.openWebPiSession.mockResolvedValue({ pid: 43, startedAt: 3 })
+  mocks.deleteSession.mockResolvedValue(true)
 })
 
 afterEach(cleanup)
@@ -124,5 +190,42 @@ describe('WorkspacesProvider conversation routing', () => {
       },
     }))
     expect(mocks.setSidebar).toHaveBeenCalledWith('chat')
+  })
+
+  it('routes Manager lifecycle actions through the separate launcher-owned state', async () => {
+    mocks.resumeSession.mockResolvedValue({ pid: 42, startedAt: 2 })
+    render(
+      <WorkspacesProvider>
+        <ManagerProbe />
+      </WorkspacesProvider>,
+    )
+
+    expect(await screen.findByText('Coordinate release owners')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause manager' }))
+    await waitFor(() => expect(mocks.pauseSession).toHaveBeenCalledWith(
+      MANAGER_WORKSPACE_ID,
+      'opencode-manager-session',
+    ))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume manager' }))
+    await waitFor(() => expect(mocks.openOrFocus).toHaveBeenCalledWith({
+      kind: 'workspace-manager',
+      params: { sessionId: 'opencode-manager-session' },
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open manager WebPi' }))
+    await waitFor(() => expect(mocks.openWebPiSession).toHaveBeenCalledWith(
+      MANAGER_WORKSPACE_ID,
+      'opencode-manager-session',
+    ))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete manager' }))
+    expect(screen.getByText(/Delete "Coordinate release owners"/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(mocks.deleteSession).toHaveBeenCalledWith(
+      MANAGER_WORKSPACE_ID,
+      'opencode-manager-session',
+    ))
   })
 })

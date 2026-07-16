@@ -102,7 +102,10 @@ function managerSnapshot(sessions: readonly SessionRecord[] = []): ManagerWorksp
   }
 }
 
-function context(defaultAgent: string): WorkspacesContextValue {
+function context(
+  defaultAgent: string,
+  workspaceManager: ManagerWorkspaceSnapshot = managerSnapshot(),
+): WorkspacesContextValue {
   return {
     workspaces: [],
     templates: [],
@@ -110,17 +113,22 @@ function context(defaultAgent: string): WorkspacesContextValue {
     defaultAgent,
     issueDefaultAgent: null,
     listError: null,
+    workspaceManager,
+    workspaceManagerLoaded: true,
+    workspaceManagerError: null,
     hasLoaded: true,
     templatesLoaded: true,
     refresh: vi.fn(),
+    refreshWorkspaceManager: vi.fn(async () => undefined),
+    quickStartWorkspaceManager: mocks.quickStartWorkspaceManager,
     spawn: vi.fn(async () => undefined),
     openHeadlessRun: vi.fn(async () => undefined),
     setDefaultAgent: mocks.setDefaultAgent,
     setIssueDefaultAgent: vi.fn(async () => undefined),
     quickChat: vi.fn(async () => ''),
     pauseSession: vi.fn(async () => undefined),
-    resumeSession: vi.fn(async () => undefined),
-    openWebPiSession: vi.fn(async () => undefined),
+    resumeSession: mocks.resumeSession,
+    openWebPiSession: mocks.openWebPiSession,
     requestDeleteSession: vi.fn(),
     openAgentConfig: mocks.openAgentConfig,
     saveWorkspaceMetadata: vi.fn(async () => undefined),
@@ -169,7 +177,7 @@ beforeEach(async () => {
   mocks.getQuickChat.mockResolvedValue({ lastCredentialByAgent: {}, recentChatWorkspaceId: null })
   mocks.rememberQuickChatCredential.mockResolvedValue(undefined)
   mocks.openWebPiSession.mockResolvedValue(undefined)
-  mocks.resumeSession.mockResolvedValue({})
+  mocks.resumeSession.mockResolvedValue(undefined)
   mocks.quickStartWorkspaceManager.mockResolvedValue({
     manager: managerSnapshot(),
     session: {
@@ -353,7 +361,7 @@ describe('WorkspaceManagerPage runtime selection', () => {
     expect(screen.queryByRole('button', { name: 'AI provider' })).toBeNull()
   })
 
-  it('resumes a paused non-Pi Manager Session through the native terminal path', async () => {
+  it('keeps a paused non-Pi Manager Session stopped until the user resumes it', async () => {
     const session: SessionRecord = {
       id: 'manager-codex',
       resumeId: 'manager-codex-resume',
@@ -369,18 +377,53 @@ describe('WorkspaceManagerPage runtime selection', () => {
       title: 'Resume native manager',
     }
     const snapshot = managerSnapshot([session])
-    mocks.getWorkspaceManager.mockResolvedValue(snapshot)
+    mocks.useWorkspaces.mockImplementation(() => context('codex', snapshot))
 
     render(<WorkspaceManagerPage spec={{
       kind: 'workspace-manager',
       params: { sessionId: session.id },
     }} />)
 
-    await waitFor(() => expect(mocks.resumeSession).toHaveBeenCalledWith(
+    expect(mocks.resumeSession).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('terminal-view')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue in terminal' }))
+
+    expect(mocks.resumeSession).toHaveBeenCalledWith(
       'workspace-manager',
       session.id,
-    ))
+    )
     expect(mocks.openWebPiSession).not.toHaveBeenCalled()
-    expect(screen.getByTestId('terminal-view')).toBeTruthy()
+  })
+
+  it('reopens a paused Pi Manager Session in its saved WebPi surface', () => {
+    const session: SessionRecord = {
+      id: 'manager-pi',
+      resumeId: 'manager-pi-resume',
+      wsId: 'workspace-manager',
+      agent: 'pi',
+      name: 'p1',
+      createdAt: '2026-07-16T00:00:00.000Z',
+      lastActiveAt: '2026-07-16T00:00:00.000Z',
+      state: 'paused',
+      surface: 'webpi',
+      pid: null,
+      startedAt: null,
+      title: 'Resume WebPi manager',
+    }
+    mocks.useWorkspaces.mockImplementation(() => context('pi', managerSnapshot([session])))
+
+    render(<WorkspaceManagerPage spec={{
+      kind: 'workspace-manager',
+      params: { sessionId: session.id },
+    }} />)
+
+    expect(mocks.openWebPiSession).not.toHaveBeenCalled()
+    const openWebPi = screen.getByText('Open WebPi').closest('button')
+    expect(openWebPi).toBeTruthy()
+    fireEvent.click(openWebPi as HTMLButtonElement)
+
+    expect(mocks.openWebPiSession).toHaveBeenCalledWith('workspace-manager', session.id)
+    expect(mocks.resumeSession).not.toHaveBeenCalled()
   })
 })

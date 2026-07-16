@@ -1598,7 +1598,10 @@ export function createWorkspaceRoutes(
     if (!validId(id) || !validId(token)) {
       return c.json({ error: 'not_found' }, 404);
     }
-    const meta = svc.registry.get(id);
+    // The launcher-owned Manager is a runtime Workspace but deliberately does
+    // not live in the business registry. Use the same resolver as spawn/resume
+    // so its terminal diagnostics do not report workspace_not_found.
+    const meta = svc.resolveRuntimeWorkspace(id);
     if (!meta) return c.json({ error: 'workspace_not_found' }, 404);
     await svc.sessionRegistry.ensureLoaded(id).catch(() => undefined);
     const record = svc.sessionRegistry.get(id, token);

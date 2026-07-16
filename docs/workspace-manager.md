@@ -20,12 +20,19 @@ such as:
 - Which existing Session should explain an Inbox entry or historical decision?
 - Which Workspace should receive a new task, direct edit, or template upgrade?
 
-It is not a normal Chat Workspace. The UI gives it a distinct entry and a
-management-specific quick start. Its runtime picker consumes the same registered
-Agent list, saved default, install state, readiness, credential, model, and
-context contract as Quick Chat. `useAgentLaunchConfig` owns that resolution and
-the shared `AgentLaunchControls` components render it on both surfaces. Pi uses
-WebPi; Claude, Codex, and OpenCode retain their native TUI surfaces.
+It is not a normal Chat Workspace, but its conversations still belong to the
+Ask Alice interaction model. The Chat sidebar gives it a distinct, collapsible
+entry whose children reuse the ordinary Session controls for open, stop,
+resume, and delete. The manager page itself owns the management-specific quick
+start, not a second recent-conversation list. Opening a paused Manager Session
+shows an explicit resume choice; merely navigating to it must not restart the
+runtime.
+
+Its runtime picker consumes the same registered Agent list, saved default,
+install state, readiness, credential, model, and context contract as Quick
+Chat. `useAgentLaunchConfig` owns that resolution and the shared
+`AgentLaunchControls` components render it on both surfaces. Pi uses WebPi;
+Claude, Codex, and OpenCode retain their native TUI surfaces.
 
 For OpenCode and Pi, the summary describes the exact credential, model, and
 context that the next launch will inject. An existing Manager config wins over
@@ -79,6 +86,13 @@ to render, and entering the dedicated manager surface is the user's visible
 approval for the bundled skill and control-plane directory. Native runtimes keep
 their existing login, provider-injection, install, and trust behavior.
 
+OpenCode's OpenTUI startup asks the terminal emulator for cursor, mode, color,
+and pixel-geometry reports before it paints the conversation. The PTY socket
+must accept emulator replies before replaying startup bytes, and xterm must
+enable the safe canvas/cell geometry reports. OpenCode uses xterm's DOM renderer
+because the WebGL addon can silently produce an all-black OpenTUI canvas; other
+native runtimes retain the WebGL default.
+
 ## CLI Surface
 
 Start a floor audit from product indexes:
@@ -121,7 +135,8 @@ apply remains preview-first.
 - `src/workspaces/adapters/pi.ts` — explicit WebPi prompt/skill/trust flags.
 - `src/tool/workspace-list.ts` — active floor inventory.
 - `src/server/cli.ts` and `src/server/cli-commands.ts` — embedded CLI exposure.
-- `src/webui/routes/workspaces.ts` — manager status, quick start, and resume.
+- `src/webui/routes/workspaces.ts` — manager status, quick start, resume, and
+  reserved-runtime diagnostics.
 - `ui/src/lib/agentRuntime.ts` — shared runtime-selection policy.
 - `ui/src/hooks/useAgentLaunchConfig.ts` — shared readiness, credential,
   model, context, and launch-parameter resolution.
@@ -148,10 +163,13 @@ Then use the real `/chat/manager` route with at least two available runtimes:
    saved default;
 2. on Pi or OpenCode, verify the visible model/context matches the Manager
    Workspace config, switch provider, and confirm the launch uses the new one;
-3. start one Pi/WebPi and one native-TUI Manager Session, then reopen both;
+3. start one Pi/WebPi and one native-TUI Manager Session, then reopen both from
+   the collapsible Manager list in the Chat sidebar;
 4. inventory the active floor and confirm real `peer list` tool use;
 5. compare a harmless `--ws-id` reconstruction with an exact `--resume-id`
    continuation and verify their resolution modes remain visible;
 6. preview a peer template upgrade without `--apply`;
 7. confirm no business artifact appeared at the floor root;
-8. reload the manager conversation and confirm the same resume identity opens.
+8. stop and resume each Session from the sidebar, confirm the paused page does
+   not auto-start, then delete a disposable Session through the confirmation;
+9. reload the manager conversation and confirm the same resume identity opens.
