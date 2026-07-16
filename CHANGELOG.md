@@ -6,6 +6,7 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add Alice Invest operational, signals, deployment and integration runbooks.
 - Add a read-only Alice Invest operational tab for capability readiness, switches and health.
 - Add deterministic scheduled-tick signal monitoring with capability gates.
 - Add capability-gated paper alerts that persist through Inbox only.
