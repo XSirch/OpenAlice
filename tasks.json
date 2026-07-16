@@ -420,7 +420,7 @@
         {
           "id": "AINV-T803",
           "title": "Avaliar evidências do shadow mode cripto",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T801"],
           "scope": ["src/domain/alice-invest/readiness", "docs/alice-invest-runbook.md"],
           "acceptance_criteria": ["Avaliar taxa, duplicação, stale, indisponibilidade, MFE/MAE, custos, slippage e lookahead somente para cripto", "Não promover estado acima de paper_alerts"],
