@@ -477,7 +477,7 @@
         {
           "id": "AINV-T910",
           "title": "Enviar alertas paper de B3",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T202", "AINV-T706", "AINV-T805"],
           "scope": ["src/domain/alice-invest", "src/core/inbox-store.ts", "services/connector"],
           "acceptance_criteria": ["Enviar somente quando b3_signals for paper_alerts e signal_notifications_enabled", "Inbox continua a fronteira durável", "Nenhum alerta envia ordem ou libera execução"],
@@ -486,7 +486,7 @@
         {
           "id": "AINV-T911",
           "title": "Enviar alertas paper de cripto",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T202", "AINV-T706", "AINV-T806"],
           "scope": ["src/domain/alice-invest/signals", "src/workspaces", "scripts/guardian"],
           "acceptance_criteria": ["Enviar somente quando crypto_signals for paper_alerts e signal_notifications_enabled", "B3 em research_only não bloqueia cripto", "Nenhum alerta envia ordem ou libera execução"],
