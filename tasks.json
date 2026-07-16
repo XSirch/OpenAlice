@@ -165,7 +165,7 @@
         {
           "id": "AINV-T301",
           "title": "Implementar integração OpenRouter decidida pelo spike",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T300"],
           "scope": ["src/ai-providers", "src/workspaces", "src/domain/alice-invest/ai"],
           "acceptance_criteria": ["Seguir a ADR sem novo loop paralelo", "Credenciais permanecem seladas", "Modelo é configuração por responsabilidade", "Timeout, retry, custo e contexto respeitam a política"],

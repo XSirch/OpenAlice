@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a narrow direct structured-router transport with bounded context,
+  timeout and transient retry; it has no tool, Session or vault access.
 - Add a fail-closed normalized market-observation contract: timestamps and
   source are mandatory, quote fields are retained when available, and an
   unproven source remains `unknown` rather than realtime.
