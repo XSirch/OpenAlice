@@ -277,7 +277,7 @@
         {
           "id": "AINV-T611",
           "title": "Validar fonte read-only de cripto",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T600"],
           "scope": ["src/domain/market-data/bars", "src/domain/alice-invest/market-data", "docs/alice-invest-market-data.md"],
           "acceptance_criteria": ["Fonte é spot read-only sem saque, margem, futuros ou alavancagem", "Provar timestamps, capability, frescor e reconexão"],

@@ -15,3 +15,11 @@ retained whenever the provider supplies them.
 Before promotion, run a read-only configured-source capture and attach the
 source/timestamps, measured delay, quote availability, reconnect result and
 provider limitations here. No live or order-capable credential is permitted.
+
+## Crypto read-only source — AINV-T611
+
+Status: blocked on an owner-configured spot read-only source. Crypto remains
+`research_only`. The evaluator requires fresh BTC/USDT and ETH/USDT evidence,
+reconnection proof, and an explicit absence of withdrawals, margin, futures and
+leverage. Before promotion, record the least-privilege credential scope and
+observed timestamps/capability here; no existing credential may be repurposed.

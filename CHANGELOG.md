@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add fail-closed crypto source evidence checks for fresh spot-only data; no
+  configured source exists yet, so crypto remains `research_only`.
 - Add fail-closed B3 intraday-source evidence evaluation and record the current
   credential block; B3 remains `research_only` until real read-only evidence exists.
 - Add a deterministic fixed-income comparison that exposes projected return,
