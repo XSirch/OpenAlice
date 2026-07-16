@@ -430,7 +430,7 @@
         {
           "id": "AINV-T804",
           "title": "Implementar readiness core por capability",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006", "AINV-T704", "AINV-T706"],
           "scope": ["src/domain/alice-invest/readiness"],
           "acceptance_criteria": ["Projetar global, fixed_income, crypto_signals e b3_signals independentemente", "Limitar estados a paper_alerts e falhar fechado", "Avaliar fonte/freshness, Risk Validator, formatter, execution false e owner/recovery para Telegram", "Registrar razão de bloqueio sem depender de UI ou runbook"],
