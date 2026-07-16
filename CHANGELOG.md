@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a transparent spot-only crypto crossover candidate strategy that rejects
+  stale data and cannot model derivatives, margin or leverage.
 - Add a transparent B3 trailing SMA-crossover candidate strategy that emits
   only on fresh realtime input and remains silent for delayed or stale data.
 - Add trailing annualized volatility to the existing no-lookahead indicator

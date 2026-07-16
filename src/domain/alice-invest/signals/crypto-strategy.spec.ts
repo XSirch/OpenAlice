@@ -1,0 +1,4 @@
+import { describe,expect,it } from 'vitest'
+import { evaluateCryptoSpotStrategy } from './crypto-strategy.js'
+const now=new Date('2026-07-16T12:00:00Z'); const bar=(close:string,stamp='2026-07-16T11:59:50.000Z')=>({symbol:'BTC/USDT',source:'fixture',sourceTimestamp:stamp,receivedAt:now.toISOString(),capability:'realtime' as const,close})
+describe('crypto spot strategy',()=>{it('emits only for fresh spot multi-timeframe input',()=>expect(evaluateCryptoSpotStrategy({symbol:'BTC/USDT',fast:[bar('10'),bar('11'),bar('12')],slow:[bar('8'),bar('9'),bar('9'),bar('10'),bar('11')],now,maxAgeSeconds:30,spotReadOnly:true})).toMatchObject({strategyId:'crypto-spot-crossover'}));it('rejects stale or non-spot input',()=>expect(evaluateCryptoSpotStrategy({symbol:'BTC/USDT',fast:[bar('10','2026-07-16T10:00:00.000Z'),bar('11'),bar('12')],slow:[bar('8'),bar('9'),bar('9'),bar('10'),bar('11')],now,maxAgeSeconds:30,spotReadOnly:false})).toBeNull())})

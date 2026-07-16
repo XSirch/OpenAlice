@@ -330,7 +330,7 @@
         {
           "id": "AINV-T703",
           "title": "Implementar primeira estratégia cripto",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T611", "AINV-T701"],
           "scope": ["src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Estratégia cripto é spot, transparente e versionada", "Não produz sinal com dado stale"],
