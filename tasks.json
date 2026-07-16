@@ -265,7 +265,7 @@
         {
           "id": "AINV-T610",
           "title": "Validar fonte intradiária da B3",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T600"],
           "scope": ["src/domain/market-data/bars", "src/domain/alice-invest/market-data", "docs/alice-invest-market-data.md"],
           "acceptance_criteria": ["Provar OHLCV intradiário para PETR4, VALE3 e índice ou ETF", "Medir timestamp, atraso, bid/ask/spread quando disponíveis e reconexão", "Classificar por evidência realtime, delayed ou eod", "Bloquear sinal intradiário fora de realtime e frescor permitido"],

@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add fail-closed B3 intraday-source evidence evaluation and record the current
+  credential block; B3 remains `research_only` until real read-only evidence exists.
 - Add a deterministic fixed-income comparison that exposes projected return,
   liquidity, issuer, maturity, FGC, assumptions and gaps without recommendations.
 - Add Decimal-only fixed-income projection, including CDI/IPCA rates and the
