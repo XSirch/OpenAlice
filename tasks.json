@@ -400,7 +400,7 @@
         {
           "id": "AINV-T801",
           "title": "Executar shadow mode cripto",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T612", "AINV-T703", "AINV-T704", "AINV-T705", "AINV-T708"],
           "scope": ["src/workspaces/templates/alice-invest", "src/domain/alice-invest/scans", "src/domain/alice-invest/signals", "docs/alice-invest-signals.md"],
           "acceptance_criteria": ["Gerar e acompanhar sinais cripto sem Telegram", "Registrar entrada, alvo, stop, trailing, expiração, invalidação, MFE, MAE, custos e slippage spot", "Medir stale, indisponibilidade, duplicação e resultado reproduzível"],

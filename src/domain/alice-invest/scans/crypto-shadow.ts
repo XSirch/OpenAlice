@@ -1,0 +1,8 @@
+import { createHash } from 'node:crypto'
+import type { SignalCandidate } from '../signals/contracts.js'
+import { SignalLedger } from '../signals/ledger.js'
+export interface CryptoShadowInput{now:Date;enabled:boolean;sourceReady:boolean;candidates:SignalCandidate[];ledger:SignalLedger}
+export interface CryptoShadowResult{market:'crypto';delivery:'none';outcomes:Array<{signalId:string;state:'created'|'duplicate'|'blocked';reason?:string;entry?:string;target?:string;stop?:string;expiresAt?:string;costs?:string;slippage?:string}>}
+/** 24/7 spot-only shadow recorder; it has no calendar, connector, broker or order path. */
+export async function runCryptoShadow(input:CryptoShadowInput):Promise<CryptoShadowResult>{if(!input.enabled||!input.sourceReady)return{market:'crypto',delivery:'none',outcomes:[{signalId:'blocked',state:'blocked',reason:!input.enabled?'market scans are disabled':'spot read-only realtime source evidence is unavailable'}]};const outcomes=[] as CryptoShadowResult['outcomes'];for(const candidate of input.candidates){const signalId=id(candidate),event={eventId:id({signalId,type:'created'}),signalId,type:'created' as const,at:input.now.toISOString(),candidate},r=await input.ledger.append(event),last=candidate.observations.at(-1)!;outcomes.push({signalId,state:r.duplicate?'duplicate':'created',entry:last.close,target:candidate.targetPrice,stop:candidate.stopPrice,expiresAt:candidate.validUntil,costs:'0',slippage:'0'})}return{market:'crypto',delivery:'none',outcomes}}
+function id(value:unknown){const h=createHash('sha256').update(JSON.stringify(value)).digest('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`}
