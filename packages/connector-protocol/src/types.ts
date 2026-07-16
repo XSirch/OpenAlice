@@ -120,3 +120,32 @@ export const connectorDeliveryReceiptSchema = z.object({
   deliveryId: z.string().min(1),
 })
 export type ConnectorDeliveryReceipt = z.infer<typeof connectorDeliveryReceiptSchema>
+
+/** The inbound boundary accepts text only until a later contract explicitly
+ * introduces another content type. Limits are measured in UTF-8 bytes, not
+ * JavaScript code units, so adapters cannot bypass them with multi-byte text. */
+export const MAX_CONNECTOR_INBOUND_TEXT_BYTES = 16 * 1024
+export const MAX_CONNECTOR_EXTERNAL_ID_LENGTH = 256
+
+const externalIdSchema = z.string().min(1).max(MAX_CONNECTOR_EXTERNAL_ID_LENGTH)
+
+export const connectorInboundTextMessageSchema = z.object({
+  version: z.literal(1),
+  connectorId: z.string().min(1).max(64),
+  correlationId: z.string().min(1).max(128),
+  receivedAt: z.string().datetime(),
+  external: z.object({
+    updateId: externalIdSchema.optional(),
+    messageId: externalIdSchema.optional(),
+    senderId: externalIdSchema,
+    conversationId: externalIdSchema,
+  }).strict(),
+  content: z.object({
+    type: z.literal('text'),
+    text: z.string().min(1).refine(
+      (value) => Buffer.byteLength(value, 'utf8') <= MAX_CONNECTOR_INBOUND_TEXT_BYTES,
+      `Inbound text must not exceed ${MAX_CONNECTOR_INBOUND_TEXT_BYTES} UTF-8 bytes`,
+    ),
+  }).strict(),
+}).strict()
+export type ConnectorInboundTextMessage = z.infer<typeof connectorInboundTextMessageSchema>

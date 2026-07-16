@@ -101,7 +101,7 @@ structured router if a measured spike proves native CLI latency/cost unsuitable.
 
 Generic core changes:
 
-- Versioned, bounded `ConnectorInboundMessage` schema in connector protocol.
+- Versioned, bounded `ConnectorInboundTextMessage` schema in connector protocol.
 - Generic adapter inbound publication without platform-ID dispatch branches.
 - Authenticated loopback Connector-to-Alice endpoint; loopback alone is not
   authentication.
@@ -123,6 +123,14 @@ aggregate metrics, and operational UI deliberately arrive later.
 The configuration is a private atomic file under `data/config/`, seeded by an
 idempotent migration. It contains no credentials: provider and connector
 secrets continue to use the existing sealed stores.
+
+`AINV-T110` establishes the first inbound seam: version `1` accepts only a
+strict text envelope with connector-neutral external update/message/sender/
+conversation IDs, a correlation ID, and a received timestamp. It rejects
+unknown fields and text above the UTF-8 byte limit, so credentials and
+platform-specific payloads cannot cross the generic boundary. The current sink
+only validates this contract; persistence, acknowledgement, dispatch, and
+conversation binding remain deliberately deferred to `AINV-T111` onward.
 
 Product-specific code belongs in an isolated domain/template/skills: proposed
 `src/domain/alice-invest/`, `src/workspaces/templates/alice-invest/`, and

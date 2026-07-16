@@ -60,7 +60,7 @@
         {
           "id": "AINV-T110",
           "title": "Definir contrato inbound genérico do Connector",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006"],
           "scope": ["packages/connector-protocol/src", "services/connector/src/core"],
           "acceptance_criteria": ["Schema versionado e limitado para mensagem textual inbound", "Sem branches de core por plataforma", "Contrato carrega IDs externos, correlação e tempo de recebimento sem segredo"],

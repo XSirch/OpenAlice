@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_CONNECTOR_INBOUND_TEXT_BYTES,
+  connectorInboundTextMessageSchema,
   MAX_CONNECTOR_ATTACHMENT_BYTES,
   inboxNotificationSchema,
 } from './types.js'
@@ -46,5 +48,32 @@ describe('Inbox notification attachments', () => {
         contentBase64: '',
       }],
     })).toThrow()
+  })
+})
+
+describe('Connector inbound text contract', () => {
+  const message = {
+    version: 1,
+    connectorId: 'example',
+    correlationId: 'inbound-123',
+    receivedAt: '2026-07-16T00:00:00.000Z',
+    external: { updateId: '42', messageId: '7', senderId: 'user-1', conversationId: 'chat-1' },
+    content: { type: 'text', text: 'Hello' },
+  }
+
+  it('accepts a versioned, platform-neutral text message', () => {
+    expect(connectorInboundTextMessageSchema.parse(message)).toEqual(message)
+  })
+
+  it('rejects unbounded, non-text, and unexpected payload fields', () => {
+    expect(() => connectorInboundTextMessageSchema.parse({
+      ...message,
+      content: { type: 'text', text: 'a'.repeat(MAX_CONNECTOR_INBOUND_TEXT_BYTES + 1) },
+    })).toThrow(/UTF-8 bytes/)
+    expect(() => connectorInboundTextMessageSchema.parse({
+      ...message,
+      content: { type: 'photo', text: 'Hello' },
+    })).toThrow()
+    expect(() => connectorInboundTextMessageSchema.parse({ ...message, token: 'not-allowed' })).toThrow()
   })
 })

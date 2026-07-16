@@ -6,6 +6,9 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Define the strict, versioned generic Connector inbound-text contract with
+  bounded UTF-8 text, external IDs, correlation, and receipt time. It does not
+  yet persist, dispatch, bind conversations, or enable an adapter.
 - Add the fail-closed Alice Invest safety foundation: private configuration,
   disabled execution, default-off switches, payload/path limits, and migration
   seeding. No runtime capability is enabled.
