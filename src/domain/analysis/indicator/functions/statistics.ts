@@ -98,6 +98,21 @@ export function ROC(data: NumericInput, period: number): number {
   return prior === 0 ? 0 : ((cur - prior) / prior) * 100
 }
 
+/** Trailing annualized volatility of simple returns. The final bar is the only
+ * current observation; no future candle is read. */
+export function Volatility(data: NumericInput, periodsPerYear: number = 252): number {
+  const v = toValues(data)
+  if (v.length < 3) throw new Error(`Volatility requires at least 3 data points, got ${v.length}`)
+  if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) throw new Error('periodsPerYear must be a positive integer')
+  const returns = v.slice(1).map((value, index) => {
+    if (v[index] === 0) throw new Error('Volatility cannot use a zero prior price')
+    return value / v[index] - 1
+  })
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length
+  const variance = returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1)
+  return Math.sqrt(variance * periodsPerYear)
+}
+
 /** Z-score of the latest value vs the trailing window: (last − mean) / stdev.
  *  `period` defaults to the whole series. Population stdev (matches STDEV). */
 export function ZSCORE(data: NumericInput, period?: number): number {

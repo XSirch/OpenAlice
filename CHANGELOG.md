@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add trailing annualized volatility to the existing no-lookahead indicator
+  suite, which already covers SMA, EMA, RSI, MACD, ATR, VWAP, bands, ROC and volume.
 - Define strict observation, candidate and informational-signal contracts with
   decimal strings, provenance, validity and `BUY` as the sole initial side.
 - Add bounded B3/crypto universes and explicit scan gates for switch, session,

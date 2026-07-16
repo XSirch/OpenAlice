@@ -276,6 +276,7 @@ export class IndicatorCalculator {
     // Statistics functions — accept number[] | TrackedValues
     if (name === 'SMA') return Statistics.SMA(evaluatedArgs[0] as number[] | TrackedValues, evaluatedArgs[1] as number)
     if (name === 'EMA') return Statistics.EMA(evaluatedArgs[0] as number[] | TrackedValues, evaluatedArgs[1] as number)
+    if (name === 'VOLATILITY') return Statistics.Volatility(evaluatedArgs[0] as number[] | TrackedValues, evaluatedArgs[1] as number)
     if (name === 'STDEV') return Statistics.STDEV(evaluatedArgs[0] as number[] | TrackedValues)
     if (name === 'MAX') return Statistics.MAX(evaluatedArgs[0] as number[] | TrackedValues)
     if (name === 'MIN') return Statistics.MIN(evaluatedArgs[0] as number[] | TrackedValues)

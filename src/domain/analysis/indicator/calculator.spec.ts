@@ -221,6 +221,13 @@ describe('technical indicators', () => {
 
 // ==================== 成交量指标（右侧） ====================
 
+describe('volatility indicator', () => {
+  it('uses the trailing series without a future candle', async () => {
+    const result = await calc("VOLATILITY(CLOSE('AAPL', '1d'), 252)")
+    expect(result.value).toBeGreaterThan(0)
+  })
+})
+
 describe('volume indicators', () => {
   it('RVOL returns latest volume relative to its baseline (>1 here, volume trends up)', async () => {
     const result = (await calc("RVOL(VOLUME('AAPL', '1d'), 20)")).value as number

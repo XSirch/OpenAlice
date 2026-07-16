@@ -311,7 +311,7 @@
         {
           "id": "AINV-T701",
           "title": "Implementar indicadores ausentes",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T700"],
           "scope": ["src/domain/analysis", "src/domain/alice-invest/signals"],
           "acceptance_criteria": ["Cobrir indicadores aprovados com contratos de dados explícitos", "Não introduzir lookahead"],
