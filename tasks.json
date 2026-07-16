@@ -190,7 +190,7 @@
         {
           "id": "AINV-T400",
           "title": "Implementar fast path e bloqueio local de execução",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T006", "AINV-T201"],
           "scope": ["src/domain/alice-invest/router", "src/server"],
           "acceptance_criteria": ["Comandos e pedidos claros não chamam modelo", "Pedido de execução é bloqueado localmente", "Fast path não analisa investimentos nem escolhe ferramenta sensível"],

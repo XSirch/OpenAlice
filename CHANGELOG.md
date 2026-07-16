@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add a conservative local router fast path with allowlisted commands and
+  pre-provider blocking for imperative execution requests.
 - Decide the structured-router boundary: local rules remain the fast path and
   execution block, while a future narrow direct client handles validated
   ambiguity. The live OpenRouter measurement is explicitly blocked pending an
