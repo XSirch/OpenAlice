@@ -10,6 +10,12 @@ All notable changes to OpenAlice will be documented in this file.
 - Keep the initial product read-only and cap readiness at `paper_alerts`; this
   documentation increment enables no Telegram, model, signal, or execution
   behavior.
+- Reorganize the backlog around a topological delivery graph, remove artificial
+  fixed-income and scan dependencies, and split inbound, signal, security, and
+  observability work into focused tasks.
+- Move basic security controls to the foundation and add decision gates for
+  OpenRouter, validated B3 intraday data, shadow mode, and signal monitoring;
+  no runtime functionality is enabled.
 
 ### 🏗️ Architecture — UTA-split v1
 

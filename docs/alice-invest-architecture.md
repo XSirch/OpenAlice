@@ -15,6 +15,30 @@ credential, ToolCenter, analysis, and market-data abstractions. It does not add
 a second agent loop, scheduler, Inbox, session manager, credential store, or
 database.
 
+## Execution order and focused delivery
+
+The backlog is executed by its dependency graph (`execution_order: topological`
+in `tasks.json`), not merely by phase number. The current delivery order is:
+
+1. `AINV-P0` Architecture, basic security, and fork governance.
+2. `AINV-P1` Telegram inbound and reliable transport.
+3. `AINV-P2` External-conversation binding and Session dispatch.
+4. `AINV-P3` OpenRouter and the structured-router decision.
+5. `AINV-P4` Message orchestrator.
+6. `AINV-P5` Fixed income.
+7. `AINV-P6` Market data.
+8. `AINV-P7` Signal contracts and engine.
+9. `AINV-P8` Shadow mode and validation.
+10. `AINV-P9` Alerts and monitoring.
+11. `AINV-P10` Observability, documentation, and readiness.
+
+Each task is one focused commit and PR. Generic OpenAlice changes are isolated
+from Alice Invest product modules, and no implementation task is considered
+done merely because its design exists. Deterministic fixed-income work can
+proceed after the security foundation without waiting for Telegram, OpenRouter,
+or the router. Likewise, market scanning depends on validated data, the signal
+engine, risk validation, and readiness — never on fixed income.
+
 ## Current architecture
 
 Guardian supervises Alice, optional UTA, and optional Connector Service. Alice
@@ -81,6 +105,16 @@ Generic core changes:
 - OpenRouter credential preset with `openai-chat` wire and configurable models.
 - Safe correlation, health, counters, and redaction.
 
+Before any of those modules, the security foundation defines one central Alice
+Invest configuration schema. It begins at `not_ready`, treats
+`execution_enabled: false` as a type-level invariant rather than an operational
+switch, and defines the four default-deny kill switches:
+`telegram_inbound_enabled`, `market_scans_enabled`,
+`signal_notifications_enabled`, and `active_signal_monitor_enabled`. The same
+foundation owns payload limits, redaction, correlation IDs, file-path and
+permission policy, and parsing tests that fail closed. Advanced audit views,
+aggregate metrics, and operational UI deliberately arrive later.
+
 Product-specific code belongs in an isolated domain/template/skills: proposed
 `src/domain/alice-invest/`, `src/workspaces/templates/alice-invest/`, and
 `default/skills/alice-invest-*`. It owns Brazilian fixed income, router policy,
@@ -125,13 +159,24 @@ The router never analyzes investments or selects sensitive tools from free
 text. JSON Schema constrains action, destinations, risk, clarification, and
 task count. Invalid output fails closed with clarification.
 
-## OpenRouter
+## OpenRouter is a decision gate
 
-The vault stores the key write-only and exposes an `openai-chat` endpoint at
-`https://openrouter.ai/api/v1`. Alice Invest config references a credential
-slug and configurable router/analyst/research/fallback models. Environment
-variables may import headless deployment settings but must converge on the same
-vault/config boundary.
+OpenRouter integration is not decided by this document. `AINV-T300` first
+compares three structured-router implementations: (A) Pi or opencode through
+their native `openai-chat` runtime configuration, (B) a direct Alice Invest
+client with schema-validated output, and (C) deterministic local rules with no
+model call. It measures latency, cost, valid JSON rate and real JSON Schema
+support, retry/timeout behavior, context control, telemetry, credential
+isolation, testability, maintenance cost, and fallback behavior. The result is
+an ADR before router implementation.
+
+The existing `Custom` credential preset already permits the initial functional
+spike with `baseUrl: https://openrouter.ai/api/v1` and
+`wireShape: openai-chat`; Pi and opencode already support that wire. A dedicated
+OpenRouter visual preset is useful only if the ADR justifies it and never blocks
+the spike. Any selected path keeps keys write-only/sealed and role models
+configurable rather than hard-coded. Environment variables may import headless
+deployment settings but must converge on the same vault/config boundary.
 
 Calls record purpose, requested/resolved model, tokens, provider cost, latency,
 run ID, and `resumeId` when available. They never record keys or sensitive
@@ -146,13 +191,22 @@ equivalence, projections, approximate real return, issuer exposure, and FGC
 coverage. CDI is a reference rate, not a product. The LLM explains structured
 results and missing assumptions but never invents calculations or guarantees.
 
-## Market data, scans, and signals
+## Market data, scans, signals, and shadow mode
 
 Every observation contains source, source timestamp, receipt timestamp,
 `ageSeconds`, and `realtime|delayed|eod` capability, plus bid/ask/spread/volume
 when present. Delayed/EOD B3 data may support research but cannot support an
 intraday signal. Crypto is read-only spot without withdrawal, futures, margin,
 or leverage. A future MT5 bridge is a read-only BarService source.
+
+Before a B3 strategy exists, a source-validation gate must prove intraday
+OHLCV for PETR4, VALE3, and an index or ETF; source timestamps; bid/ask and
+spread when available; measured delay; and reconnection behavior. The provider
+is classified by observed evidence as `realtime`, `delayed`, or `eod`, never by
+assumption. An intraday B3 signal is blocked unless the observed source is
+`realtime` within the configured freshness limit. Without this evidence B3
+remains `research_only`. Crypto source validation is separate, read-only, and
+must independently prove its freshness/capability contract.
 
 ```text
 scheduled Issue: 0 8-16 * * 1-5 America/Sao_Paulo
@@ -182,6 +236,23 @@ and invalidation, then sends only relevant state changes through Inbox. It does
 not continuously call an LLM or run sleep loops inside agents. A separate
 supervised process is considered only if measured timing requirements cannot be
 met by Issues.
+
+Before Telegram alerts, scans run in shadow mode: candidates and lifecycle
+events are recorded but not sent. Shadow evidence records entry, target, stop,
+trailing stop, expiry, invalidation, subsequent outcome, MFE/MAE, configured
+costs/slippage, duplicate rate, stale rejections, provider outages, and
+no-lookahead checks. B3 and crypto results remain separate. Only satisfactory
+shadow evidence can make an eligible capability `paper_alerts`; existing
+Telegram outbound support alone is never evidence for that state.
+
+The active-signal monitor is also a decision gate. Its spike compares scheduled
+Issues (appropriate for low frequency/load) with a deterministic Guardian-
+supervised service (only when higher frequency requires it). It measures needed
+frequency, maximum active signals, polling/WebSocket choice, provider cost,
+gaps, crossings between checks, realtime-data need, restart/idempotency,
+health, resources, and closed-market behavior. Neither option may call an LLM
+continuously, sleep inside an agent, execute orders, or change original signal
+numbers retroactively.
 
 ## Data model
 
@@ -219,9 +290,17 @@ not silently discard pending inbound work.
   `validated_alerts`, `read_only_broker`, and `live_execution`; this release
   cannot enable any state above `paper_alerts`.
 
+Readiness is a capability projection, not one global claim. The intended shape
+is equivalent to `{ global, fixed_income, crypto_signals, b3_signals }`, so a
+validated fixed-income calculator does not imply a ready B3 alert system. B3
+without a real-time source remains `research_only`; B3 and crypto may advance
+independently. `validated_alerts`, `read_only_broker`, and `live_execution` are
+future documentary states only: no current task may activate them.
+
 `paper_alerts` requires evidence for owner authorization, dedupe/recovery,
-structured model output, data freshness, fixed-income calculations, backtests,
-no-lookahead, risk validation, formatting, and disabled execution.
+structured router behavior when used, data freshness, fixed-income calculations
+where that capability is enabled, backtests, no-lookahead, risk validation,
+formatting, shadow mode, and disabled execution.
 
 ## Observability and audit
 
@@ -263,14 +342,25 @@ Architectural decisions:
 9. Use migrated files, not a database.
 10. Gate capability with evidence and cap readiness at `paper_alerts`.
 
-## Migration and delivery
+## Fork governance, migration, and delivery
 
-Deliver focused increments: architecture/backlog; inbound schema; durable
-transport; Session binding; OpenRouter; router; fixed income; freshness/data;
-signals/risk/formatting; scheduled scan; monitor; observability; documentation
-and readiness. Generic contracts stay backward-compatible with outbound-only
-installations. Every persisted change has an idempotent migration and recovery
-test.
+The fork policy is documented and refined by `AINV-T005`. `origin` is
+`XSirch/OpenAlice`; `upstream` is `TraderAlice/OpenAlice` when configured for
+reference. The intended maintenance loop is `git fetch upstream`, then an
+intentional merge of `upstream/master` into the fork's stable `master` (or a
+documented rebase alternative). Each Alice Invest task begins by recording the
+upstream reference commit, runs on one branch, and lands through one focused PR
+after its proportional validation. Conflicts are resolved periodically rather
+than accumulated, secrets never enter Git, and no large change is committed
+directly to `master`.
+
+Deliver focused increments: security/governance; inbound schema and state
+machine; transport recovery; Session binding; OpenRouter ADR and selected
+integration; router; fixed income; freshness/source validation; signal
+contracts/risk/strategies/backtests; shadow evidence; alert/monitor ADR and
+implementation; observability, documentation, and readiness. Generic contracts
+stay backward-compatible with outbound-only installations. Every persisted
+change has an idempotent migration and recovery test.
 
 ## Test strategy
 
