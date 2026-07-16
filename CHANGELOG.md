@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Define the Connector inbound lifecycle, acknowledgement boundary, and stable
+  update/message dedupe key before durable storage is introduced.
 - Define the strict, versioned generic Connector inbound-text contract with
   bounded UTF-8 text, external IDs, correlation, and receipt time. It does not
   yet persist, dispatch, bind conversations, or enable an adapter.

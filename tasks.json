@@ -69,7 +69,7 @@
         {
           "id": "AINV-T111",
           "title": "Definir journal e state machine inbound",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T110"],
           "scope": ["services/connector/src/core", "src/core", "docs/alice-invest-architecture.md"],
           "acceptance_criteria": ["Estados distinguem recebido, persistido, encaminhado, concluído, retry e dead-letter", "Dedupe por connector/update/message é especificado", "Acknowledgement ocorre somente após persistência"],

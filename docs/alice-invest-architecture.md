@@ -132,6 +132,14 @@ platform-specific payloads cannot cross the generic boundary. The current sink
 only validates this contract; persistence, acknowledgement, dispatch, and
 conversation binding remain deliberately deferred to `AINV-T111` onward.
 
+`AINV-T111` fixes the transport lifecycle before storage is implemented:
+`received -> persisted -> forwarded -> completed`, with `forwarded` allowed to
+schedule a retry or enter visible `dead_letter`; a retry may only return to
+`forwarded` or dead-letter. Connector acknowledgement is forbidden in
+`received` and becomes eligible only after `persisted`. Dedupe keys are stable
+SHA-256 identities scoped to `connectorId` plus external `updateId`, falling
+back to `messageId`; raw external IDs are not used as paths or log keys.
+
 Product-specific code belongs in an isolated domain/template/skills: proposed
 `src/domain/alice-invest/`, `src/workspaces/templates/alice-invest/`, and
 `default/skills/alice-invest-*`. It owns Brazilian fixed income, router policy,
