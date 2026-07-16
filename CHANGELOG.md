@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add Decimal-only fixed-income projection, including CDI/IPCA rates and the
+  Brazilian regressive IR/IOF schedules.
 - Connect the fast path and validated structured transport in a correlation-
   preserving router that fails safely to clarification.
 - Define an allowlisted router-decision schema with bounded tasks and explicit

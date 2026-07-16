@@ -232,7 +232,7 @@
         {
           "id": "AINV-T501",
           "title": "Implementar cálculos Decimal e tributação de renda fixa",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T500"],
           "scope": ["src/domain/alice-invest/fixed-income"],
           "acceptance_criteria": ["Calcular bruto, líquido, IR regressivo, IOF, CDI e projeção", "Não usar float para valores financeiros"],
