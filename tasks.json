@@ -199,7 +199,7 @@
         {
           "id": "AINV-T401",
           "title": "Definir schema e destinos do Invest Message Router",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T300", "AINV-T400"],
           "scope": ["src/domain/alice-invest/router"],
           "acceptance_criteria": ["Ações e destinos são allowlisted", "Schema limita tarefas e exige clarificação quando necessário", "Saída livre não autoriza ferramentas"],
