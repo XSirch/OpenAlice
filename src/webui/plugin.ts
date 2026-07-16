@@ -11,6 +11,8 @@ import { createMediaRoutes } from './routes/media.js'
 import { createChannelsRoutes, type SSEClient } from './routes/channels.js'
 import { createConfigRoutes, createMarketDataRoutes } from './routes/config.js'
 import { createConnectorRoutes } from './routes/connectors.js'
+import { createConnectorInboundRoutes } from './routes/connector-inbound.js'
+import { ConnectorInboundReceiver } from '../core/connector-inbound-receiver.js'
 import { createScheduleRoutes } from './routes/schedule.js'
 import { createIssuesRoutes } from './routes/issues.js'
 import { createInquiryRoutes } from './routes/inquiries.js'
@@ -202,6 +204,10 @@ export class WebPlugin implements Plugin {
       .split(',').map((s) => s.trim()).filter(Boolean)
     const authDisabled = process.env['OPENALICE_DISABLE_AUTH'] === '1'
     app.route('/api/auth', createAuthRoutes({ trustedProxies }))
+    // Process-to-process HMAC authentication is intentionally separate from
+    // browser/session auth and accepts no user-facing traffic.
+    const inboundReceiver = new ConnectorInboundReceiver()
+    app.route('/api/connector-inbound', createConnectorInboundRoutes((message) => inboundReceiver.receive(message)))
     app.use('*', createAuthMiddleware({
       trustedProxies,
       csrfTrustedOrigins,

@@ -96,7 +96,7 @@
         {
           "id": "AINV-T114",
           "title": "Implementar bridge autenticado Connector para Alice",
-          "status": "pending",
+          "status": "done",
           "depends_on": ["AINV-T113"],
           "scope": ["packages/connector-protocol/src", "services/connector/src", "src/services/connector-client", "src/server", "scripts/guardian"],
           "acceptance_criteria": ["Transporte loopback autenticado", "Correlação atravessa ambos os processos", "Falha de transporte não duplica dispatch", "Health não revela conteúdo ou segredo"],

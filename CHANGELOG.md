@@ -6,6 +6,8 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add an authenticated, correlation-preserving Connector-to-Alice inbound
+  bridge with process-local idempotency protection.
 - Add bounded generic inbound dispatch with transient-only retry, timeout, and
   durable dead-letter state.
 - Persist and deduplicate inbound Connector envelopes atomically, retaining
