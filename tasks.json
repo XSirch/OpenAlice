@@ -1829,6 +1829,54 @@
       ]
     }
   ],
+  "validation_blocker_tasks": [
+    {
+      "id": "AINV-T1103",
+      "title": "Corrigir build determinístico do Connector smoke",
+      "status": "done",
+      "depends_on": [],
+      "scope": ["package.json", "services/connector", "scripts/connector-service-smoke.mjs"],
+      "acceptance_criteria": ["O smoke compila o Connector, verifica o artefato em execução e não depende de dist residual"],
+      "validation": ["pnpm test:connector-service — passed"]
+    },
+    {
+      "id": "AINV-T1104",
+      "title": "Corrigir resolução do guardian-runtime no E2E",
+      "status": "validated",
+      "depends_on": ["AINV-T1103"],
+      "scope": ["vitest.e2e.config.ts"],
+      "acceptance_criteria": ["O E2E resolve o pacote workspace a partir do source sem depender de dist residual"],
+      "validation": ["pnpm test:e2e avançou além da resolução do pacote; o run direto permanece bloqueado pelo git ausente no PATH deste shell"]
+    },
+    {
+      "id": "AINV-T1105",
+      "title": "Tornar bridge inbound degradável no startup",
+      "status": "validated",
+      "depends_on": ["AINV-T1104"],
+      "scope": ["src/webui/plugin.ts", "src/webui/routes/connector-inbound.ts"],
+      "acceptance_criteria": ["Workspace indisponível retorna 503 autenticado e Alice continua iniciando; pedido posterior pode ser aceito"],
+      "validation": ["src/webui/routes/connector-inbound.spec.ts — 3 passed"]
+    },
+    {
+      "id": "AINV-T1106",
+      "title": "Reexecutar validação local completa",
+      "status": "in_progress",
+      "depends_on": ["AINV-T1103", "AINV-T1104", "AINV-T1105"],
+      "scope": ["docs/alice-invest-validation-report.md"],
+      "acceptance_criteria": ["Registrar somente resultados completos e verificáveis da matriz local"],
+      "validation": ["Docker Desktop Linux Engine indisponível; E2E direto bloqueado por git fora do PATH"]
+    },
+    {
+      "id": "AINV-T1107",
+      "title": "Obter CI verde no commit de correção",
+      "status": "blocked",
+      "depends_on": ["AINV-T1106"],
+      "scope": [".github/workflows", "docs/alice-invest-validation-report.md"],
+      "acceptance_criteria": ["CI correspondente ao commit de correção termina verde"],
+      "validation": ["Aguardando publicação do commit/PR e execução do GitHub Actions"],
+      "blocked_reason": "Nenhum commit/PR foi publicado ainda; CI não pode ser alegado localmente."
+    }
+  ],
   "status_definitions": {
     "pending": "Not started.",
     "in_progress": "Started but incomplete.",
