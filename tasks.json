@@ -1869,8 +1869,8 @@
           "depends_on": ["AINV-T1106"],
           "scope": [".github/workflows", "docs/alice-invest-validation-report.md"],
           "acceptance_criteria": ["CI correspondente ao commit de correção termina verde"],
-          "validation": ["Aguardando PR de promoção e execução do GitHub Actions"],
-          "blocked_reason": "A branch dev está publicada, mas ainda não existe PR nem workflow de validação executado e verde para o commit atual."
+          "validation": ["PR #1 de dev para master foi mergeado; aguardando workflow de validação verde para o commit atual da master"],
+          "blocked_reason": "O PR de dev para master foi mergeado, mas ainda não existe workflow de validação configurado e executado com sucesso para o commit atual da master."
         }
       ]
     }

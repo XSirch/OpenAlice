@@ -136,8 +136,9 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 - No remaining local blocker from the Connector smoke, Guardian-runtime
   resolution, or Docker inbound-bridge startup checks.
-- The remaining validation blocker is CI publication: `dev` is published, but
-  no promotion PR or green workflow run exists for the current commit.
+- The remaining validation blocker is CI publication: PR #1 promoted `dev` to
+  `master`, but no configured validation workflow has executed successfully
+  for the current `master` commit.
 
 ### Readiness conclusion
 
