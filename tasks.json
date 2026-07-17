@@ -529,7 +529,7 @@
         {
           "id": "AINV-T305",
           "title": "Validate OpenRouter transient failure and fallback",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T304"
           ],
@@ -541,12 +541,14 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "Its required real OpenRouter probe (AINV-T304) cannot run without the owner-authorized credential.",
+          "next_action": "Complete AINV-T303 and AINV-T304, then rerun the existing transient/fallback tests against the recorded probe contract."
         },
         {
           "id": "AINV-T306",
           "title": "Validate OpenRouter tokens, cost, and redaction",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T304"
           ],
@@ -558,7 +560,9 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "Its required token/cost evidence depends on the owner-authorized real OpenRouter probe (AINV-T304).",
+          "next_action": "Complete AINV-T303 and AINV-T304, then record bounded redacted telemetry and the provider cost result."
         }
       ]
     },
@@ -1165,7 +1169,7 @@
         {
           "id": "AINV-T802",
           "title": "Avaliar evidências do shadow mode B3",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T800B"
           ],
@@ -1180,12 +1184,14 @@
           "validation": [
             "Relatório B3 reproduzível baseado no ledger"
           ],
-          "readiness_impact": "b3_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "b3_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "AINV-T800B requires a real read-only B3 source and an observed shadow period before the ledger can be evaluated.",
+          "next_action": "Complete AINV-T610B and AINV-T800B, then evaluate the resulting reproducible B3 ledger report."
         },
         {
           "id": "AINV-T803",
           "title": "Avaliar evidências do shadow mode cripto",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T801B"
           ],
@@ -1200,7 +1206,9 @@
           "validation": [
             "Relatório cripto reproduzível baseado no ledger"
           ],
-          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "AINV-T801B requires a real read-only crypto source and an observed shadow period before the ledger can be evaluated.",
+          "next_action": "Complete AINV-T613 through AINV-T615 and AINV-T801B, then evaluate the resulting reproducible crypto ledger report."
         },
         {
           "id": "AINV-T804",
@@ -1231,7 +1239,7 @@
         {
           "id": "AINV-T805",
           "title": "Projetar evidência B3 no readiness core",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T802",
             "AINV-T804"
@@ -1246,12 +1254,14 @@
           "validation": [
             "Testes de evidência B3 elegível, stale e fonte delayed"
           ],
-          "readiness_impact": "b3_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "b3_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "The B3 shadow evidence required by AINV-T802 is not available because its real source and temporal run are blocked.",
+          "next_action": "Complete AINV-T802 with a real B3 ledger report, then run the B3-specific readiness evidence tests."
         },
         {
           "id": "AINV-T806",
           "title": "Projetar evidência cripto no readiness core",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T803",
             "AINV-T804"
@@ -1266,7 +1276,9 @@
           "validation": [
             "Testes de evidência cripto elegível, stale e fornecedor indisponível"
           ],
-          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "The crypto shadow evidence required by AINV-T803 is not available because its real source and temporal run are blocked.",
+          "next_action": "Complete AINV-T803 with a real crypto ledger report, then run the crypto-specific readiness evidence tests."
         },
         {
           "id": "AINV-T807",
@@ -1406,7 +1418,7 @@
         {
           "id": "AINV-T913",
           "title": "Validate B3 paper flow ledger to Inbox to Connector",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T910",
             "AINV-T805"
@@ -1420,12 +1432,14 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "The B3 readiness evidence prerequisite AINV-T805 is blocked on real source and temporal shadow evidence.",
+          "next_action": "Complete AINV-T805, then exercise the B3 ledger-to-Inbox-to-Connector flow with the capability eligible for paper alerts."
         },
         {
           "id": "AINV-T914",
           "title": "Validate crypto paper flow ledger to Inbox to Connector",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T911",
             "AINV-T806"
@@ -1439,7 +1453,9 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "The crypto readiness evidence prerequisite AINV-T806 is blocked on real source and temporal shadow evidence.",
+          "next_action": "Complete AINV-T806, then exercise the crypto ledger-to-Inbox-to-Connector flow with the capability eligible for paper alerts."
         },
         {
           "id": "AINV-T915",
@@ -1825,7 +1841,7 @@
         {
           "id": "AINV-T1102",
           "title": "Publish CI validation summary",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T1101"
           ],
@@ -1838,7 +1854,9 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "Publication requires a green GitHub Actions workflow for the corresponding commit, which cannot be produced locally.",
+          "next_action": "Open the published branch as a master PR and wait for the Alice Invest validation workflow to complete green."
         },
         {
           "id": "AINV-T1103",
