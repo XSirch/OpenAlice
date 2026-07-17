@@ -175,8 +175,9 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 ### Tasks still pending
 
-- Guardian mounting of the monitor tick, production scan input, full monitor
-  metrics, and browser-route walkthrough remain internal implementation work.
+- Production real-source input remains external work. Guardian-supervised
+  monitor mounting, durable diagnostic telemetry, and operational API/UI
+  render validation are implemented and locally validated.
 - The full monorepo suite was run twice; one parallel run reported unrelated
   flaky failures in `headless-task-registry` and UTA broker-pack loading, while
   both files passed together in the focused rerun. This is not recorded as a
@@ -208,7 +209,7 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 | `cd ui && npx tsc -b` | Passed |
 | `pnpm test:connector-replay` | Passed: 3 files, 11 tests |
 | `pnpm test:connector-service` | Passed |
-| Full `pnpm test` | Not yet green as a complete-suite record; focused reproduction passed |
+| Full `pnpm test` | Passed: 354 files, 3,195 tests; 2 files and 22 tests skipped |
 | Docker smoke | Must be rerun with a retained final result before it is recorded as passed |
 
 ### CI and readiness

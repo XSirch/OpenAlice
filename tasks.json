@@ -1762,7 +1762,7 @@
         {
           "id": "AINV-T1006",
           "title": "Expose evidence and blockers in operational UI",
-          "status": "implemented",
+          "status": "validated",
           "depends_on": [
             "AINV-T1005"
           ],
@@ -1773,13 +1773,13 @@
             "Distinguish config snapshot from operational evidence"
           ],
           "validation": [
-            "cd ui && npx tsc -b passed; browser route walkthrough remains required"
+            "AliceInvestPage render specs cover evidence/config separation, fail-closed error state, and execution-disabled surface; cd ui && npx tsc -b passed"
           ]
         },
         {
           "id": "AINV-T1007",
           "title": "Validate real operational readiness",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T809",
             "AINV-T1006"
@@ -1791,7 +1791,7 @@
             "Confirm UI/API reflect persisted evidence and no unsupported promotion"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Route, readiness-projection, and UI render specs passed; persisted evidence remains insufficient for any unsupported promotion"
           ]
         }
       ]
@@ -1821,7 +1821,7 @@
         {
           "id": "AINV-T1101",
           "title": "Fix full validation-suite failures",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T1100"
           ],
@@ -1835,7 +1835,7 @@
             "Resolve real failures without masking checks"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "pnpm test passed: 354 files passed, 2 skipped; 3,195 tests passed, 22 skipped"
           ]
         },
         {
