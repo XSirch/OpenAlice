@@ -21,3 +21,7 @@ external-market validated by this document.
 No matrix row promotes Alice Invest above `research_only`. The next evidence
 must be recorded under a validation run ID with source, timestamp, inputs,
 expected result, observed result, and any applicable provider limitation.
+
+The deterministic calculator and Decimal precision tests remain internal
+implementation evidence only. They do not establish a real product offer,
+official Treasury price, market curve, issuer liquidity rule, or FGC source.

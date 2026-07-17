@@ -6,6 +6,12 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Add durable, schema-validated readiness evidence with a migration, fail-closed
+  capability projections and a sanitized operational API/UI. Add deterministic
+  signal target/trailing lifecycle transitions, durable Inbox-delivery receipts
+  and recovery tests. Financial execution remains disabled; no external
+  capability was promoted.
+
 - Fix deterministic Connector process-smoke preparation, resolve the Guardian
   runtime from workspace source in E2E, and make the optional authenticated
   inbound bridge degrade with `503` during Workspace startup rather than
