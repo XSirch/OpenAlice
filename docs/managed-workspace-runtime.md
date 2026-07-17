@@ -169,9 +169,11 @@ Source/dev falls back to `node` from the contributor environment. Keep the publi
 JavaScript directly makes behavior depend on the host Node version and the
 nearest `package.json` module type.
 
-The Windows package currently retains dugite's embedded Git payload as well as
-PortableGit. This duplication is intentional until all Workspace Git call
-sites have moved behind an OpenAlice-owned wrapper.
+The Windows package retains dugite's JavaScript execution wrapper but excludes
+its embedded Git payload. `LOCAL_GIT_DIRECTORY` routes every dugite call to the
+same pinned PortableGit tree that supplies Workspace Bash. macOS continues to
+ship dugite's embedded Git because its packaged path does not need a separate
+managed Unix shell payload.
 
 ### Windows workspace shell preference
 
@@ -344,9 +346,9 @@ Keep these true together:
 - `vendor/**` remains in the Electron builder file list.
 - `asar` remains disabled while packaged scripts and binaries are executed
   from the resource tree.
-- `dugite` remains in `pnpm.onlyBuiltDependencies` until its embedded payload
-  is deliberately removed; skipping its postinstall silently produces an
-  incomplete package.
+- `dugite` remains in `pnpm.onlyBuiltDependencies` because macOS packages use
+  its embedded Git. The Windows builder excludes `node_modules/dugite/git/**`,
+  keeps the JS wrapper, and must route it through managed PortableGit.
 - Pi and PortableGit versions, download URLs, and checksums remain pinned in
   `scripts/vendor-managed-runtime.mjs`.
 - Managed `fd` and `ripgrep` versions, release URLs, checksums, binaries, and
@@ -383,6 +385,10 @@ contract:
    that invokes `alice-workspace issue create`. The smoke accepts the run only
    when structured assistant output is decoded and the created issue is visible
    from the external `/api/issues` surface.
+
+The focused Windows toolchain smoke additionally loads the packaged dugite JS
+wrapper with no embedded dugite Git present, then performs a real
+`init`/`add`/`commit`/`status` cycle through managed PortableGit.
 
 The second assertion deliberately uses an observable Workspace side effect,
 not a model claiming that a command succeeded. The run emits a versioned JSON
@@ -475,10 +481,11 @@ A release-facing change should also verify a clean-machine flow:
 
 ## Known Follow-up
 
-PortableGit and dugite's embedded Git are still duplicated on Windows. The
-next cleanup is to introduce an OpenAlice-owned Git execution wrapper, migrate
-Workspace/template call sites to it, and remove dugite only after macOS and
-Windows packaged smokes remain green.
+OpenAlice still imports dugite directly at several Workspace and template call
+sites. A future OpenAlice-owned Git execution wrapper can centralize timeouts,
+errors, and environment policy and eventually replace the dugite dependency.
+That refactor is no longer required to keep duplicate Git binaries out of the
+Windows package.
 
 That cleanup must not weaken the first-run contract: install OpenAlice,
 configure a credential, open a Workspace, and let Alice work.
