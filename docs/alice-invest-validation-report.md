@@ -175,9 +175,11 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 ### Tasks still pending
 
-- Production real-source input remains external work. Guardian-supervised
-  monitor mounting, durable diagnostic telemetry, and operational API/UI
-  render validation are implemented and locally validated.
+- None. The final local reconciliation contains 9 `done`, 44 `implemented`,
+  13 `validated`, and 24 externally `blocked` tasks. Production real-source
+  input remains external work; Guardian-supervised monitor mounting, durable
+  diagnostic telemetry, and operational API/UI render validation are locally
+  validated.
 - The full monorepo suite was run twice; one parallel run reported unrelated
   flaky failures in `headless-task-registry` and UTA broker-pack loading, while
   both files passed together in the focused rerun. This is not recorded as a
