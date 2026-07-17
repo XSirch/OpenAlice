@@ -2,6 +2,11 @@ import { Hono } from 'hono'
 import { connectorInboundTextMessageSchema, type ConnectorInboundTextMessage } from '@traderalice/connector-protocol'
 import { verifyConnectorInbound } from '../../core/connector-inbound-auth.js'
 
+/** The authenticated Connector may beat Workspace bootstrap during startup.
+ * Keep that optional dependency visible to the caller without taking Alice
+ * down or accepting an envelope that cannot yet reach its durable target. */
+export class ConnectorInboundUnavailableError extends Error {}
+
 export function createConnectorInboundRoutes(
   receive: (message: ConnectorInboundTextMessage) => Promise<void>,
   rotate?: (input: { connectorId: string; conversationId: string; ownerId: string }) => Promise<void>,
@@ -14,7 +19,14 @@ export function createConnectorInboundRoutes(
     if (!await verifyConnectorInbound(message.correlationId, body, c.req.header('x-openalice-connector-signature'))) {
       return c.json({ error: 'unauthorized' }, 401)
     }
-    await receive(message)
+    try {
+      await receive(message)
+    } catch (error) {
+      if (error instanceof ConnectorInboundUnavailableError) {
+        return c.json({ error: 'connector inbound temporarily unavailable' }, 503)
+      }
+      throw error
+    }
     return c.json({ accepted: true, correlationId: message.correlationId }, 202)
   })
   app.post('/rotate', async (c) => {
@@ -27,7 +39,14 @@ export function createConnectorInboundRoutes(
     } catch { return c.json({ error: 'invalid rotation request' }, 400) }
     if (!await verifyConnectorInbound(input.correlationId, body, c.req.header('x-openalice-connector-signature'))) return c.json({ error: 'unauthorized' }, 401)
     if (!rotate) return c.json({ error: 'conversation rotation unavailable' }, 503)
-    await rotate({ connectorId: input.connectorId, conversationId: input.conversationId, ownerId: input.ownerId })
+    try {
+      await rotate({ connectorId: input.connectorId, conversationId: input.conversationId, ownerId: input.ownerId })
+    } catch (error) {
+      if (error instanceof ConnectorInboundUnavailableError) {
+        return c.json({ error: 'connector inbound temporarily unavailable' }, 503)
+      }
+      throw error
+    }
     return c.json({ accepted: true, correlationId: input.correlationId }, 202)
   })
   return app

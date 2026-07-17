@@ -6,6 +6,13 @@ All notable changes to OpenAlice will be documented in this file.
 
 ### Alice Invest
 
+- Fix deterministic Connector process-smoke preparation, resolve the Guardian
+  runtime from workspace source in E2E, and make the optional authenticated
+  inbound bridge degrade with `503` during Workspace startup rather than
+  terminating Alice. Connector smoke, E2E and Docker smoke passed after the
+  local environment was corrected. No capability was promoted and financial
+  execution remains disabled.
+
 - Reassess Alice Invest completion claims: distinguish `implemented`,
   `validated`, `done`, and externally `blocked` work; reopen unproven external
   and temporal validation gaps without promoting readiness.
