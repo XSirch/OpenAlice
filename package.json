@@ -132,7 +132,10 @@
       "target": [
         "nsis"
       ],
-      "icon": "apps/desktop/build/icon.ico"
+      "icon": "apps/desktop/build/icon.ico",
+      "files": [
+        "!node_modules/dugite/git/**"
+      ]
     },
     "nsis": {
       "oneClick": false,
