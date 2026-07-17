@@ -1773,7 +1773,7 @@
         {
           "id": "AINV-T1100",
           "title": "Add Alice Invest validation CI",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": [
             "AINV-T1007"
           ],
@@ -1785,7 +1785,7 @@
             "Run the defined Alice Invest matrix and publish results"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Workflow YAML parsed locally; GitHub Actions execution is still required"
           ]
         },
         {
