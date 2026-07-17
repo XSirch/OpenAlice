@@ -111,7 +111,7 @@ describe('buildPackagedToolchainSmokePlan', () => {
       expect(plan.commands[6].command.replaceAll('\\', '/')).toContain('vendor/git/win32-x64/cmd/git.exe')
       expect(plan.commands[7].env?.LOCAL_GIT_DIRECTORY.replaceAll('\\', '/'))
         .toContain('vendor/git/win32-x64')
-      expect(plan.commands[7].args.join('\n').replaceAll('\\', '/'))
+      expect(plan.commands[7].args.join('\n').replaceAll('\\', '/').replaceAll('//', '/'))
         .toContain('node_modules/dugite/build/lib/index.js')
       expect(plan.commands[9].env?.PATH.replaceAll('\\', '/')).toContain('vendor/git/win32-x64/mingw64/bin')
       expect(plan.commands[9].env?.PATH.replaceAll('\\', '/')).toContain('vendor/tools/win32-x64/bin')
