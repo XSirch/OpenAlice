@@ -11,7 +11,7 @@ import { createMediaRoutes } from './routes/media.js'
 import { createChannelsRoutes, type SSEClient } from './routes/channels.js'
 import { createConfigRoutes, createMarketDataRoutes } from './routes/config.js'
 import { createConnectorRoutes } from './routes/connectors.js'
-import { createConnectorInboundRoutes } from './routes/connector-inbound.js'
+import { ConnectorInboundUnavailableError, createConnectorInboundRoutes } from './routes/connector-inbound.js'
 import { ConnectorInboundReceiver } from '../core/connector-inbound-receiver.js'
 import { ExternalConversationBindingStore, rotateExternalConversationBinding } from '../core/external-conversation-bindings.js'
 import { ExternalConversationDispatcher, workspaceConversationDispatchTarget } from '../workspaces/external-conversation-dispatch.js'
@@ -210,23 +210,25 @@ export class WebPlugin implements Plugin {
     app.route('/api/auth', createAuthRoutes({ trustedProxies }))
     // Process-to-process HMAC authentication is intentionally separate from
     // browser/session auth and accepts no user-facing traffic.
-    const workspaceService = this.workspaceServiceRef?.current ?? this.workspaceService
-    if (!workspaceService) throw new Error('Workspace service is unavailable for Connector inbound bridge')
     const conversationBindings = new ExternalConversationBindingStore(dataPath('config', 'external-conversation-bindings.json'))
-    const conversationDispatcher = new ExternalConversationDispatcher(
-      workspaceConversationDispatchTarget(createWorkspaceConversationControl(workspaceService)),
-      ctx.inboxStore,
-    )
     const inboundReceiver = new ConnectorInboundReceiver(async (message) => {
+      const workspaceService = this.workspaceServiceRef?.current ?? this.workspaceService
+      if (!workspaceService) throw new ConnectorInboundUnavailableError('Workspace service is unavailable for Connector inbound bridge')
       const binding = await conversationBindings.resolve(message.connectorId, message.external.conversationId, message.external.senderId)
       if (!binding) throw new Error('external conversation is not bound to a Session')
       const identity = workspaceService.resumeRegistry.get(binding.resumeId)
       if (!identity) throw new Error('bound Session is unavailable')
+      const conversationDispatcher = new ExternalConversationDispatcher(
+        workspaceConversationDispatchTarget(createWorkspaceConversationControl(workspaceService)),
+        ctx.inboxStore,
+      )
       await conversationDispatcher.dispatch({ resumeId: binding.resumeId, workspaceId: identity.wsId, prompt: message.content.text })
     })
     app.route('/api/connector-inbound', createConnectorInboundRoutes(
       (message) => inboundReceiver.receive(message),
       async ({ connectorId, conversationId, ownerId }) => {
+        const workspaceService = this.workspaceServiceRef?.current ?? this.workspaceService
+        if (!workspaceService) throw new ConnectorInboundUnavailableError('Workspace service is unavailable for Connector inbound bridge')
         await rotateExternalConversationBinding(conversationBindings, workspaceService.resumeRegistry, connectorId, conversationId, ownerId)
       },
     ))

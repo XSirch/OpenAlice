@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 // e2e tests don't need packages/*/dist pre-built.
 const workspaceAliases = {
   '@': resolve(__dirname, './src'),
+  '@traderalice/guardian-runtime': resolve(__dirname, './packages/guardian-runtime/src/index.ts'),
   '@traderalice/ibkr': resolve(__dirname, './packages/ibkr/src/index.ts'),
   '@traderalice/uta-protocol': resolve(__dirname, './packages/uta-protocol/src/index.ts'),
   '@traderalice/opentypebb': resolve(__dirname, './packages/opentypebb/src/index.ts'),

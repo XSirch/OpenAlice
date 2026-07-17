@@ -44,3 +44,85 @@ Fixtures, source evaluators, a boolean readiness core, a configuration snapshot,
 and isolated Connector tests prove implementation boundaries only. They do not
 prove provider freshness, temporal lifecycle behavior, real delivery, or
 operational readiness. See `tasks.json` for the blocked and pending graph.
+
+## Validation rerun after blocker fixes
+
+### Commit
+
+- Base: `b6094a94aa63ab234afbb97f6846df43b6ffe202`.
+- Fix branch: `fix/alice-invest-validation-blockers`, published at
+  `0d805171fc2cb3c739a1bc97ae9cd7bd22a176da`. No CI link exists yet.
+
+### Environment
+
+- Windows local workspace, 2026-07-17; Node `v24.18.0`, pnpm `11.7.0`.
+- No external credentials were used and no financial order was submitted.
+- The shell did not expose Git on `PATH`, although Git exists at
+  `C:\Program Files\Git\cmd\git.exe`. Docker Desktop's Linux Engine was not
+  running.
+- `origin` exposes `master` but no `dev` branch, and GitHub CLI is not
+  installed; a policy-compliant PR to `dev` could not be created from this
+  environment.
+
+### Root causes
+
+- `test:connector-service` launched `services/connector/dist/connector.cjs`
+  without building it first.
+- `vitest.e2e.config.ts` lacked the Guardian runtime source alias already used
+  by the standard Vitest configuration.
+- WebPlugin mounted the authenticated inbound route before WorkspaceService was
+  constructed and synchronously threw when the service reference was empty.
+
+### Changes
+
+- Added `build:connector`; Connector process smoke now builds before it starts.
+- Added the Guardian runtime workspace-source alias to the E2E resolver.
+- Made inbound route handlers resolve WorkspaceService lazily. Bootstrap
+  unavailability is an authenticated `503`, so no envelope is accepted before
+  its destination exists and a later retry can succeed.
+
+### Commands
+
+| Command | Result | Duration / evidence |
+| --- | --- | --- |
+| `pnpm install --frozen-lockfile` | Passed | 321 ms. |
+| `npx tsc --noEmit` | Passed | 14.5 s; only npm project-config warning. |
+| `cd ui && npx tsc -b` | Passed | 28 s. |
+| `pnpm test src/webui/routes/connector-inbound.spec.ts` | Passed | 1.22 s; 1 file, 3 tests. |
+| `pnpm test:connector-service` | Passed | Connector rebuilt (`connector.cjs`, 5.04 MB) then process/journal smoke passed. |
+| `pnpm test:e2e` | Failed after package resolution | 28.25 s; 3 workspace-creation tests failed with `spawn git ENOENT` because Git was absent from this shell `PATH`. The former Guardian-runtime resolution error did not recur. |
+| `pnpm docker:smoke` | Blocked | Docker Desktop Linux Engine pipe was absent before build/run. |
+
+### Environment remediation rerun
+
+- Added `C:\Program Files\Git\cmd` to the user `PATH`; Git reports
+  `2.55.0.windows.1` and Docker Engine reports `28.5.1 linux`.
+
+| Command | Result | Duration / evidence |
+| --- | --- | --- |
+| `pnpm test:e2e -- --reporter=verbose` | Passed | The three Workspace creation tests that previously failed now passed; the selected market-data checks remained skipped only for absent provider keys. |
+| `pnpm docker:smoke -- --skip-build --image openalice:validation-rerun` | Passed | HTTP readiness, all four runtime detections, Chat Workspace, PTY/`alice` manifest round trip, and offboarding passed. The temporary caller-owned image was removed afterwards. |
+
+### Results
+
+- Connector smoke: passed; build is deterministic and the smoke retains its
+  cleanup path.
+- Guardian runtime: resolved from workspace source; the complete local E2E
+  rerun passed after Git was restored to `PATH`.
+- Inbound bridge: focused route test proves `503` while WorkspaceService is
+  unavailable and `202` after it becomes available. Alice no longer exits
+  merely because that optional dependency is late.
+- Docker smoke: passed after Docker Desktop Linux Engine was started.
+
+### Remaining failures
+
+- No remaining local blocker from the Connector smoke, Guardian-runtime
+  resolution, or Docker inbound-bridge startup checks.
+- The remaining validation blocker is CI publication: `origin` lacks `dev` and
+  a policy-compliant PR still cannot be opened from this environment.
+
+### Readiness conclusion
+
+`global=not_ready`; `fixed_income=research_only`; `b3_signals=research_only`;
+`crypto_signals=research_only`. No capability was promoted and
+`execution_enabled` remains `false`.
