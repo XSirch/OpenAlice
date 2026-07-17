@@ -29,7 +29,8 @@ are idempotent. Back up OPENALICE_HOME using documented atomic file copies.
 
 ## Active signal monitor
 
-The monitor is a bounded supervised tick, never an agent loop. A tick first
+The monitor is a bounded supervised tick, never an agent loop. Alice starts and
+stops it inside the Guardian-supervised process tree. A tick first
 persists its lifecycle event, then attempts Inbox delivery only for a
 `paper_alerts` capability with notifications enabled. Its delivery receipt is
 durable, so a later tick can retry a transient Inbox failure without adding a

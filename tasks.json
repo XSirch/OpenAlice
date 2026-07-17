@@ -1570,7 +1570,7 @@
         {
           "id": "AINV-T912E",
           "title": "Integrate monitor with scheduler and Guardian",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912D"
           ],
@@ -1582,13 +1582,13 @@
             "Run supervised recoverable ticks without an agent loop"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "AliceInvestMonitorService is started/stopped by Alice under Guardian supervision; focused service spec proves the default fail-closed tick"
           ]
         },
         {
           "id": "AINV-T912F",
           "title": "Deliver monitor updates through Inbox",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912E"
           ],
@@ -1600,7 +1600,7 @@
             "Deliver only relevant changes after ledger persistence"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "monitor-runner spec proves ledger persistence before Inbox, delivery dedupe, and retry after a 503"
           ]
         },
         {
