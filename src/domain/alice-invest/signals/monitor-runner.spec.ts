@@ -28,7 +28,7 @@ describe('signal monitor runner',()=>{
         {capability:'b3_signals',event,low:'8',high:'13',sourceTimestamp:'2026-07-16T12:09:55.000Z',workspaceId:'workspace'},
         {capability:'crypto_signals',event:{...event,signalId:'crypto'},price:'12',sourceTimestamp:'2026-07-16T12:09:55.000Z',workspaceId:'workspace'},
       ]},ledger,inbox,deliveries)
-      expect(outcomes).toMatchObject([{action:'invalidated',delivered:true},{action:'target_hit',delivered:false}])
+      expect(outcomes).toMatchObject([{action:'stop_hit',delivered:true},{action:'target_hit',delivered:false}])
       expect(outcomes[0]?.reason).toContain('stop-first')
     }finally{await rm(dir,{recursive:true,force:true})}
   })

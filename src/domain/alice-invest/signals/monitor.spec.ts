@@ -6,10 +6,15 @@ const input=(price?:string)=>({event,now:new Date('2026-07-16T12:10:00Z'),price,
 
 describe('signal monitor',()=>{
   it('fails closed and only evaluates an active signal once',()=>{
-    expect(monitorSignal(input('9'))).toMatchObject({action:'invalidated'})
+    expect(monitorSignal(input('9'))).toMatchObject({action:'stop_hit'})
     expect(monitorSignal({...input('1'),event:{...event,type:'invalidated'}}).action).toBe('none')
     expect(monitorSignal({...input('1'),capabilityReady:false}).action).toBe('none')
     expect(monitorSignal(input()).action).toBe('none')
+  })
+  it('records activation before later terminal lifecycle transitions',()=>{
+    const active=monitorSignal(input('10'))
+    expect(active).toMatchObject({action:'active'})
+    expect(monitorSignal({...input('12'),event:{...event,type:'active'}})).toMatchObject({action:'target_hit'})
   })
   it('records a deterministic target transition',()=>{
     const result=monitorSignal(input('12'))

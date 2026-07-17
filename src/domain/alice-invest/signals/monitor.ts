@@ -2,19 +2,19 @@ import { createHash } from 'node:crypto'
 import Decimal from 'decimal.js'
 import type { SignalLedger, SignalLedgerEvent } from './ledger.js'
 export interface MonitorInput{event:SignalLedgerEvent;now:Date;price?:string;capabilityReady:boolean;marketOpen:boolean;trailingActivationPrice?:string;trailingDistance?:string}
-export interface MonitorResult{action:'none'|'invalidated'|'expired'|'target_hit'|'trailing_activated'|'trailing_updated';reason?:string;trailingStop?:string}
+export interface MonitorResult{action:'none'|'active'|'invalidated'|'expired'|'target_hit'|'stop_hit'|'trailing_activated'|'trailing_updated';reason?:string;trailingStop?:string}
 /** One scheduled-tick decision. The caller appends an event only for a non-none result. */
 export function monitorSignal(input:MonitorInput):MonitorResult{
   if(!input.capabilityReady||!input.marketOpen)return{action:'none'}
-  if(input.event.type!=='created'&&input.event.type!=='trailing_activated'&&input.event.type!=='trailing_updated')return{action:'none'}
+  if(input.event.type!=='created'&&input.event.type!=='active'&&input.event.type!=='trailing_activated'&&input.event.type!=='trailing_updated')return{action:'none'}
   if(input.now.getTime()>=Date.parse(input.event.candidate.validUntil))return{action:'expired',reason:'signal validity expired'}
   if(!input.price)return{action:'none'}
   const price=new Decimal(input.price), trailingStop=input.event.trailingStop&&new Decimal(input.event.trailingStop), stop=trailingStop??new Decimal(input.event.candidate.stopPrice)
-  if(price.lte(stop))return{action:'invalidated',reason:trailingStop?'trailing stop reached':'stop price reached'}
+  if(price.lte(stop))return{action:'stop_hit',reason:trailingStop?'trailing stop reached':'stop price reached'}
   if(price.gte(input.event.candidate.targetPrice))return{action:'target_hit',reason:'target price reached'}
-  if(!input.trailingActivationPrice||!input.trailingDistance)return{action:'none'}
+  if(!input.trailingActivationPrice||!input.trailingDistance)return input.event.type==='created'?{action:'active',reason:'signal is active'}:{action:'none'}
   const activation=new Decimal(input.trailingActivationPrice), distance=new Decimal(input.trailingDistance)
-  if(distance.lte(0)||price.lt(activation))return{action:'none'}
+  if(distance.lte(0)||price.lt(activation))return input.event.type==='created'?{action:'active',reason:'signal is active'}:{action:'none'}
   const next=price.minus(distance)
   if(next.lte(stop))return{action:'none'}
   return{action:trailingStop?'trailing_updated':'trailing_activated',reason:trailingStop?'trailing stop increased':'trailing stop activated',trailingStop:next.toFixed()}

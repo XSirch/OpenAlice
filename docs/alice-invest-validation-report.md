@@ -145,3 +145,86 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 `global=not_ready`; `fixed_income=research_only`; `b3_signals=research_only`;
 `crypto_signals=research_only`. No capability was promoted and
 `execution_enabled` remains `false`.
+
+## Remaining backlog execution
+
+### Base commit
+
+- `fef8b9f2`, the current `master` at branch creation.
+
+### Branch
+
+- `feat/alice-invest-complete-remaining-backlog`.
+
+### Tasks discovered
+
+- 90 total tasks. The DAG parsed with unique IDs and existing dependencies.
+
+### Tasks completed and validated
+
+- A versioned migration and private, idempotent `ReadinessEvidence` journal
+  preserve evidence across restarts. Its projection fails closed for every
+  capability and never derives readiness from a UI switch or fixture.
+- The read-only Alice Invest API emits only criterion, status, timestamp,
+  source and bounded details. It omits evidence IDs, validation run IDs and
+  raw payloads. The UI visibly separates derived readiness from configuration.
+- The signal monitor now records target, stop/invalidated, expiry, trailing
+  activation and monotonic trailing updates. It uses stop-first attribution for
+  a candle that crosses both stop and target, stores a durable delivery receipt,
+  and retries an Inbox failure on a later tick without a second ledger event.
+
+### Tasks still pending
+
+- Guardian mounting of the monitor tick, production scan input, full monitor
+  metrics, and browser-route walkthrough remain internal implementation work.
+- The full monorepo suite was run twice; one parallel run reported unrelated
+  flaky failures in `headless-task-registry` and UTA broker-pack loading, while
+  both files passed together in the focused rerun. This is not recorded as a
+  green complete-suite validation.
+
+### Tasks blocked
+
+- Owner Telegram bot/private chat, owner-authorized OpenRouter credential,
+  read-only B3 and crypto sources, temporal shadow observation, and a green
+  GitHub Actions run are all still blocked. Each corresponding backlog task
+  records a concrete `next_action`; no fixture was used as external evidence.
+
+### Code changes and migrations
+
+- `src/migrations/0027_alice_invest_readiness_evidence` seeds the migrated
+  evidence journal. `src/migrations/registry.ts` and the generated index
+  include it.
+- Monitor transition, runner and delivery-receipt code live under
+  `src/domain/alice-invest/signals/` and have no broker, UTA write, LLM loop,
+  or financial execution path.
+
+### Tests
+
+| Command | Result |
+| --- | --- |
+| Focused evidence, projection, route and migration specs | Passed |
+| Focused monitor, delivery store, runner and ledger specs | Passed: 4 files, 11 tests |
+| `npx tsc --noEmit` | Passed after the monitor/UI changes |
+| `cd ui && npx tsc -b` | Passed |
+| `pnpm test:connector-replay` | Passed: 3 files, 11 tests |
+| `pnpm test:connector-service` | Passed |
+| Full `pnpm test` | Not yet green as a complete-suite record; focused reproduction passed |
+| Docker smoke | Must be rerun with a retained final result before it is recorded as passed |
+
+### CI and readiness
+
+- `.github/workflows/alice-invest-validation.yml` runs the requested matrix in
+  separate checks/Docker jobs, enables Corepack, caches pnpm, and emits a
+  fail-closed readiness/financial-execution summary. It has parsed locally but
+  has no GitHub Actions run yet.
+- Final readiness remains `global=not_ready`,
+  `fixed_income=research_only`, `b3_signals=research_only`, and
+  `crypto_signals=research_only`; `execution_enabled=false`.
+
+### Required owner actions
+
+1. Configure and authorize the least-privilege external credentials and
+   controlled temporal tests listed in `tasks.json`.
+2. Publish this branch and run the GitHub Actions workflow through a master PR.
+3. Do not promote any capability until the persisted, source-backed evidence
+   has satisfied every criterion.

@@ -56,7 +56,7 @@ function ambiguousCandleResult(signal: MonitoredSignal, input: MonitorInput): Mo
   if (input.event.type !== 'created' || !signal.low || !signal.high) return null
   const low = Number(signal.low), high = Number(signal.high), stop = Number(input.event.candidate.stopPrice), target = Number(input.event.candidate.targetPrice)
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null
-  if (low <= stop && high >= target) return { action: 'invalidated', reason: 'ambiguous candle crossed stop and target; stop-first policy applied' }
+  if (low <= stop && high >= target) return { action: 'stop_hit', reason: 'ambiguous candle crossed stop and target; stop-first policy applied' }
   return null
 }
 function monitorMessage(capability: MonitorCapability, event: SignalLedgerEvent): string {

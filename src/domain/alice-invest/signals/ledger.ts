@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { SignalCandidate } from './contracts.js'
-export type SignalLifecycle='created'|'invalidated'|'expired'|'target_hit'|'trailing_activated'|'trailing_updated'
+export type SignalLifecycle='created'|'active'|'target_hit'|'stop_hit'|'expired'|'invalidated'|'trailing_activated'|'trailing_updated'
 export interface SignalLedgerEvent { eventId:string; signalId:string; type:SignalLifecycle; at:string; candidate:SignalCandidate; reason?:string; price?:string; trailingStop?:string }
 interface LedgerFile { version:1; events:SignalLedgerEvent[] }
 export class SignalLedger {
