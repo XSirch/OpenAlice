@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { z } from 'zod'
 import { dataPath } from '../../../core/paths.js'
@@ -19,7 +19,8 @@ export const readinessEvidenceSchema = z.object({
 export type ReadinessEvidence = z.infer<typeof readinessEvidenceSchema>
 export type ReadinessCapability = z.infer<typeof readinessCapabilitySchema>
 
-const DEFAULT_PATH = dataPath('alice-invest', 'readiness-evidence.jsonl')
+const DEFAULT_PATH = dataPath('config', 'alice-invest-readiness-evidence.json')
+const journalSchema = z.object({ version: z.literal(1), entries: z.array(readinessEvidenceSchema) }).strict()
 
 /** Append-only, idempotent local evidence journal. It deliberately accepts no
  * caller-supplied readiness state, so a fixture cannot promote a capability. */
@@ -32,9 +33,7 @@ export class ReadinessEvidenceStore {
   async init(): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true })
     try {
-      for (const line of (await readFile(this.path, 'utf8')).split(/\r?\n/)) {
-        if (!line.trim()) continue
-        const entry = readinessEvidenceSchema.parse(JSON.parse(line))
+      for (const entry of journalSchema.parse(JSON.parse(await readFile(this.path, 'utf8'))).entries) {
         if (!this.seen.has(entry.id)) { this.seen.add(entry.id); this.entries.push(entry) }
       }
     } catch (error) {
@@ -46,8 +45,11 @@ export class ReadinessEvidenceStore {
     const entry = readinessEvidenceSchema.parse(input)
     const next = this.writeChain.then(async () => {
       if (this.seen.has(entry.id)) return false
-      await appendFile(this.path, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 })
-      this.seen.add(entry.id); this.entries.push(entry); return true
+      this.seen.add(entry.id); this.entries.push(entry)
+      const temp = `${this.path}.tmp-${process.pid}`
+      await writeFile(temp, `${JSON.stringify({ version: 1, entries: this.entries }, null, 2)}\n`, { mode: 0o600 })
+      await chmod(temp, 0o600).catch(() => undefined); await rename(temp, this.path); await chmod(this.path, 0o600).catch(() => undefined)
+      return true
     })
     this.writeChain = next.catch(() => undefined)
     return next
