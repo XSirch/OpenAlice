@@ -1320,7 +1320,7 @@
         {
           "id": "AINV-T809",
           "title": "Block and timestamp capability changes",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T808"
           ],
@@ -1331,7 +1331,7 @@
             "Require persisted evidence, explicit blockers, and timestamps for every capability promotion"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "readiness projection specs prove explicit missing/expired blockers and evaluated timestamps from persisted evidence"
           ]
         }
       ]

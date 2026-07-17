@@ -184,9 +184,9 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 ### Tasks blocked
 
-- Owner Telegram bot/private chat, owner-authorized OpenRouter credential,
-  read-only B3 and crypto sources, temporal shadow observation, and a green
-  GitHub Actions run are all still blocked. Each corresponding backlog task
+- 24 tasks are blocked by owner Telegram bot/private chat, owner-authorized
+  OpenRouter credential, read-only B3 and crypto sources, temporal shadow
+  observation, or a green GitHub Actions run. Each corresponding backlog task
   records a concrete `next_action`; no fixture was used as external evidence.
 
 ### Code changes and migrations
