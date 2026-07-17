@@ -50,8 +50,8 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 ### Commit
 
 - Base: `b6094a94aa63ab234afbb97f6846df43b6ffe202`.
-- Fix branch: `fix/alice-invest-validation-blockers`; local, uncommitted work at
-  the time of this record. No CI link exists yet.
+- Fix branch: `fix/alice-invest-validation-blockers`, published at
+  `0d805171fc2cb3c739a1bc97ae9cd7bd22a176da`. No CI link exists yet.
 
 ### Environment
 
@@ -60,6 +60,9 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 - The shell did not expose Git on `PATH`, although Git exists at
   `C:\Program Files\Git\cmd\git.exe`. Docker Desktop's Linux Engine was not
   running.
+- `origin` exposes `master` but no `dev` branch, and GitHub CLI is not
+  installed; a policy-compliant PR to `dev` could not be created from this
+  environment.
 
 ### Root causes
 
