@@ -1842,11 +1842,11 @@
     {
       "id": "AINV-T1104",
       "title": "Corrigir resolução do guardian-runtime no E2E",
-      "status": "validated",
+      "status": "done",
       "depends_on": ["AINV-T1103"],
       "scope": ["vitest.e2e.config.ts"],
       "acceptance_criteria": ["O E2E resolve o pacote workspace a partir do source sem depender de dist residual"],
-      "validation": ["pnpm test:e2e avançou além da resolução do pacote; o run direto permanece bloqueado pelo git ausente no PATH deste shell"]
+      "validation": ["pnpm test:e2e — passed após Git ser disponibilizado no PATH; o pacote resolve do source workspace"]
     },
     {
       "id": "AINV-T1105",
@@ -1860,11 +1860,11 @@
     {
       "id": "AINV-T1106",
       "title": "Reexecutar validação local completa",
-      "status": "in_progress",
+      "status": "validated",
       "depends_on": ["AINV-T1103", "AINV-T1104", "AINV-T1105"],
       "scope": ["docs/alice-invest-validation-report.md"],
       "acceptance_criteria": ["Registrar somente resultados completos e verificáveis da matriz local"],
-      "validation": ["Docker Desktop Linux Engine indisponível; E2E direto bloqueado por git fora do PATH"]
+      "validation": ["Matriz local reexecutada; E2E e Docker smoke passaram após corrigir o ambiente"]
     },
     {
       "id": "AINV-T1107",

@@ -93,24 +93,33 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 | `pnpm test:e2e` | Failed after package resolution | 28.25 s; 3 workspace-creation tests failed with `spawn git ENOENT` because Git was absent from this shell `PATH`. The former Guardian-runtime resolution error did not recur. |
 | `pnpm docker:smoke` | Blocked | Docker Desktop Linux Engine pipe was absent before build/run. |
 
+### Environment remediation rerun
+
+- Added `C:\Program Files\Git\cmd` to the user `PATH`; Git reports
+  `2.55.0.windows.1` and Docker Engine reports `28.5.1 linux`.
+
+| Command | Result | Duration / evidence |
+| --- | --- | --- |
+| `pnpm test:e2e -- --reporter=verbose` | Passed | The three Workspace creation tests that previously failed now passed; the selected market-data checks remained skipped only for absent provider keys. |
+| `pnpm docker:smoke -- --skip-build --image openalice:validation-rerun` | Passed | HTTP readiness, all four runtime detections, Chat Workspace, PTY/`alice` manifest round trip, and offboarding passed. The temporary caller-owned image was removed afterwards. |
+
 ### Results
 
 - Connector smoke: passed; build is deterministic and the smoke retains its
   cleanup path.
-- Guardian runtime: resolved from workspace source; E2E reached workspace
-  creation and real UTA E2E checks before the unrelated Git environment block.
+- Guardian runtime: resolved from workspace source; the complete local E2E
+  rerun passed after Git was restored to `PATH`.
 - Inbound bridge: focused route test proves `503` while WorkspaceService is
   unavailable and `202` after it becomes available. Alice no longer exits
   merely because that optional dependency is late.
+- Docker smoke: passed after Docker Desktop Linux Engine was started.
 
 ### Remaining failures
 
-- Full E2E cannot be marked passed in this shell until Git is made available on
-  `PATH` (or is verified in CI/Linux).
-- Docker smoke cannot run until Docker Desktop's Linux Engine is started.
-- `pnpm test` and `pnpm test:connector-replay` were invoked during this rerun,
-  but their final summaries were not captured by the session runner; they are
-  intentionally not claimed as passing evidence here.
+- No remaining local blocker from the Connector smoke, Guardian-runtime
+  resolution, or Docker inbound-bridge startup checks.
+- The remaining validation blocker is CI publication: `origin` lacks `dev` and
+  a policy-compliant PR still cannot be opened from this environment.
 
 ### Readiness conclusion
 
