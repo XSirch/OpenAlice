@@ -9,9 +9,8 @@ All notable changes to OpenAlice will be documented in this file.
 - Fix deterministic Connector process-smoke preparation, resolve the Guardian
   runtime from workspace source in E2E, and make the optional authenticated
   inbound bridge degrade with `503` during Workspace startup rather than
-  terminating Alice. The Connector smoke passed; E2E remains environment-
-  blocked by Git missing from this shell `PATH` and Docker smoke by an offline
-  Docker Desktop Linux Engine. No capability was promoted and financial
+  terminating Alice. Connector smoke, E2E and Docker smoke passed after the
+  local environment was corrected. No capability was promoted and financial
   execution remains disabled.
 
 - Reassess Alice Invest completion claims: distinguish `implemented`,

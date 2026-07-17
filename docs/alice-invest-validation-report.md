@@ -103,6 +103,24 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 | `pnpm test:e2e -- --reporter=verbose` | Passed | The three Workspace creation tests that previously failed now passed; the selected market-data checks remained skipped only for absent provider keys. |
 | `pnpm docker:smoke -- --skip-build --image openalice:validation-rerun` | Passed | HTTP readiness, all four runtime detections, Chat Workspace, PTY/`alice` manifest round trip, and offboarding passed. The temporary caller-owned image was removed afterwards. |
 
+### Complete validation matrix on dev
+
+- Base under test: `5f9d9ea6`, immediately before the documentation-only
+  evidence update. Git was explicitly prepended from
+  `C:\Program Files\Git\cmd` for the E2E process because the already-open
+  terminal had not inherited the updated user `PATH`.
+
+| Command | Result | Duration / evidence |
+| --- | --- | --- |
+| `pnpm install --frozen-lockfile` | Passed | 933 ms. |
+| `npx tsc --noEmit` | Passed | Completed with only the known npm project-config warning. |
+| `cd ui && npx tsc -b` | Passed | Completed successfully. |
+| `pnpm test` | Passed | 345 files passed, 2 skipped; 3,176 tests passed, 22 skipped; 25.90 s. |
+| `pnpm test:connector-replay` | Passed | 3 files and 11 tests passed; 238 ms. |
+| `pnpm test:connector-service` | Passed | Rebuilt `connector.cjs` then completed the isolated process/journal smoke. |
+| `PATH=C:\Program Files\Git\cmd;$PATH pnpm test:e2e` | Passed | Workspace creation passed; 14 provider-dependent tests skipped because credentials were not configured. |
+| `pnpm docker:smoke` | Passed | Isolated image build plus HTTP, agent inventory, Workspace PTY/CLI round trip and offboarding completed; owned resources were cleaned. |
+
 ### Results
 
 - Connector smoke: passed; build is deterministic and the smoke retains its
@@ -118,8 +136,8 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 - No remaining local blocker from the Connector smoke, Guardian-runtime
   resolution, or Docker inbound-bridge startup checks.
-- The remaining validation blocker is CI publication: `origin` lacks `dev` and
-  a policy-compliant PR still cannot be opened from this environment.
+- The remaining validation blocker is CI publication: `dev` is published, but
+  no promotion PR or green workflow run exists for the current commit.
 
 ### Readiness conclusion
 
