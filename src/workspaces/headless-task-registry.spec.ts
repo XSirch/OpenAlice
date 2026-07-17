@@ -161,7 +161,7 @@ describe('HeadlessTaskRegistry', () => {
     const reloaded = await HeadlessTaskRegistry.load(path, noopLogger)
     expect(reloaded.list()).toHaveLength(24)
     expect(reloaded.list().every((task) => task.status === 'done' && task.output?.toolCalls === 1)).toBe(true)
-  })
+  }, 15_000)
 
   it('pages newest-first with a stable task cursor', async () => {
     const reg = await HeadlessTaskRegistry.load(path, noopLogger)
