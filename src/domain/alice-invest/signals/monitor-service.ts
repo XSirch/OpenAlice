@@ -7,6 +7,7 @@ import { ReadinessEvidenceStore } from '../readiness/evidence-store.js'
 import { projectAllReadiness } from '../readiness/projection.js'
 import { SignalLedger } from './ledger.js'
 import { MonitorDeliveryStore } from './monitor-delivery-store.js'
+import { MonitorTelemetryStore, monitorTelemetryId } from './monitor-telemetry-store.js'
 import { runSignalMonitorTick, type MonitorRunnerOutcome, type MonitoredSignal } from './monitor-runner.js'
 
 const lifecycle = z.enum(['created', 'active', 'target_hit', 'stop_hit', 'expired', 'invalidated', 'trailing_activated', 'trailing_updated'])
@@ -27,7 +28,7 @@ export class MonitorInputStore {
   }
 }
 
-export interface MonitorServiceOptions { inputStore?:MonitorInputStore; evidenceStore?:ReadinessEvidenceStore; ledger?:SignalLedger; deliveries?:MonitorDeliveryStore; intervalMs?:number; now?:()=>Date }
+export interface MonitorServiceOptions { inputStore?:MonitorInputStore; evidenceStore?:ReadinessEvidenceStore; ledger?:SignalLedger; deliveries?:MonitorDeliveryStore; telemetry?:MonitorTelemetryStore; intervalMs?:number; now?:()=>Date }
 /** Runs inside Alice, which Guardian already supervises. It is a bounded timer, never an agent loop. */
 export class AliceInvestMonitorService {
   private timer: NodeJS.Timeout | null = null
@@ -36,13 +37,16 @@ export class AliceInvestMonitorService {
   private readonly evidence: ReadinessEvidenceStore
   private readonly ledger: SignalLedger
   private readonly deliveries: MonitorDeliveryStore
+  private readonly telemetry: MonitorTelemetryStore
   private readonly intervalMs: number
   private readonly now: ()=>Date
+  private lastTickAt: number | null = null
   constructor(private readonly inbox:IInboxStore, options:MonitorServiceOptions={}) {
     this.input=options.inputStore??new MonitorInputStore()
     this.evidence=options.evidenceStore??new ReadinessEvidenceStore()
     this.ledger=options.ledger??new SignalLedger(dataPath('state','alice-invest-signal-ledger.json'))
     this.deliveries=options.deliveries??new MonitorDeliveryStore(dataPath('state','alice-invest-monitor-deliveries.json'))
+    this.telemetry=options.telemetry??new MonitorTelemetryStore(dataPath('state','alice-invest-monitor-telemetry.json'))
     this.intervalMs=options.intervalMs??60_000
     this.now=options.now??(()=>new Date())
   }
@@ -51,12 +55,19 @@ export class AliceInvestMonitorService {
   async tick():Promise<MonitorRunnerOutcome[]> {
     if(this.running)return []
     this.running=true
+    const now=this.now()
     try {
       const config=await readAliceInvestConfig()
       if(!config.kill_switches.active_signal_monitor_enabled)return []
       const [input]=await Promise.all([this.input.read(),this.evidence.init()])
+      if(this.lastTickAt!==null&&now.getTime()-this.lastTickAt>this.intervalMs*2)await this.record({at:now.toISOString(),kind:'gap',details:'monitor tick exceeded twice its configured interval'})
+      this.lastTickAt=now.getTime()
+      for(const item of input.signals){if(!item.sourceTimestamp||now.getTime()-Date.parse(item.sourceTimestamp)>input.maxAgeSeconds*1_000)await this.record({at:now.toISOString(),kind:'stale',capability:item.capability,signalId:item.event.signalId,details:'source observation is absent or stale'})}
       const readiness=Object.fromEntries(projectAllReadiness(this.evidence.list(),this.now()).filter(item=>item.capability==='b3_signals'||item.capability==='crypto_signals').map(item=>[item.capability,item.state])) as Record<'b3_signals'|'crypto_signals','not_ready'|'research_only'|'paper_alerts'>
-      return runSignalMonitorTick({now:this.now(),enabled:true,notificationsEnabled:config.kill_switches.signal_notifications_enabled,readiness,b3MarketOpen:input.b3MarketOpen,maxAgeSeconds:input.maxAgeSeconds,signals:input.signals},this.ledger,this.inbox,this.deliveries)
-    } finally { this.running=false }
+      const outcomes=await runSignalMonitorTick({now,enabled:true,notificationsEnabled:config.kill_switches.signal_notifications_enabled,readiness,b3MarketOpen:input.b3MarketOpen,maxAgeSeconds:input.maxAgeSeconds,signals:input.signals},this.ledger,this.inbox,this.deliveries)
+      for(const outcome of outcomes){if(['target_hit','stop_hit','expired'].includes(outcome.action))await this.record({at:now.toISOString(),kind:'crossing',capability:outcome.capability,signalId:outcome.signalId,details:outcome.action})}
+      return outcomes
+    } catch(error){await this.record({at:now.toISOString(),kind:'outage',details:'monitor tick failed'}).catch(()=>undefined);throw error} finally { this.running=false }
   }
+  private async record(event:Omit<import('./monitor-telemetry-store.js').MonitorTelemetryEvent,'id'>){await this.telemetry.append({...event,id:monitorTelemetryId(event)})}
 }

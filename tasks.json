@@ -1606,7 +1606,7 @@
         {
           "id": "AINV-T912G",
           "title": "Measure gaps and crossings between ticks",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": [
             "AINV-T912E"
           ],
@@ -1853,7 +1853,7 @@
             "Green workflow on its corresponding commit and command/result summary"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Monitor telemetry store and service specs cover persisted idempotent gap facts and stale input; crossing/outage paths are covered by the deterministic service implementation"
           ],
           "blocked_reason": "Publication requires a green GitHub Actions workflow for the corresponding commit, which cannot be produced locally.",
           "next_action": "Open the published branch as a master PR and wait for the Alice Invest validation workflow to complete green."

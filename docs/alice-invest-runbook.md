@@ -38,6 +38,11 @@ second lifecycle event. B3 observes the configured market-open gate; crypto is
 24/7. Stale or absent source timestamps fail closed. For a candle that crosses
 both stop and target, the deterministic policy attributes the stop first.
 
+The monitor writes a bounded telemetry journal for missed tick gaps, terminal
+crossings, stale inputs and internal outages. It contains only capability,
+signal correlation and short operational facts; it never stores source payloads
+or credentials. These records are operational diagnostics, not readiness proof.
+
 Do not enable monitoring or alerts as evidence. Guardian integration and real
 source input still require the pending backlog work; temporal shadow evidence
 is required before any readiness promotion.
