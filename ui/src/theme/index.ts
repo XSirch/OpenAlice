@@ -3,8 +3,8 @@
  * BEFORE first render, so `<html>` has the persisted mode and resolved card.
  *
  * Wiring is one-directional, mirroring i18n/index.ts: the theme store is the
- * source of truth; here we resolve auto/light/dark onto the configured day or
- * night palette and publish the result as data attributes. CSS only defines
+ * source of truth; here we resolve auto/day/night onto the configured slot
+ * and publish its universal palette as data attributes. CSS only defines
  * complete semantic cards; it does not contain a second mode-selection path.
  *
  * A near-identical apply already ran from index.html's inline script to avoid
@@ -20,13 +20,13 @@ const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
 function applyTheme(state: ReturnType<typeof readInitialThemePreferences>): void {
   const root = document.documentElement
   root.dataset.theme = state.theme
-  root.dataset.lightPalette = state.lightPalette
-  root.dataset.darkPalette = state.darkPalette
+  root.dataset.dayPalette = state.dayPalette
+  root.dataset.nightPalette = state.nightPalette
   root.dataset.palette = resolveEffectivePalette(
     state.theme,
     systemTheme.matches,
-    state.lightPalette,
-    state.darkPalette,
+    state.dayPalette,
+    state.nightPalette,
   )
 }
 
@@ -35,8 +35,8 @@ applyTheme(readInitialThemePreferences())
 useThemeStore.subscribe((state, prev) => {
   if (
     state.theme !== prev.theme
-    || state.lightPalette !== prev.lightPalette
-    || state.darkPalette !== prev.darkPalette
+    || state.dayPalette !== prev.dayPalette
+    || state.nightPalette !== prev.nightPalette
   ) applyTheme(state)
 })
 

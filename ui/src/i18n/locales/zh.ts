@@ -44,11 +44,11 @@ export const zh: Resources = {
       title: '外观',
       description: '色彩与布局偏好，仅保存在本设备。',
       colorMode: '色彩模式',
-      colorModeDescription: '自动模式跟随系统；日间和暗夜模式会固定使用所配置色卡的一侧。',
+      colorModeDescription: '自动模式跟随系统在日间和暗夜槽位间切换；日间和暗夜模式会固定对应槽位。',
       dayPalette: '日间色卡',
-      dayPaletteDescription: '用于日间模式，以及自动模式切换到浅色外观时。',
+      dayPaletteDescription: '用于日间模式，以及自动模式跟随浅色系统偏好时；可选择任意色卡。',
       nightPalette: '暗夜色卡',
-      nightPaletteDescription: '用于暗夜模式，以及自动模式切换到深色外观时。',
+      nightPaletteDescription: '用于暗夜模式，以及自动模式跟随深色系统偏好时；可选择任意色卡。',
       showEditorTabs: '显示编辑器标签页',
       showEditorTabsOn: '编辑器上方显示标签栏 —— 点击切换，× 或中键关闭。',
       showEditorTabsOff: '标签栏已隐藏。从侧栏导航；想要 VS Code 式标签页就打开它。',
@@ -631,7 +631,7 @@ export const zh: Resources = {
     },
   },
   theme: {
-    mode: { auto: '自动', light: '浅色', dark: '深色' },
+    mode: { auto: '自动', day: '日间', night: '暗夜' },
     switchTo: '切换到{{mode}}',
     palette: { paper: '纸张', porcelain: '白瓷', graphite: '石墨', midnight: '午夜' },
     paletteDescription: {

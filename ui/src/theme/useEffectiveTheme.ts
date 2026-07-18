@@ -1,7 +1,12 @@
 import { useSyncExternalStore } from 'react'
 
 import { useThemeStore } from './store'
-import type { ThemePaletteId } from './palettes'
+import {
+  paletteAppearance,
+  resolveEffectiveSlot,
+  type ThemePaletteId,
+  type ThemePreferenceSlot,
+} from './palettes'
 
 const mq = window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -11,28 +16,32 @@ function subscribeSystem(cb: () => void): () => void {
 }
 
 /**
- * Resolve the preference (`light | dark | auto`) to a concrete `'light' | 'dark'`
- * — `auto` follows the OS. Use this for the rare surfaces that need the actual
- * value in JS rather than via CSS: notably the xterm terminal, whose palette is
- * a JS object, not a CSS variable. CSS-driven surfaces should just read the
- * `--color-*` tokens (which resolve through the active `data-palette` card).
+ * Resolve which preference slot is active. Auto follows the OS; a palette's
+ * own light/dark appearance does not influence slot selection.
  */
-export function useEffectiveTheme(): 'light' | 'dark' {
+export function useEffectivePreferenceSlot(): ThemePreferenceSlot {
   const theme = useThemeStore((s) => s.theme)
   const systemDark = useSyncExternalStore(
     subscribeSystem,
     () => mq.matches,
     () => true,
   )
-  if (theme === 'light') return 'light'
-  if (theme === 'dark') return 'dark'
-  return systemDark ? 'dark' : 'light'
+  return resolveEffectiveSlot(theme, systemDark)
 }
 
-/** The concrete semantic card selected for the currently effective mode. */
+/** The concrete semantic card selected for the currently active slot. */
 export function useEffectivePalette(): ThemePaletteId {
-  const mode = useEffectiveTheme()
-  const lightPalette = useThemeStore((s) => s.lightPalette)
-  const darkPalette = useThemeStore((s) => s.darkPalette)
-  return mode === 'dark' ? darkPalette : lightPalette
+  const slot = useEffectivePreferenceSlot()
+  const dayPalette = useThemeStore((s) => s.dayPalette)
+  const nightPalette = useThemeStore((s) => s.nightPalette)
+  return slot === 'night' ? nightPalette : dayPalette
+}
+
+/**
+ * Resolve the active card's intrinsic appearance. Use this for JS surfaces
+ * such as xterm and chart redraws; assigning Midnight to Day must still report
+ * a dark color scheme to the shell.
+ */
+export function useEffectiveTheme(): 'light' | 'dark' {
+  return paletteAppearance(useEffectivePalette())
 }
