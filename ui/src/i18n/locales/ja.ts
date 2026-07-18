@@ -44,11 +44,11 @@ export const ja: Resources = {
       title: '外観',
       description: '色とレイアウトの設定。この端末にのみ保存されます。',
       colorMode: 'カラーモード',
-      colorModeDescription: '自動はシステムに追従し、ライトとダークは設定したパレットの片側に固定します。',
+      colorModeDescription: '自動はシステムに追従して昼と夜のスロットを切り替え、昼と夜は対応するスロットに固定します。',
       dayPalette: '昼用パレット',
-      dayPaletteDescription: 'ライトモードと、自動がライト表示になる場合に使います。',
+      dayPaletteDescription: '昼モードと、自動が明るいシステム設定に追従する場合に使います。どのパレットでも選べます。',
       nightPalette: '夜用パレット',
-      nightPaletteDescription: 'ダークモードと、自動がダーク表示になる場合に使います。',
+      nightPaletteDescription: '夜モードと、自動が暗いシステム設定に追従する場合に使います。どのパレットでも選べます。',
       showEditorTabs: 'エディタタブを表示',
       showEditorTabsOn: 'エディタ上部にタブバーを表示 —— クリックで切替、× または中クリックで閉じる。',
       showEditorTabsOff: 'タブバーは非表示。サイドバーから移動します。VS Code 風のタブが欲しい場合はオンに。',
@@ -631,7 +631,7 @@ export const ja: Resources = {
     },
   },
   theme: {
-    mode: { auto: '自動', light: 'ライト', dark: 'ダーク' },
+    mode: { auto: '自動', day: '昼', night: '夜' },
     switchTo: '{{mode}}に切り替え',
     palette: { paper: 'ペーパー', porcelain: 'ポーセリン', graphite: 'グラファイト', midnight: 'ミッドナイト' },
     paletteDescription: {

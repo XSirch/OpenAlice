@@ -4,10 +4,10 @@ import { basename, extname, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
-  DARK_PALETTES,
-  LIGHT_PALETTES,
   THEME_PALETTES,
+  paletteAppearance,
   resolveEffectivePalette,
+  resolveEffectiveSlot,
   type ThemePaletteId,
 } from './palettes'
 
@@ -83,10 +83,9 @@ function paletteToken(id: ThemePaletteId, token: string): string {
 }
 
 describe('semantic color contract', () => {
-  it('ships two complete light cards and two complete dark cards', () => {
-    expect(LIGHT_PALETTES.map(({ id }) => id)).toEqual(['paper', 'porcelain'])
-    expect(DARK_PALETTES.map(({ id }) => id)).toEqual(['graphite', 'midnight'])
+  it('ships one universal library with four complete semantic cards', () => {
     expect(THEME_PALETTES.map(({ id }) => id)).toEqual(PALETTE_IDS)
+    expect(THEME_PALETTES.map(({ appearance }) => appearance)).toEqual(['light', 'light', 'dark', 'dark'])
     expect(new Set(PALETTE_IDS).size).toBe(4)
 
     for (const id of PALETTE_IDS) {
@@ -131,11 +130,17 @@ describe('semantic color contract', () => {
     expect(palette).toContain('.oa-palette-preview-terminal')
   })
 
-  it('resolves auto, day, and night modes through one palette selector', () => {
+  it('assigns any palette to either preference slot', () => {
+    expect(resolveEffectiveSlot('auto', false)).toBe('day')
+    expect(resolveEffectiveSlot('auto', true)).toBe('night')
+    expect(resolveEffectiveSlot('day', true)).toBe('day')
+    expect(resolveEffectiveSlot('night', false)).toBe('night')
     expect(resolveEffectivePalette('auto', false, 'porcelain', 'midnight')).toBe('porcelain')
     expect(resolveEffectivePalette('auto', true, 'porcelain', 'midnight')).toBe('midnight')
-    expect(resolveEffectivePalette('light', true, 'paper', 'graphite')).toBe('paper')
-    expect(resolveEffectivePalette('dark', false, 'paper', 'graphite')).toBe('graphite')
+    expect(resolveEffectivePalette('day', true, 'midnight', 'paper')).toBe('midnight')
+    expect(resolveEffectivePalette('night', false, 'midnight', 'paper')).toBe('paper')
+    expect(paletteAppearance('midnight')).toBe('dark')
+    expect(paletteAppearance('paper')).toBe('light')
     expect(palette).not.toMatch(/data-theme|prefers-color-scheme/)
   })
 

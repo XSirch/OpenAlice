@@ -52,11 +52,11 @@ export const zhHant: Resources = {
       title: '外觀',
       description: '色彩與版面偏好，僅儲存在本機。',
       colorMode: '色彩模式',
-      colorModeDescription: '自動模式跟隨系統；日間與暗夜模式會固定使用所設定色卡的一側。',
+      colorModeDescription: '自動模式跟隨系統在日間與暗夜槽位間切換；日間與暗夜模式會固定對應槽位。',
       dayPalette: '日間色卡',
-      dayPaletteDescription: '用於日間模式，以及自動模式切換到淺色外觀時。',
+      dayPaletteDescription: '用於日間模式，以及自動模式跟隨淺色系統偏好時；可選擇任意色卡。',
       nightPalette: '暗夜色卡',
-      nightPaletteDescription: '用於暗夜模式，以及自動模式切換到深色外觀時。',
+      nightPaletteDescription: '用於暗夜模式，以及自動模式跟隨深色系統偏好時；可選擇任意色卡。',
       showEditorTabs: '顯示編輯器分頁',
       showEditorTabsOn: '編輯器上方顯示分頁列 —— 點擊切換，× 或中鍵關閉。',
       showEditorTabsOff: '分頁列已隱藏。從側欄導覽；想要 VS Code 式分頁就開啟它。',
@@ -639,7 +639,7 @@ export const zhHant: Resources = {
     },
   },
   theme: {
-    mode: { auto: '自動', light: '淺色', dark: '深色' },
+    mode: { auto: '自動', day: '日間', night: '暗夜' },
     switchTo: '切換到{{mode}}',
     palette: { paper: '紙張', porcelain: '白瓷', graphite: '石墨', midnight: '午夜' },
     paletteDescription: {

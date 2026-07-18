@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocale, useSetLocale, LOCALE_LABELS } from '../i18n/useLocale'
 import { useEditorTabsPref } from '../live/editor-tabs-pref'
 import { preferencesApi, type WorkspaceShellStatus } from '../api/preferences'
-import { DARK_PALETTES, LIGHT_PALETTES, type ThemePaletteDefinition, type ThemePaletteId } from '../theme/palettes'
+import { THEME_PALETTES, type ThemePaletteDefinition, type ThemePaletteId } from '../theme/palettes'
 import { useThemeStore, type AppTheme } from '../theme/store'
 
 // ==================== Appearance ====================
@@ -21,12 +21,12 @@ function AppearanceSection() {
   const showEditorTabs = useEditorTabsPref((s) => s.showEditorTabs)
   const setShowEditorTabs = useEditorTabsPref((s) => s.setShowEditorTabs)
   const theme = useThemeStore((s) => s.theme)
-  const lightPalette = useThemeStore((s) => s.lightPalette)
-  const darkPalette = useThemeStore((s) => s.darkPalette)
+  const dayPalette = useThemeStore((s) => s.dayPalette)
+  const nightPalette = useThemeStore((s) => s.nightPalette)
   const setTheme = useThemeStore((s) => s.setTheme)
-  const setLightPalette = useThemeStore((s) => s.setLightPalette)
-  const setDarkPalette = useThemeStore((s) => s.setDarkPalette)
-  const modes: readonly AppTheme[] = ['auto', 'light', 'dark']
+  const setDayPalette = useThemeStore((s) => s.setDayPalette)
+  const setNightPalette = useThemeStore((s) => s.setNightPalette)
+  const modes: readonly AppTheme[] = ['auto', 'day', 'night']
   return (
     <ConfigSection title={t('settings.appearance.title')} description={t('settings.appearance.description')}>
       <div className="border-b border-border/60 pb-5">
@@ -61,16 +61,16 @@ function AppearanceSection() {
         <PalettePicker
           title={t('settings.appearance.dayPalette')}
           description={t('settings.appearance.dayPaletteDescription')}
-          palettes={LIGHT_PALETTES}
-          selected={lightPalette}
-          onSelect={setLightPalette}
+          palettes={THEME_PALETTES}
+          selected={dayPalette}
+          onSelect={setDayPalette}
         />
         <PalettePicker
           title={t('settings.appearance.nightPalette')}
           description={t('settings.appearance.nightPaletteDescription')}
-          palettes={DARK_PALETTES}
-          selected={darkPalette}
-          onSelect={setDarkPalette}
+          palettes={THEME_PALETTES}
+          selected={nightPalette}
+          onSelect={setNightPalette}
         />
       </div>
 
@@ -91,7 +91,7 @@ function AppearanceSection() {
   )
 }
 
-function PalettePicker<T extends ThemePaletteId>({
+function PalettePicker({
   title,
   description,
   palettes,
@@ -100,9 +100,9 @@ function PalettePicker<T extends ThemePaletteId>({
 }: {
   title: string
   description: string
-  palettes: readonly ThemePaletteDefinition<T>[]
-  selected: T
-  onSelect: (palette: T) => void
+  palettes: readonly ThemePaletteDefinition[]
+  selected: ThemePaletteId
+  onSelect: (palette: ThemePaletteId) => void
 }) {
   const { t } = useTranslation()
   return (

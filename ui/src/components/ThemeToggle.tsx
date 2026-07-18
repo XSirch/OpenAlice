@@ -1,8 +1,8 @@
 /**
  * The color-theme toggle that lives in the ActivityBar footer. One icon
- * button cycles auto → light → dark → auto. The icon reflects the concrete
- * effective mode (sun / moon); auto adds a tiny badge instead of using an
- * abstract monitor icon.
+ * button cycles auto → day → night → auto. The icon reflects the active
+ * palette's intrinsic appearance (sun / moon); auto adds a tiny badge instead
+ * of using an abstract monitor icon.
  *
  * State is the theme store (ui/src/theme/store); the side-effect module
  * resolves the configured day/night card onto `<html data-palette>`. No prop
@@ -15,11 +15,11 @@ import { useTranslation } from 'react-i18next'
 import { useThemeStore, type AppTheme } from '../theme/store'
 import { useEffectiveTheme } from '../theme/useEffectiveTheme'
 
-/** What the NEXT click switches to (auto → light → dark → auto). */
+/** What the NEXT click switches to (auto → day → night → auto). */
 const NEXT: Record<AppTheme, AppTheme> = {
-  auto: 'light',
-  light: 'dark',
-  dark: 'auto',
+  auto: 'day',
+  day: 'night',
+  night: 'auto',
 }
 
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {

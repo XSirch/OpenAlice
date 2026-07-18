@@ -1,52 +1,63 @@
-export type LightPaletteId = 'paper' | 'porcelain'
-export type DarkPaletteId = 'graphite' | 'midnight'
-export type ThemePaletteId = LightPaletteId | DarkPaletteId
-export type ThemePaletteMode = 'light' | 'dark'
-export type ThemeColorMode = ThemePaletteMode | 'auto'
+export type ThemePaletteId = 'paper' | 'porcelain' | 'graphite' | 'midnight'
+export type ThemePaletteAppearance = 'light' | 'dark'
+export type ThemePreferenceMode = 'auto' | 'day' | 'night'
+export type ThemePreferenceSlot = Exclude<ThemePreferenceMode, 'auto'>
 
-export interface ThemePaletteDefinition<T extends ThemePaletteId = ThemePaletteId> {
-  readonly id: T
-  readonly mode: ThemePaletteMode
-  readonly labelKey: `theme.palette.${T}`
-  readonly descriptionKey: `theme.paletteDescription.${T}`
+export interface ThemePaletteDefinition {
+  readonly id: ThemePaletteId
+  /** Intrinsic appearance used by native controls and terminal color reporting. */
+  readonly appearance: ThemePaletteAppearance
+  readonly labelKey: `theme.palette.${ThemePaletteId}`
+  readonly descriptionKey: `theme.paletteDescription.${ThemePaletteId}`
 }
 
-export const DEFAULT_LIGHT_PALETTE: LightPaletteId = 'paper'
-export const DEFAULT_DARK_PALETTE: DarkPaletteId = 'graphite'
+export const DEFAULT_DAY_PALETTE: ThemePaletteId = 'paper'
+export const DEFAULT_NIGHT_PALETTE: ThemePaletteId = 'graphite'
 
-export const LIGHT_PALETTES = [
-  { id: 'paper', mode: 'light', labelKey: 'theme.palette.paper', descriptionKey: 'theme.paletteDescription.paper' },
-  { id: 'porcelain', mode: 'light', labelKey: 'theme.palette.porcelain', descriptionKey: 'theme.paletteDescription.porcelain' },
-] as const satisfies readonly ThemePaletteDefinition<LightPaletteId>[]
+/**
+ * One universal palette library. `appearance` describes a card; it does not
+ * restrict which preference slot can select it.
+ */
+export const THEME_PALETTES = [
+  { id: 'paper', appearance: 'light', labelKey: 'theme.palette.paper', descriptionKey: 'theme.paletteDescription.paper' },
+  { id: 'porcelain', appearance: 'light', labelKey: 'theme.palette.porcelain', descriptionKey: 'theme.paletteDescription.porcelain' },
+  { id: 'graphite', appearance: 'dark', labelKey: 'theme.palette.graphite', descriptionKey: 'theme.paletteDescription.graphite' },
+  { id: 'midnight', appearance: 'dark', labelKey: 'theme.palette.midnight', descriptionKey: 'theme.paletteDescription.midnight' },
+] as const satisfies readonly ThemePaletteDefinition[]
 
-export const DARK_PALETTES = [
-  { id: 'graphite', mode: 'dark', labelKey: 'theme.palette.graphite', descriptionKey: 'theme.paletteDescription.graphite' },
-  { id: 'midnight', mode: 'dark', labelKey: 'theme.palette.midnight', descriptionKey: 'theme.paletteDescription.midnight' },
-] as const satisfies readonly ThemePaletteDefinition<DarkPaletteId>[]
-
-export const THEME_PALETTES: readonly ThemePaletteDefinition[] = [
-  ...LIGHT_PALETTES,
-  ...DARK_PALETTES,
-]
-
-export function isLightPaletteId(value: unknown): value is LightPaletteId {
-  return value === 'paper' || value === 'porcelain'
+export function isThemePaletteId(value: unknown): value is ThemePaletteId {
+  return value === 'paper' || value === 'porcelain' || value === 'graphite' || value === 'midnight'
 }
 
-export function isDarkPaletteId(value: unknown): value is DarkPaletteId {
-  return value === 'graphite' || value === 'midnight'
+export function isThemePreferenceMode(value: unknown): value is ThemePreferenceMode {
+  return value === 'auto' || value === 'day' || value === 'night'
 }
 
-export function isThemeColorMode(value: unknown): value is ThemeColorMode {
-  return value === 'auto' || value === 'light' || value === 'dark'
+/** Accept the v1 `light` / `dark` preference values without keeping them live. */
+export function normalizeThemePreferenceMode(value: unknown): ThemePreferenceMode | null {
+  if (isThemePreferenceMode(value)) return value
+  if (value === 'light') return 'day'
+  if (value === 'dark') return 'night'
+  return null
+}
+
+export function paletteAppearance(palette: ThemePaletteId): ThemePaletteAppearance {
+  return THEME_PALETTES.find(({ id }) => id === palette)!.appearance
+}
+
+export function resolveEffectiveSlot(
+  preference: ThemePreferenceMode,
+  systemDark: boolean,
+): ThemePreferenceSlot {
+  if (preference === 'auto') return systemDark ? 'night' : 'day'
+  return preference
 }
 
 export function resolveEffectivePalette(
-  theme: ThemeColorMode,
+  preference: ThemePreferenceMode,
   systemDark: boolean,
-  lightPalette: LightPaletteId,
-  darkPalette: DarkPaletteId,
+  dayPalette: ThemePaletteId,
+  nightPalette: ThemePaletteId,
 ): ThemePaletteId {
-  const mode = theme === 'auto' ? (systemDark ? 'dark' : 'light') : theme
-  return mode === 'dark' ? darkPalette : lightPalette
+  return resolveEffectiveSlot(preference, systemDark) === 'night' ? nightPalette : dayPalette
 }
