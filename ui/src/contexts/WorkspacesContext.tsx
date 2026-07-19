@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next'
 import '../components/workspace/workspaces.css'
 
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useToast } from '../components/Toast'
 import {
   publishTerminalViewAttributes,
   useTerminalAppearance,
@@ -94,6 +95,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   } | null>(null)
   const [pendingSessionDelete, setPendingSessionDelete] = useState<{ wsId: string; sessionId: string } | null>(null)
   const { t } = useTranslation()
+  const toast = useToast()
   const terminalAppearance = useTerminalAppearance()
 
   const ensureTerminalAppearancePublished = useCallback(async (): Promise<void> => {
@@ -458,6 +460,35 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
 
   const deleteSession = useCallback(
     async (wsId: string, sessionId: string): Promise<void> => {
+      const workspaceState = useWorkspace.getState()
+      const focusedGroup = workspaceState.tree.kind === 'leaf' ? workspaceState.tree.group : null
+      const focusedTab = focusedGroup?.activeTabId
+        ? workspaceState.tabs[focusedGroup.activeTabId] ?? null
+        : null
+      const focusedOwnsSession = focusedTab?.spec.kind === 'workspace'
+        ? focusedTab.spec.params.wsId === wsId && focusedTab.spec.params.sessionId === sessionId
+        : focusedTab?.spec.kind === 'workspace-manager'
+          ? wsId === MANAGER_WORKSPACE_ID && focusedTab.spec.params.sessionId === sessionId
+          : false
+
+      // Deleting the Session currently on screen has a deterministic landing:
+      // its Workspace-level Session library. Open/focus that hub before closing
+      // the pinned tab so closeTab's neighbour rule cannot send the user to an
+      // unrelated editor.
+      if (focusedOwnsSession) {
+        if (wsId === MANAGER_WORKSPACE_ID) {
+          openOrFocus({ kind: 'workspace-manager', params: {} })
+        } else {
+          const source = focusedTab?.spec.kind === 'workspace'
+            ? focusedTab.spec.params.source
+            : undefined
+          openOrFocus({
+            kind: 'workspace',
+            params: { wsId, ...(source ? { source } : {}) },
+          })
+        }
+      }
+
       // Optimistic remove.
       if (wsId === MANAGER_WORKSPACE_ID) {
         setWorkspaceManager((current) => removeManagerSession(current, sessionId))
@@ -470,7 +501,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
       }
       // Close any tab pinned to this session immediately (don't wait for the
       // reconcile effect — gives instant UI feedback).
-      const tabsSnap = useWorkspace.getState().tabs
+      const tabsSnap = workspaceState.tabs
       for (const tabId of Object.keys(tabsSnap)) {
         const tab = tabsSnap[tabId]
         const ownsSession = tab?.spec.kind === 'workspace'
@@ -486,7 +517,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
       if (wsId === MANAGER_WORKSPACE_ID) void refreshWorkspaceManager()
       else void refresh()
     },
-    [refresh, refreshWorkspaceManager, closeTab],
+    [refresh, refreshWorkspaceManager, closeTab, openOrFocus],
   )
 
   // Public delete = confirm first (the × sits next to the open-conversation hit
@@ -546,6 +577,18 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
           wsId={configuringAgentTarget.wsId}
           initialAgent={configuringAgentTarget.agent}
           initialSection={configuringAgentTarget.section ?? (configuringAgentTarget.agent ? 'ai' : 'general')}
+          onAiSaved={({ model, runtimeLabel, workspaceLabel }) => {
+            toast.success(model
+              ? t('workspaceSettings.ai.savedModelToast', {
+                  model,
+                  runtime: runtimeLabel,
+                  workspace: workspaceLabel,
+                })
+              : t('workspaceSettings.ai.savedConfigToast', {
+                  runtime: runtimeLabel,
+                  workspace: workspaceLabel,
+                }))
+          }}
           onClose={() => setConfiguringAgentTarget(null)}
         />
       )}

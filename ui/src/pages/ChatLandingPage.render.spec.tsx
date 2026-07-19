@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { WorkspacesContextValue } from '../contexts/workspaces-context'
@@ -234,5 +234,46 @@ describe('ChatLandingPage AI source disclosure', () => {
 
     expect(await screen.findByText('Will write to this workspace when you send')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Configure workspace AI' })).toBeTruthy()
+  })
+
+  it('replaces a transient provider choice with the Workspace config saved in Settings', async () => {
+    mocks.listAgentCredentials.mockResolvedValue([
+      {
+        slug: 'google-1',
+        vendor: 'google',
+        authType: 'api-key',
+        wires: { 'google-generative-ai': 'https://generativelanguage.googleapis.com/v1beta' },
+        resolvedModel: 'gemini-3.1-flash-lite',
+      },
+      {
+        slug: 'deepseek-1',
+        vendor: 'deepseek',
+        authType: 'api-key',
+        wires: { 'openai-chat': 'https://api.deepseek.com/v1' },
+        resolvedModel: 'deepseek-v3.2',
+      },
+    ])
+
+    render(<ChatLandingPage spec={{ params: { targetWsId: 'chat-1' } }} />)
+
+    expect(await screen.findByLabelText('Model gemini-3.1-flash-lite')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'AI provider' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /deepseek-1/ }))
+    expect(await screen.findByLabelText('Model deepseek-v3.2')).toBeTruthy()
+
+    mocks.detectWorkspaceCredential.mockResolvedValue({
+      configured: true,
+      slug: 'google-1',
+      model: 'gemini-3.1-pro-preview',
+      contextWindow: 512_000,
+      wireShape: 'google-generative-ai',
+    })
+    window.dispatchEvent(new CustomEvent('openalice:workspace-agent-config-changed', {
+      detail: { wsId: 'chat-1', agent: 'pi' },
+    }))
+
+    expect(await screen.findByLabelText('Model gemini-3.1-pro-preview')).toBeTruthy()
+    expect(screen.queryByLabelText('Model deepseek-v3.2')).toBeNull()
+    expect(mocks.detectWorkspaceCredential).toHaveBeenCalledTimes(2)
   })
 })

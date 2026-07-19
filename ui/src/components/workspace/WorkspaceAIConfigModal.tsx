@@ -40,6 +40,7 @@ import {
 import { ModelCombobox } from '../credentials/PresetFields'
 import { useTestGate } from '../../lib/useTestGate'
 import { useWorkspaces } from '../../contexts/workspaces-context'
+import { notifyWorkspaceAgentConfigChanged } from '../../lib/workspaceAiEvents'
 import { WorkspaceTemplateUpgradePanel } from './WorkspaceTemplateUpgradePanel'
 import { WorkspaceAbsorbPanel } from './WorkspaceAbsorbPanel'
 
@@ -59,8 +60,16 @@ type Section = 'general' | 'ai' | 'template' | 'absorb'
 interface Props {
   wsId: string
   onClose: () => void
+  onAiSaved?: (result: WorkspaceAiSaveResult) => void
   initialAgent?: Tab
   initialSection?: Section
+}
+
+export interface WorkspaceAiSaveResult {
+  readonly agent: Tab
+  readonly runtimeLabel: string
+  readonly model: string | null
+  readonly workspaceLabel: string
 }
 
 const inputClass =
@@ -188,7 +197,13 @@ export function connectionFieldsChanged(
   return testKey(configToForm(saved, tab)) !== testKey(form)
 }
 
-export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude', initialSection = 'general' }: Props) {
+export function WorkspaceAIConfigModal({
+  wsId,
+  onClose,
+  onAiSaved,
+  initialAgent = 'claude',
+  initialSection = 'general',
+}: Props) {
   const { t } = useTranslation()
   const { workspaces, refresh, saveWorkspaceMetadata } = useWorkspaces()
   const workspace = workspaces.find((w) => w.id === wsId) ?? null
@@ -212,9 +227,9 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
-  // Push-back prompt: shown after a successful Save when the just-saved key
-  // isn't already in Alice's central store — offers to solidify it for reuse.
-  const [offerSaveCred, setOfferSaveCred] = useState(false)
+  // A Workspace-only hand-entered key can still be promoted to Alice's vault,
+  // but the choice must happen before the primary Save closes the dialog.
+  const [dismissedCredentialKey, setDismissedCredentialKey] = useState<string | null>(null)
   const [savingCred, setSavingCred] = useState(false)
   const [credFlash, setCredFlash] = useState<string | null>(null)
   // One test-gate per tab (hooks are unconditional + fixed-count).
@@ -310,6 +325,10 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
       (form.wireShape === 'anthropic' && savedForm.authMode !== form.authMode)
     )
   }, [bundle, form, tab])
+  const enteredApiKey = form.apiKey.trim()
+  const offerSaveCred = !!enteredApiKey &&
+    !credentials.some((credential) => credential.apiKey === enteredApiKey) &&
+    dismissedCredentialKey !== enteredApiKey
   const connectionDirty = useMemo(
     () => !!bundle && connectionFieldsChanged(bundle[tab], form, tab),
     [bundle, form, tab],
@@ -350,20 +369,17 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
     setSaving(true)
     try {
       await saveAgentConfig(wsId, tab, formToConfig(form, tab))
-      const fresh = await getAgentConfig(wsId)
-      setBundle(fresh)
       notifyConfigChanged()
-      setSavedFlash(true)
-      setTimeout(() => setSavedFlash(false), 1800)
-      // Offer to solidify a hand-entered key into Alice's central store — but
-      // only when that key isn't already there (one key = one account; dedup is
-      // by key, so a known key shouldn't re-prompt).
-      const key = form.apiKey.trim()
-      const known = credentials.some((c) => c.apiKey === key)
-      setOfferSaveCred(!!key && !known)
+      onAiSaved?.({
+        agent: tab,
+        runtimeLabel: TAB_LABEL[tab],
+        model: form.model.trim() || null,
+        workspaceLabel,
+      })
+      setSaving(false)
+      onClose()
     } catch (err) {
       setError((err as Error).message)
-    } finally {
       setSaving(false)
     }
   }
@@ -379,7 +395,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
         wireShape: form.wireShape,
       })
       setCredentials(await listCredentials())
-      setOfferSaveCred(false)
+      setDismissedCredentialKey(null)
       setCredFlash(t('workspaceSettings.ai.savedReusable', { slug }))
       setTimeout(() => setCredFlash(null), 2600)
     } catch (err) {
@@ -408,9 +424,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
   }
 
   const notifyConfigChanged = () => {
-    window.dispatchEvent(new CustomEvent('openalice:workspace-agent-config-changed', {
-      detail: { wsId, agent: tab },
-    }))
+    notifyWorkspaceAgentConfigChanged({ wsId, agent: tab })
     window.dispatchEvent(new CustomEvent('openalice:credentials-changed'))
   }
 
@@ -1005,7 +1019,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
               </span>
               <div className="flex gap-2 shrink-0">
                 <button
-                  onClick={() => setOfferSaveCred(false)}
+                  onClick={() => setDismissedCredentialKey(enteredApiKey)}
                   disabled={savingCred}
                   className="px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground text-[12px] disabled:opacity-40"
                 >

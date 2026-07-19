@@ -16,7 +16,11 @@ import {
   type WorkspaceCredentialDetection,
 } from '../components/workspace/api'
 import { isLoginlessAgent, resolveAgentRuntime, type LoginlessAgentId } from '../lib/agentRuntime'
-import { WORKSPACE_DEFAULTS_CHANGED_EVENT } from '../lib/workspaceAiEvents'
+import {
+  WORKSPACE_AGENT_CONFIG_CHANGED_EVENT,
+  WORKSPACE_DEFAULTS_CHANGED_EVENT,
+  type WorkspaceAgentConfigChangedDetail,
+} from '../lib/workspaceAiEvents'
 
 const DEFAULT_CONTEXT_WINDOW: WorkspaceContextWindow = 256_000
 const AGENT_LAUNCH_PREFERENCES_CHANGED_EVENT = 'openalice:agent-launch-preferences-changed'
@@ -379,13 +383,18 @@ export function useAgentLaunchConfig({
 
   useEffect(() => {
     const onWorkspaceAgentConfigChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ wsId?: string; agent?: string }>).detail
+      const detail = (event as CustomEvent<WorkspaceAgentConfigChangedDetail>).detail
       if (!detail || (detail.wsId === workspaceId && detail.agent === effectiveAgent)) {
+        // A picker choice is intentionally stronger than the detected
+        // Workspace binding during ordinary interaction. Once Settings saves,
+        // however, the Workspace file becomes the new truth; retaining the
+        // transient choice would keep Quick Start painted with the old model.
+        setPickedCredential(null)
         setAgentConfigRevision((revision) => revision + 1)
       }
     }
-    window.addEventListener('openalice:workspace-agent-config-changed', onWorkspaceAgentConfigChanged)
-    return () => window.removeEventListener('openalice:workspace-agent-config-changed', onWorkspaceAgentConfigChanged)
+    window.addEventListener(WORKSPACE_AGENT_CONFIG_CHANGED_EVENT, onWorkspaceAgentConfigChanged)
+    return () => window.removeEventListener(WORKSPACE_AGENT_CONFIG_CHANGED_EVENT, onWorkspaceAgentConfigChanged)
   }, [effectiveAgent, workspaceId])
 
   useEffect(() => {
