@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { CliAdapter, OnDiskSession, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
+import { isModelReasoningEffort } from '../../ai-providers/model-semantics.js';
 import { readWorkspaceFile } from '../file-service.js';
 import type { HeadlessOutputEvent } from '../headless-output.js';
 import { resetOwnedJsonConfig, writeOwnedJsonConfig } from './owned-json-config.js';
@@ -18,6 +19,45 @@ const OPENCODE_OWNED_PATHS = [
   ['model'],
 ] as const;
 const DEFAULT_OUTPUT_TOKENS = 16_384;
+
+function modelEffortOptions(cred: WorkspaceAiCred): Record<string, unknown> | null {
+  const effort = cred.reasoningEffort;
+  if (!effort) return null;
+  if (cred.wireShape === 'anthropic') {
+    if (effort === 'none') return { thinking: { type: 'disabled' } };
+    // Current Claude adaptive models require the thinking mode alongside
+    // output effort. Other Anthropic-compatible providers such as GLM expose
+    // effort directly and can reject Claude-specific thinking objects.
+    const id = cred.model?.toLowerCase() ?? '';
+    return id.includes('claude') || id.includes('fable')
+      ? { thinking: { type: 'adaptive' }, effort }
+      : { effort };
+  }
+  if (cred.wireShape === 'google-generative-ai') {
+    return { thinkingConfig: { includeThoughts: effort !== 'none', thinkingLevel: effort } };
+  }
+  return { reasoningEffort: effort };
+}
+
+function readModelEffort(
+  options: Record<string, unknown>,
+  wireShape: NonNullable<WorkspaceAiCred['wireShape']>,
+): WorkspaceAiCred['reasoningEffort'] {
+  if (wireShape === 'anthropic') {
+    const thinking = options['thinking'];
+    if (thinking && typeof thinking === 'object' && (thinking as Record<string, unknown>)['type'] === 'disabled') {
+      return 'none';
+    }
+    return isModelReasoningEffort(options['effort']) ? options['effort'] : undefined;
+  }
+  if (wireShape === 'google-generative-ai') {
+    const thinking = options['thinkingConfig'];
+    if (!thinking || typeof thinking !== 'object') return undefined;
+    const level = (thinking as Record<string, unknown>)['thinkingLevel'];
+    return isModelReasoningEffort(level) ? level : undefined;
+  }
+  return isModelReasoningEffort(options['reasoningEffort']) ? options['reasoningEffort'] : undefined;
+}
 // opencode's `@ai-sdk/openai-compatible` SDK is statically bundled into the
 // binary (no runtime `npm install`) and speaks `/v1/chat/completions` — the
 // right shape for OpenAI-compatible + Chinese gateways (DeepSeek/Qwen/Kimi/
@@ -265,6 +305,8 @@ export const opencodeAdapter: CliAdapter = {
     if (cred.model) {
       const model: Record<string, unknown> = { name: cred.model };
       if (typeof cred.reasoning === 'boolean') model['reasoning'] = cred.reasoning;
+      const effortOptions = modelEffortOptions(cred);
+      if (effortOptions) model['options'] = effortOptions;
       const contextWindow = positiveNumber(cred.contextWindow);
       if (contextWindow !== null) {
         // opencode treats missing custom-model limits as 0, which disables its
@@ -337,6 +379,10 @@ export const opencodeAdapter: CliAdapter = {
       : npm === '@ai-sdk/google' ? 'google-generative-ai' as const
       : npm === '@ai-sdk/openai' ? 'openai-responses' as const
       : 'openai-chat' as const;
+    const modelOptions = modelConfig?.['options'];
+    const reasoningEffort = modelOptions && typeof modelOptions === 'object'
+      ? readModelEffort(modelOptions as Record<string, unknown>, wireShape)
+      : undefined;
     return {
       baseUrl,
       apiKey,
@@ -345,6 +391,7 @@ export const opencodeAdapter: CliAdapter = {
       ...(wireShape === 'anthropic' ? { authMode: bearerKey ? 'bearer' as const : 'x-api-key' as const } : {}),
       ...(contextWindow ? { contextWindow } : {}),
       ...(reasoning !== undefined ? { reasoning } : {}),
+      ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
     };
   },
 

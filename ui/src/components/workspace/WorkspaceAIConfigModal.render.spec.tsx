@@ -60,9 +60,9 @@ beforeEach(async () => {
     refresh: vi.fn(),
     saveWorkspaceMetadata: vi.fn(),
   })
-  mocks.listCredentials.mockResolvedValue([])
-  mocks.getPresets.mockResolvedValue({ presets: [] })
-  mocks.getAgentConfig
+  mocks.listCredentials.mockReset().mockResolvedValue([])
+  mocks.getPresets.mockReset().mockResolvedValue({ presets: [] })
+  mocks.getAgentConfig.mockReset()
     .mockResolvedValueOnce({ claude: null, codex: null, opencode: null, pi: savedPi })
     .mockResolvedValueOnce({
       claude: null,
@@ -76,6 +76,145 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 describe('WorkspaceAIConfigModal local model metadata', () => {
+  it('shows LongCat\'s real thinking default without inventing an effort selector', async () => {
+    mocks.getAgentConfig.mockReset().mockResolvedValue({
+      claude: null,
+      codex: null,
+      opencode: null,
+      pi: {
+        ...savedPi,
+        baseUrl: 'https://api.longcat.chat/openai',
+        model: 'LongCat-2.0',
+      },
+    })
+    mocks.getPresets.mockResolvedValue({
+      presets: [{
+        id: 'longcat',
+        label: 'LongCat',
+        category: 'third-party',
+        defaultName: 'LongCat',
+        description: '',
+        models: [{
+          id: 'LongCat-2.0',
+          label: 'LongCat 2.0',
+          semantics: { reasoning: { mode: 'optional', defaultEnabled: true } },
+        }],
+        schema: { type: 'object', properties: {} },
+      }],
+    })
+    render(
+      <WorkspaceAIConfigModal wsId="chat-1" initialSection="ai" initialAgent="pi" onClose={vi.fn()} />,
+    )
+
+    expect(await screen.findByText('开启（提供方默认）')).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: 'Pi 思考强度' })).toBeNull()
+    expect(screen.getByText(/不会虚构一个强度值/)).toBeTruthy()
+  })
+
+  it('prefills a registered effort and saves an explicit Workspace override without probing', async () => {
+    const openAiPi = {
+      ...savedPi,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.6',
+    }
+    mocks.getAgentConfig.mockReset()
+      .mockResolvedValueOnce({ claude: null, codex: null, opencode: null, pi: openAiPi })
+      .mockResolvedValueOnce({
+        claude: null,
+        codex: null,
+        opencode: null,
+        pi: { ...openAiPi, reasoningEffort: 'high' },
+      })
+    mocks.getPresets.mockResolvedValue({
+      presets: [{
+        id: 'codex-api',
+        label: 'OpenAI',
+        category: 'official',
+        defaultName: 'OpenAI',
+        description: '',
+        models: [{
+          id: 'gpt-5.6',
+          label: 'GPT 5.6',
+          semantics: {
+            reasoning: {
+              mode: 'optional',
+              efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+              defaultEffort: 'medium',
+            },
+          },
+        }],
+        schema: { type: 'object', properties: {} },
+      }],
+    })
+    mocks.listCredentials.mockResolvedValue([{
+      slug: 'openai-test',
+      vendor: 'openai',
+      authType: 'api-key',
+      wires: { 'openai-chat': 'https://api.openai.com/v1' },
+      apiKey: 'secret',
+    }])
+
+    render(
+      <WorkspaceAIConfigModal wsId="chat-1" initialSection="ai" initialAgent="pi" onClose={vi.fn()} />,
+    )
+
+    const effort = await screen.findByRole('combobox', { name: 'Pi 思考强度' })
+    expect((effort as HTMLSelectElement).value).toBe('medium')
+    fireEvent.change(effort, { target: { value: 'high' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(mocks.saveAgentConfig).toHaveBeenCalledWith(
+      'chat-1',
+      'pi',
+      expect.objectContaining({ reasoningEffort: 'high' }),
+    ))
+    expect(mocks.testAgentConfig).not.toHaveBeenCalled()
+  })
+
+  it('keeps runtime default selected when the provider publishes tiers but no default', async () => {
+    const glmPi = {
+      ...savedPi,
+      baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+      model: 'glm-5.2',
+    }
+    mocks.getAgentConfig.mockReset().mockResolvedValue({
+      claude: null,
+      codex: null,
+      opencode: null,
+      pi: glmPi,
+    })
+    mocks.listCredentials.mockResolvedValue([{
+      slug: 'glm-test',
+      vendor: 'glm',
+      authType: 'api-key',
+      wires: { 'openai-chat': 'https://open.bigmodel.cn/api/coding/paas/v4' },
+      apiKey: 'secret',
+    }])
+    mocks.getPresets.mockResolvedValue({
+      presets: [{
+        id: 'glm',
+        label: 'GLM',
+        category: 'third-party',
+        defaultName: 'GLM',
+        description: '',
+        models: [{
+          id: 'glm-5.2',
+          label: 'GLM 5.2',
+          semantics: { reasoning: { mode: 'adaptive', efforts: ['high', 'max'] } },
+        }],
+        schema: { type: 'object', properties: {} },
+      }],
+    })
+
+    render(
+      <WorkspaceAIConfigModal wsId="chat-1" initialSection="ai" initialAgent="pi" onClose={vi.fn()} />,
+    )
+
+    const effort = await screen.findByRole('combobox', { name: 'Pi 思考强度' })
+    expect((effort as HTMLSelectElement).value).toBe('')
+    expect(screen.getByText('运行时默认（提供方未公布）')).toBeTruthy()
+  })
+
   it('saves a context-only change directly without probing the provider again', async () => {
     render(
       <WorkspaceAIConfigModal

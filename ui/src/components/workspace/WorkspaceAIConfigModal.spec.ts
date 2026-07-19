@@ -27,6 +27,19 @@ describe('WorkspaceAIConfigModal Pi model capability mapping', () => {
     expect(formToConfig(form, 'opencode').reasoning).toBe(true)
   })
 
+  it('round-trips a Workspace reasoning effort for every runtime', () => {
+    for (const agent of ['claude', 'codex', 'opencode', 'pi'] as const) {
+      const form = configToForm({
+        baseUrl: 'https://provider.test',
+        apiKey: 'secret',
+        model: 'reasoning-model',
+        reasoningEffort: 'high',
+      }, agent)
+      expect(form.reasoningEffort).toBe('high')
+      expect(formToConfig(form, agent)).toMatchObject({ reasoningEffort: 'high' })
+    }
+  })
+
   it('omits unknown-model reasoning when the runtime should decide', () => {
     const form = configToForm(null, 'pi')
     expect(form.reasoning).toBeNull()
@@ -45,6 +58,7 @@ describe('WorkspaceAIConfigModal Pi model capability mapping', () => {
     const form = configToForm(saved, 'pi')
     form.contextWindow = 512_000
     form.reasoning = true
+    form.reasoningEffort = 'high'
 
     expect(connectionFieldsChanged(saved, form, 'pi')).toBe(false)
   })

@@ -33,6 +33,12 @@ describe('model semantics registry', () => {
       .toBe('Reasoning optional · default effort high · interleaved thinking · 1M context')
   })
 
+  it('keeps LongCat\'s documented thinking default separate from effort tiers', () => {
+    const semantics = resolveModelSemantics('longcat', 'LongCat-2.0')
+    expect(semantics?.reasoning).toEqual({ mode: 'optional', defaultEnabled: true })
+    expect(describeModelSemantics(semantics)).toBe('Reasoning optional · thinking default on')
+  })
+
   it('registers every built-in vendor injection default', () => {
     for (const [vendor, model] of Object.entries(DEFAULT_MODEL_BY_VENDOR)) {
       expect(resolveModelSemantics(vendor, model), `${vendor}/${model}`).not.toBeNull()

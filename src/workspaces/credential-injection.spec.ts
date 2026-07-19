@@ -22,6 +22,10 @@ const googleKey: Credential = {
   vendor: 'google', authType: 'api-key', apiKey: 'AQ.google',
   wires: { 'google-generative-ai': 'https://generativelanguage.googleapis.com/v1beta' },
 }
+const longcatKey: Credential = {
+  vendor: 'longcat', authType: 'api-key', apiKey: 'lc-key',
+  wires: { 'openai-chat': 'https://api.longcat.chat/openai' },
+}
 
 describe('credentialToWorkspaceAiCred', () => {
   it('picks the agent\'s wire (claude → anthropic) + apiKey; model from overrides', () => {
@@ -124,6 +128,7 @@ describe('credentialToWorkspaceAiCred', () => {
     })).toMatchObject({
       contextWindow: 1_000_000,
       reasoning: true,
+      reasoningEffort: 'minimal',
     })
 
     expect(credentialToWorkspaceAiCred(minimaxIntl, 'opencode', {
@@ -133,6 +138,23 @@ describe('credentialToWorkspaceAiCred', () => {
       contextWindow: 204_800,
       reasoning: true,
     })
+  })
+
+  it('projects a known model default effort into every compatible runtime', () => {
+    for (const agent of ['claude', 'opencode', 'pi']) {
+      expect(credentialToWorkspaceAiCred(anthropicKey, agent, {
+        model: 'claude-sonnet-4-6',
+      })).toMatchObject({ reasoningEffort: 'high' })
+    }
+    expect(credentialToWorkspaceAiCred(openaiKey, 'codex', {
+      model: 'gpt-5.6',
+    })).toMatchObject({ reasoningEffort: 'medium' })
+  })
+
+  it('does not fabricate an effort tier for a provider with only a thinking switch', () => {
+    expect(credentialToWorkspaceAiCred(longcatKey, 'pi', {
+      model: 'LongCat-2.0',
+    })).not.toHaveProperty('reasoningEffort')
   })
 
   it('injects Google through the native wire for opencode and Pi only', () => {

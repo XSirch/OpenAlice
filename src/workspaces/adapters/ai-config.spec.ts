@@ -143,6 +143,31 @@ describe('claudeAdapter AI-config', () => {
     });
   });
 
+  it('round-trips Claude Code effort and restores the prior project value on reset', async () => {
+    await mkdir(join(dir, '.claude'), { recursive: true });
+    await writeFile(join(dir, '.claude/settings.local.json'), JSON.stringify({ effortLevel: 'low' }));
+    await claudeAdapter.writeAiConfig!(dir, { model: 'claude-x', reasoningEffort: 'high' });
+    expect(JSON.parse(await read('.claude/settings.local.json'))).toMatchObject({
+      model: 'claude-x',
+      effortLevel: 'high',
+    });
+    expect(await claudeAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort: 'high' });
+    await claudeAdapter.writeAiConfig!(dir, {});
+    expect(JSON.parse(await read('.claude/settings.local.json'))).toEqual({ effortLevel: 'low' });
+  });
+
+  it('rejects effort values Claude Code cannot persist in project settings', async () => {
+    await expect(claudeAdapter.writeAiConfig!(dir, { model: 'claude-x', reasoningEffort: 'max' }))
+      .rejects.toThrow(/cannot persist project effort max/);
+  });
+
+  it('does not claim a user effortLevel when resetting config from a pre-effort release', async () => {
+    await mkdir(join(dir, '.claude'), { recursive: true });
+    await writeFile(join(dir, '.claude/settings.local.json'), JSON.stringify({ effortLevel: 'xhigh' }));
+    await claudeAdapter.writeAiConfig!(dir, {});
+    expect(JSON.parse(await read('.claude/settings.local.json'))).toEqual({ effortLevel: 'xhigh' });
+  });
+
   it('readAiConfig returns null when no file exists', async () => {
     expect(await claudeAdapter.readAiConfig!(dir)).toBeNull();
   });
@@ -250,6 +275,14 @@ describe('codexAdapter AI-config', () => {
     });
   });
 
+  it('writes and round-trips model_reasoning_effort', async () => {
+    await codexAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://oai.test/v1', model: 'gpt-x', reasoningEffort: 'medium',
+    });
+    expect(await read('.codex/config.toml')).toContain('model_reasoning_effort = "medium"\n');
+    expect(await codexAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort: 'medium' });
+  });
+
   it('readAiConfig returns null when no files exist', async () => {
     expect(await codexAdapter.readAiConfig!(dir)).toBeNull();
   });
@@ -329,6 +362,31 @@ describe('opencodeAdapter AI-config', () => {
     expect(JSON.parse(await read('opencode.json')).provider.workspace.models['reasoning-model'])
       .toMatchObject({ reasoning });
     expect(await opencodeAdapter.readAiConfig!(dir)).toMatchObject({ reasoning });
+  });
+
+  it.each([
+    ['openai-chat', 'medium', { reasoningEffort: 'medium' }],
+    ['anthropic', 'high', { effort: 'high' }],
+    ['google-generative-ai', 'low', { thinkingConfig: { includeThoughts: true, thinkingLevel: 'low' } }],
+  ] as const)('projects %s effort into model options and round-trips it', async (wireShape, reasoningEffort, options) => {
+    await opencodeAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://provider.test', model: 'reasoning-model', wireShape, reasoningEffort,
+    });
+    expect(JSON.parse(await read('opencode.json')).provider.workspace.models['reasoning-model'].options)
+      .toEqual(options);
+    expect(await opencodeAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort });
+  });
+
+  it('enables adaptive thinking when projecting effort for a current Claude model', async () => {
+    await opencodeAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-6',
+      wireShape: 'anthropic',
+      reasoningEffort: 'high',
+    });
+    expect(JSON.parse(await read('opencode.json')).provider.workspace.models['claude-sonnet-4-6'].options)
+      .toEqual({ thinking: { type: 'adaptive' }, effort: 'high' });
+    expect(await opencodeAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort: 'high' });
   });
 
   it('honors wireShape — Anthropic, Google, and OpenAI Responses use their native SDKs', async () => {
@@ -802,6 +860,26 @@ describe('piAdapter AI-config', () => {
       defaultProvider: 'user',
       thinkingLevel: 'high',
     });
+  });
+
+  it('round-trips Pi effort through project defaultThinkingLevel and restores the prior value', async () => {
+    await mkdir(join(dir, '.pi'), { recursive: true });
+    await writeFile(join(dir, '.pi/settings.json'), JSON.stringify({ defaultThinkingLevel: 'low', theme: 'dark' }));
+    await piAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://cn.test/v1', model: 'reasoning-model', reasoningEffort: 'high',
+    });
+    expect(JSON.parse(await read('.pi/settings.json'))).toMatchObject({ defaultThinkingLevel: 'high' });
+    expect(await piAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort: 'high' });
+    await piAdapter.writeAiConfig!(dir, {});
+    expect(JSON.parse(await read('.pi/settings.json'))).toEqual({ defaultThinkingLevel: 'low', theme: 'dark' });
+  });
+
+  it('maps registry effort none to Pi\'s native off level', async () => {
+    await piAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://cn.test/v1', model: 'reasoning-model', reasoningEffort: 'none',
+    });
+    expect(JSON.parse(await read('.pi/settings.json')).defaultThinkingLevel).toBe('off');
+    expect(await piAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort: 'none' });
   });
 
   it('honors wireShape — Anthropic, Google, and OpenAI Responses use native Pi APIs', async () => {

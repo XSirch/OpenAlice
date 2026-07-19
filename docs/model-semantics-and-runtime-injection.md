@@ -69,14 +69,24 @@ runtime's native format:
 
 - Pi custom model metadata and native project selection;
 - opencode model capabilities, limits, provider package, and variants;
-- Claude Code endpoint/auth/model settings while preserving its native model
-  catalog and effort defaults;
-- Codex endpoint/auth/model and wire API settings.
+- Claude Code endpoint/auth/model settings plus project-local `effortLevel`;
+- Codex endpoint/auth/model, wire API, and `model_reasoning_effort` settings.
 
-The runtime remains the owner of unspecified policy. OpenAlice does not choose
-an effort level just because a model supports effort. A user preference may be
-projected when explicit; otherwise the Agent's native default and global
-fallback remain in force.
+OpenAlice projects a registered provider default when the exact model contract
+publishes one. This makes a Workspace binding deterministic across Agent
+runtimes without inventing policy: an explicit Workspace preference wins, then
+the registered model default, and only an unknown or undocumented value falls
+back to the Agent's native behavior. A model that documents only a thinking
+switch (for example LongCat 2.0) keeps `defaultEnabled` separate and never
+receives a fabricated effort tier.
+
+The native fields are deliberately runtime-owned projections of the same
+resolved value:
+
+- Pi: project `defaultThinkingLevel` (`none` maps to Pi's native `off`);
+- opencode: model-level `options` in the provider SDK's native shape;
+- Claude Code: project `effortLevel` (only values Claude can persist);
+- Codex: project `model_reasoning_effort`.
 
 ## Registry Ownership
 
@@ -102,8 +112,11 @@ compatibility, and Workspace launch must not depend on a live catalog fetch.
 ## User Experience
 
 For a registered model, the normal flow asks for account/region/key/model and
-derives capability fields automatically. The UI may summarize the result but
+derives capability fields automatically. The UI shows the resolved effort and
+marks the registered default instead of hiding it behind “runtime default.” It
 must not require a reasoning checkbox or context-window guess for known facts.
+When the provider publishes no effort tiers, the UI shows the actual thinking
+policy (on/off/required/unknown) rather than rendering an empty effort control.
 
 For an unknown free-typed model, the runtime fallback is the default. Advanced
 overrides remain available for facts OpenAlice cannot discover. An override is
@@ -138,10 +151,10 @@ advisory and fail-open; it never becomes a fabricated ready/not-ready fact.
 
 The test-before-save gate follows the same boundary as the probe. Changes to
 the key, endpoint, wire shape, authentication mode, or model require a fresh
-probe. Context-window and unknown-model reasoning metadata are local runtime
-registration fields; changing only those fields saves directly without making
-an unrelated provider request. Both automatic creation-default saves and
-explicit Workspace saves must acknowledge completion in the UI.
+probe. Context-window, reasoning capability, and reasoning effort are local
+runtime registration fields; changing only those fields saves directly without
+making an unrelated provider request. Both automatic creation-default saves
+and explicit Workspace saves must acknowledge completion in the UI.
 
 ## Configuration Ownership and Reset
 
@@ -186,6 +199,8 @@ Tests for this subsystem must cover:
 - exact ids and declared aliases resolve, while unknown ids remain unknown;
 - omitted semantic fields do not become false during serialization;
 - registered reasoning models reach Pi and opencode without a manual toggle;
+- registered effort defaults round-trip through all four native runtimes;
+- provider-only thinking switches never become fabricated effort values;
 - non-reasoning and unknown models do not receive fabricated capabilities;
 - model changes cannot retain a capability override for the previous id;
 - adapter write/read/write round trips preserve semantic fields;

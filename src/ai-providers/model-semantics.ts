@@ -7,7 +7,8 @@
  *
  * Runtime-specific request knobs do not belong here. `reasoning` records the
  * model contract; Pi/opencode project that contract into their native custom-
- * model capability bit, while Claude Code/Codex keep their own effort policy.
+ * model capability bit, while every adapter projects a resolved effort into
+ * its own native field only when the registry or user supplies one.
  */
 
 export type ModelReasoningMode = 'none' | 'optional' | 'adaptive' | 'required'
@@ -21,6 +22,20 @@ export type ModelReasoningEffort =
   | 'xhigh'
   | 'max'
 
+export const MODEL_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]
+
+export function isModelReasoningEffort(value: unknown): value is ModelReasoningEffort {
+  return typeof value === 'string' && MODEL_REASONING_EFFORTS.includes(value as ModelReasoningEffort)
+}
+
 export interface ModelReasoningSemantics {
   /**
    * none: no reasoning capability
@@ -33,6 +48,8 @@ export interface ModelReasoningSemantics {
   efforts?: ModelReasoningEffort[]
   /** Provider default. Omitted when the provider does not publish one. */
   defaultEffort?: ModelReasoningEffort
+  /** Provider default for protocols that expose only a thinking on/off switch. */
+  defaultEnabled?: boolean
   /** Reasoning may continue across tool calls / message boundaries. */
   interleaved?: boolean
 }
@@ -217,7 +234,9 @@ export const MODEL_SEMANTICS_BY_VENDOR: Registry = {
   longcat: {
     'LongCat-2.0': {
       maxOutputTokens: 131_072,
-      reasoning: { mode: 'optional' },
+      // LongCat documents thinking as enabled by default, but does not expose
+      // provider-native effort tiers. Keep that distinct from an effort value.
+      reasoning: { mode: 'optional', defaultEnabled: true },
     },
   },
 }
@@ -253,6 +272,9 @@ export function describeModelSemantics(semantics: ModelSemantics | null | undefi
     }
     parts.push(labels[semantics.reasoning.mode])
     if (semantics.reasoning.defaultEffort) parts.push(`default effort ${semantics.reasoning.defaultEffort}`)
+    else if (semantics.reasoning.defaultEnabled !== undefined) {
+      parts.push(`thinking default ${semantics.reasoning.defaultEnabled ? 'on' : 'off'}`)
+    }
     if (semantics.reasoning.interleaved) parts.push('interleaved thinking')
   }
   if (semantics.contextWindow) parts.push(`${formatTokenCount(semantics.contextWindow)} context`)

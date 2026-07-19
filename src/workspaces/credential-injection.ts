@@ -118,6 +118,8 @@ export interface CredentialInjectionOverrides {
   contextWindow?: number | null
   /** Unknown-model override for Pi/opencode. Registered model facts win. */
   reasoning?: boolean | null
+  /** Explicit effort override. Known model defaults are filled by the registry. */
+  reasoningEffort?: WorkspaceAiCred['reasoningEffort']
   /** Anthropic wire only — which header carries the key. Defaults via baseUrl heuristic. */
   authMode?: 'x-api-key' | 'bearer'
   /** Codex only — Responses vs Chat Completions. Adapter defaults to 'chat'. */
@@ -152,6 +154,7 @@ export function credentialToWorkspaceAiCred(
     cred.contextWindow = overrides.contextWindow ?? DEFAULT_CONTEXT_WINDOW
     if (typeof overrides.reasoning === 'boolean') cred.reasoning = overrides.reasoning
   }
+  if (overrides.reasoningEffort) cred.reasoningEffort = overrides.reasoningEffort
 
   if (picked.shape === 'anthropic') {
     cred.authMode = resolveAnthropicAuthMode({
@@ -180,20 +183,24 @@ export function applyRegisteredModelSemantics(
   agentId: string,
   vendor: string | null | undefined,
 ): WorkspaceAiCred {
-  if (agentId !== 'opencode' && agentId !== 'pi') return cred
   const semantics = resolveModelSemantics(vendor, cred.model)
   if (!semantics) return cred
 
   const next: WorkspaceAiCred = { ...cred }
-  const registeredContext = positiveNumber(semantics.contextWindow)
-  const configuredContext = positiveNumber(cred.contextWindow)
-  if (registeredContext !== null) {
-    next.contextWindow = configuredContext === null
-      ? registeredContext
-      : Math.min(configuredContext, registeredContext)
+  if (agentId === 'opencode' || agentId === 'pi') {
+    const registeredContext = positiveNumber(semantics.contextWindow)
+    const configuredContext = positiveNumber(cred.contextWindow)
+    if (registeredContext !== null) {
+      next.contextWindow = configuredContext === null
+        ? registeredContext
+        : Math.min(configuredContext, registeredContext)
+    }
+    const reasoning = modelSupportsReasoning(semantics)
+    if (reasoning !== null) next.reasoning = reasoning
   }
-  const reasoning = modelSupportsReasoning(semantics)
-  if (reasoning !== null) next.reasoning = reasoning
+  if (!next.reasoningEffort && semantics.reasoning?.defaultEffort) {
+    next.reasoningEffort = semantics.reasoning.defaultEffort
+  }
   return next
 }
 
