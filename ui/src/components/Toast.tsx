@@ -95,7 +95,7 @@ function ToastNotification({ toast, onDismiss }: { toast: ToastItem; onDismiss: 
     <div
       className={`
         pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg border text-sm
-        transition-all duration-200
+        transition-[opacity,transform] duration-[var(--motion-standard)] [transition-timing-function:var(--motion-ease-out)] motion-reduce:transform-none motion-reduce:transition-none
         ${isSuccess ? 'bg-success/10 border-success/30 text-success' : 'bg-destructive/10 border-destructive/30 text-destructive'}
         ${mounted && !toast.removing ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'}
       `}

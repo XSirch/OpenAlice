@@ -120,6 +120,10 @@ Chat uses that boundary deliberately:
   `data/preferences.json`. A missing or stale pointer falls back to the most
   recently active Chat Workspace; only a user with no Chat Workspace gets a
   new stable starter workspace.
+- Chat navigation treats a Workspace as a potentially large conversation
+  container. Its sidebar disclosure is a bounded recent/running preview; the
+  Workspace page is the searchable, lifecycle-filtered catalog for the full
+  Session history. Do not render an unbounded Session tree in the shell.
 
 Do not reintroduce date-based automatic Chat Workspaces. A date is not a
 context boundary, and new daily repositories strand files, issues, git history,

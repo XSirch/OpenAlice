@@ -40,6 +40,7 @@ import { useReorderMotion } from './useReorderMotion'
 import { preferencesApi } from '../../api/preferences'
 
 const CHAT_TEMPLATE = 'chat'
+const CHAT_SIDEBAR_SESSION_LIMIT = 6
 
 function nextChatWorkspaceTag(workspaces: readonly Workspace[]): string {
   const tags = new Set(workspaces.map((workspace) => workspace.tag))
@@ -211,6 +212,10 @@ export function ChatWorkspaceSection(): ReactElement | null {
             onConfigure={() => ctx.openAgentConfig(w.id)}
             onDelete={() => setPendingDelete(w)}
             onSpawn={() => openOrFocus({ kind: 'chat-landing', params: { targetWsId: w.id } })}
+            onBrowseSessions={() => {
+              rememberChatWorkspace(w.id)
+              openOrFocus({ kind: 'workspace', params: { wsId: w.id, source: 'chat' } })
+            }}
           />
         ))}
       </ul>
@@ -334,6 +339,8 @@ interface ChatWorkspaceRowProps {
   onDelete: () => void
   /** Spawn a fresh agent session in THIS workspace (and open it). */
   onSpawn: () => void
+  /** Open the scalable Workspace-level Session directory. */
+  onBrowseSessions: () => void
 }
 
 function ChatWorkspaceRow(props: ChatWorkspaceRowProps): ReactElement {
@@ -348,8 +355,9 @@ function ChatWorkspaceRow(props: ChatWorkspaceRowProps): ReactElement {
     () => orderSessionsForSidebar(w.sessions),
     [w.sessions],
   )
+  const visibleSessions = orderedSessions.slice(0, CHAT_SIDEBAR_SESSION_LIMIT)
   const sessionListRef = useReorderMotion<HTMLDivElement>(
-    orderedSessions.map((session) => session.id),
+    visibleSessions.map((session) => session.id),
   )
 
   const statusClass = hasRunning
@@ -450,7 +458,7 @@ function ChatWorkspaceRow(props: ChatWorkspaceRowProps): ReactElement {
       </div>
       {expanded && orderedSessions.length > 0 && (
         <div ref={sessionListRef} className="oa-disclosure-enter ml-[18px] border-l border-border/50">
-          {orderedSessions.map((s) => (
+          {visibleSessions.map((s) => (
             <SessionRow
               key={s.id}
               reorderId={s.id}
@@ -462,6 +470,15 @@ function ChatWorkspaceRow(props: ChatWorkspaceRowProps): ReactElement {
               onDelete={() => props.onDeleteSession(s.id)}
             />
           ))}
+          {orderedSessions.length > visibleSessions.length && (
+            <button
+              type="button"
+              onClick={props.onBrowseSessions}
+              className="oa-pressable ml-2 my-1 flex min-h-7 items-center rounded-md px-2 text-[10.5px] font-medium text-primary hover:bg-primary/10"
+            >
+              {t('chat.viewAllSessions', { count: orderedSessions.length })}
+            </button>
+          )}
         </div>
       )}
     </li>

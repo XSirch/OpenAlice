@@ -216,12 +216,15 @@ describe('WorkspaceAIConfigModal local model metadata', () => {
   })
 
   it('saves a context-only change directly without probing the provider again', async () => {
+    const onClose = vi.fn()
+    const onAiSaved = vi.fn()
     render(
       <WorkspaceAIConfigModal
         wsId="chat-1"
         initialSection="ai"
         initialAgent="pi"
-        onClose={vi.fn()}
+        onClose={onClose}
+        onAiSaved={onAiSaved}
       />,
     )
 
@@ -244,7 +247,14 @@ describe('WorkspaceAIConfigModal local model metadata', () => {
       }),
     ))
     expect(mocks.testAgentConfig).not.toHaveBeenCalled()
-    expect(await screen.findByText('已保存。请暂停并恢复已打开的会话以重新载入。')).toBeTruthy()
+    expect(onAiSaved).toHaveBeenCalledWith({
+      agent: 'pi',
+      runtimeLabel: 'Pi',
+      model: 'unknown-model',
+      workspaceLabel: 'chat-1',
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('已保存。请暂停并恢复已打开的会话以重新载入。')).toBeNull()
   })
 
   it('notifies launch surfaces after resetting the Workspace-local binding', async () => {
