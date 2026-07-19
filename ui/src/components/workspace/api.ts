@@ -4,7 +4,7 @@
  * server from the SessionPool).
  */
 
-import type { WireShape } from '../../api'
+import type { ModelReasoningEffort, WireShape } from '../../api'
 
 export interface Workspace {
   readonly id: string;
@@ -1139,6 +1139,8 @@ export interface AgentConfig {
   readonly contextWindow?: number | null;
   /** Pi/opencode custom-model reasoning capability when explicitly registered. */
   readonly reasoning?: boolean | null;
+  /** Workspace-local reasoning effort projected into the runtime's native field. */
+  readonly reasoningEffort?: ModelReasoningEffort | null;
   /** Wire protocol the endpoint speaks — drives how the adapter is configured. */
   readonly wireShape?: WireShape | null;
   /** Codex only — wire format for the upstream API. */
@@ -1228,6 +1230,7 @@ export interface WorkspaceCredentialDetection {
   readonly contextWindow: number | null;
   readonly wireShape: WireShape | null;
   readonly reasoning?: boolean | null;
+  readonly reasoningEffort?: ModelReasoningEffort | null;
   readonly interactiveSetupStatus?:
     | 'ready'
     | 'runtime-onboarding-required'
@@ -1249,6 +1252,7 @@ export async function detectWorkspaceCredential(
     contextWindow: null,
     wireShape: null,
     reasoning: null,
+    reasoningEffort: null,
   };
   return (await res.json()) as WorkspaceCredentialDetection;
 }

@@ -88,7 +88,7 @@ describe('saved credential model selection', () => {
   it('resolves and describes exact rich model semantics', () => {
     const semantics = presetModel(modelPreset, 'stable-default')?.semantics
     expect(describeModelSemantics(semantics))
-      .toBe('Adaptive reasoning · runtime default: high · interleaved thinking · 1M context')
+      .toBe('Adaptive reasoning · default effort: high · interleaved thinking · 1M context')
     expect(presetModel(modelPreset, 'free-typed-model')).toBeNull()
   })
 })

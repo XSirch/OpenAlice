@@ -261,6 +261,7 @@ describe('GET /credentials — Quick Chat launch metadata', () => {
         model: 'gemini-3.5-flash',
         contextWindow: 512_000,
         wireShape: 'google-generative-ai',
+        reasoningEffort: 'medium',
       },
     });
 
@@ -273,6 +274,7 @@ describe('GET /credentials — Quick Chat launch metadata', () => {
       model: 'gemini-3.5-flash',
       contextWindow: 512_000,
       wireShape: 'google-generative-ai',
+      reasoningEffort: 'medium',
     });
   });
 
@@ -411,6 +413,7 @@ describe('GET /credentials — Quick Chat launch metadata', () => {
     expect(opencode.writeAiConfig).toHaveBeenCalledWith('/manager', {
       ...config,
       reasoning: true,
+      reasoningEffort: 'medium',
     });
   });
 });

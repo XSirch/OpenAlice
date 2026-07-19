@@ -18,6 +18,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 
 import type { WorkspaceAiCred } from '../cli-adapter.js';
+import { isModelReasoningEffort } from '../../ai-providers/model-semantics.js';
 
 export const PI_PROJECT_SETTINGS_PATH = '.pi/settings.json';
 export const PI_BINDING_STATE_PATH = '.pi/openalice-provider.json';
@@ -45,11 +46,14 @@ interface PiBindingState {
     readonly defaultProvider: SavedSetting;
     readonly defaultModel: SavedSetting;
     readonly shellPath: SavedSetting;
+    /** Optional for backward compatibility with version-1 state written before effort ownership. */
+    readonly defaultThinkingLevel?: SavedSetting;
   };
   readonly injected: {
     readonly defaultProvider: SavedSetting;
     readonly defaultModel: SavedSetting;
     readonly shellPath: SavedSetting;
+    readonly defaultThinkingLevel?: SavedSetting;
   };
 }
 
@@ -82,6 +86,15 @@ function sameSavedSetting(left: SavedSetting, right: SavedSetting): boolean {
 
 function positiveNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function piThinkingLevel(effort: NonNullable<WorkspaceAiCred['reasoningEffort']>): string {
+  return effort === 'none' ? 'off' : effort;
+}
+
+function reasoningEffortFromPi(value: unknown): WorkspaceAiCred['reasoningEffort'] {
+  if (value === 'off') return 'none';
+  return isModelReasoningEffort(value) ? value : undefined;
 }
 
 export function resolvePiAgentDir(env: EnvLike = process.env): string {
@@ -264,6 +277,9 @@ function injectedSettings(
     defaultProvider: { present: true, value: providerId },
     defaultModel: cred.model ? { present: true, value: cred.model } : { present: false },
     shellPath: shellPath ? { present: true, value: shellPath } : { present: false },
+    defaultThinkingLevel: cred.reasoningEffort
+      ? { present: true, value: piThinkingLevel(cred.reasoningEffort) }
+      : { present: false },
   };
 }
 
@@ -275,10 +291,12 @@ async function writeProjectBinding(
 ): Promise<void> {
   const settings = await readProjectSettings(cwd);
   const existingState = await readBindingState(cwd);
-  const previous = existingState?.previous ?? {
-    defaultProvider: snapshotSetting(settings, 'defaultProvider'),
-    defaultModel: snapshotSetting(settings, 'defaultModel'),
-    shellPath: snapshotSetting(settings, 'shellPath'),
+  const previous = {
+    defaultProvider: existingState?.previous.defaultProvider ?? snapshotSetting(settings, 'defaultProvider'),
+    defaultModel: existingState?.previous.defaultModel ?? snapshotSetting(settings, 'defaultModel'),
+    shellPath: existingState?.previous.shellPath ?? snapshotSetting(settings, 'shellPath'),
+    defaultThinkingLevel: existingState?.previous.defaultThinkingLevel
+      ?? snapshotSetting(settings, 'defaultThinkingLevel'),
   };
   const injected = injectedSettings(providerId, cred, shellPath);
   applySavedSetting(settings, 'defaultProvider', injected.defaultProvider);
@@ -287,6 +305,11 @@ async function writeProjectBinding(
     applySavedSetting(settings, 'shellPath', injected.shellPath);
   } else if (existingState?.injected.shellPath.present) {
     applySavedSetting(settings, 'shellPath', previous.shellPath);
+  }
+  if (cred.reasoningEffort) {
+    applySavedSetting(settings, 'defaultThinkingLevel', injected.defaultThinkingLevel!);
+  } else if (existingState?.injected.defaultThinkingLevel?.present) {
+    applySavedSetting(settings, 'defaultThinkingLevel', previous.defaultThinkingLevel);
   }
   await writeJsonAtomic(join(cwd, PI_PROJECT_SETTINGS_PATH), settings);
   await writeJsonAtomic(join(cwd, PI_BINDING_STATE_PATH), {
@@ -332,6 +355,19 @@ async function resetProjectBinding(cwd: string, agentDir: string): Promise<void>
       sameSavedSetting(snapshotSetting(settings, 'shellPath'), state.injected.shellPath)
     ) {
       applySavedSetting(settings, 'shellPath', state.previous.shellPath);
+    }
+    if (
+      state.injected.defaultThinkingLevel?.present &&
+      sameSavedSetting(
+        snapshotSetting(settings, 'defaultThinkingLevel'),
+        state.injected.defaultThinkingLevel,
+      )
+    ) {
+      applySavedSetting(
+        settings,
+        'defaultThinkingLevel',
+        state.previous.defaultThinkingLevel ?? { present: false },
+      );
     }
   } else if (settings['defaultProvider'] === providerId) {
     delete settings['defaultProvider'];
@@ -408,6 +444,7 @@ export async function readPiWorkspaceConfig(
   const apiKey = typeof provider['apiKey'] === 'string' ? provider['apiKey'] : bearerKey;
   const contextWindow = positiveNumber(modelEntry?.['contextWindow'] as number | undefined);
   const reasoning = typeof modelEntry?.['reasoning'] === 'boolean' ? modelEntry['reasoning'] : undefined;
+  const reasoningEffort = reasoningEffortFromPi(settings['defaultThinkingLevel']);
   const wireShape = wireShapeFromApi(provider['api']);
   if (baseUrl === null && apiKey === null && model === null) return null;
   return {
@@ -418,6 +455,7 @@ export async function readPiWorkspaceConfig(
     ...(wireShape === 'anthropic' ? { authMode: bearerKey ? 'bearer' as const : 'x-api-key' as const } : {}),
     ...(contextWindow !== null ? { contextWindow } : {}),
     ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
   };
 }
 
@@ -518,7 +556,7 @@ export async function migrateLegacyPiAgentDir(cwd: string, env: EnvLike = proces
     join(legacyDir, PI_GLOBAL_SETTINGS_FILENAME),
     join(agentDir, PI_GLOBAL_SETTINGS_FILENAME),
     'Pi settings.json',
-    new Set(['defaultProvider', 'defaultModel', 'shellPath']),
+    new Set(['defaultProvider', 'defaultModel', 'shellPath', 'defaultThinkingLevel']),
   );
   await mergeJsonMissing(
     join(legacyDir, PI_GLOBAL_AUTH_FILENAME),

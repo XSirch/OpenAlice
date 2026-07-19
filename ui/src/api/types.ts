@@ -95,6 +95,7 @@ export interface ModelSemantics {
     mode: ModelReasoningMode
     efforts?: ModelReasoningEffort[]
     defaultEffort?: ModelReasoningEffort
+    defaultEnabled?: boolean
     interleaved?: boolean
   }
 }

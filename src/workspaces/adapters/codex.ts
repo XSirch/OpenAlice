@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import type { CliAdapter, OnDiskSession, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
+import { isModelReasoningEffort } from '../../ai-providers/model-semantics.js';
 import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
 import type { HeadlessOutputEvent } from '../headless-output.js';
 
@@ -282,6 +283,7 @@ export const codexAdapter: CliAdapter = {
     // don't repeat it here.
     let toml = '';
     if (cred.model) toml += `model = ${tomlString(cred.model)}\n`;
+    if (cred.reasoningEffort) toml += `model_reasoning_effort = ${tomlString(cred.reasoningEffort)}\n`;
     if (cred.baseUrl) toml += `model_provider = "${CODEX_PROVIDER_NAME}"\n`;
     if (cred.baseUrl) {
       toml += '\n';
@@ -314,6 +316,7 @@ export const codexAdapter: CliAdapter = {
     let baseUrl: string | null = null;
     let wireApi: 'chat' | 'responses' | null = null;
     let model: string | null = null;
+    let reasoningEffort: WorkspaceAiCred['reasoningEffort'] = null;
     if (tomlRaw) {
       // Shape-specific extraction: we always write the provider section as
       // `[model_providers.workspace]` with `base_url`, `wire_api`, plus
@@ -329,6 +332,8 @@ export const codexAdapter: CliAdapter = {
       }
       const modelMatch = tomlRaw.match(/^model\s*=\s*"([^"]*)"\s*$/m);
       if (modelMatch) model = modelMatch[1] ?? null;
+      const effortMatch = tomlRaw.match(/^model_reasoning_effort\s*=\s*"([^"]*)"\s*$/m);
+      if (isModelReasoningEffort(effortMatch?.[1])) reasoningEffort = effortMatch[1];
     }
 
     let apiKey: string | null = null;
@@ -340,9 +345,16 @@ export const codexAdapter: CliAdapter = {
       } catch { /* ignore parse error, leave apiKey null */ }
     }
 
-    if (baseUrl === null && apiKey === null && model === null && wireApi === null) return null;
+    if (baseUrl === null && apiKey === null && model === null && wireApi === null && reasoningEffort === null) return null;
     // Codex is Responses-only, so the unified wireShape is always openai-responses.
-    return { baseUrl, apiKey, model, wireApi, wireShape: 'openai-responses' };
+    return {
+      baseUrl,
+      apiKey,
+      model,
+      wireApi,
+      wireShape: 'openai-responses',
+      ...(reasoningEffort ? { reasoningEffort } : {}),
+    };
   },
 
   /**

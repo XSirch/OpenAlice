@@ -9,6 +9,7 @@ import type {
   WorkspaceAiCred,
 } from '../cli-adapter.js';
 import { readWorkspaceFile } from '../file-service.js';
+import type { ModelReasoningEffort } from '../../ai-providers/model-semantics.js';
 import type { HeadlessOutputEvent } from '../headless-output.js';
 import { resetOwnedJsonConfig, writeOwnedJsonConfig } from './owned-json-config.js';
 
@@ -22,6 +23,14 @@ const CLAUDE_OWNED_PATHS = [
   ['env', 'ANTHROPIC_AUTH_TOKEN'],
   ['model'],
 ] as const;
+
+const CLAUDE_PROJECT_EFFORTS = new Set<ModelReasoningEffort>(['low', 'medium', 'high', 'xhigh']);
+
+function claudeProjectEffort(value: unknown): ModelReasoningEffort | null {
+  return typeof value === 'string' && CLAUDE_PROJECT_EFFORTS.has(value as ModelReasoningEffort)
+    ? value as ModelReasoningEffort
+    : null;
+}
 
 /**
  * Claude Code parks project-scoped `.mcp.json` servers at "⏸ Pending
@@ -297,10 +306,15 @@ export const claudeAdapter: CliAdapter = {
       });
       return;
     }
+    if (cred.reasoningEffort && !claudeProjectEffort(cred.reasoningEffort)) {
+      throw new Error(`Claude Code cannot persist project effort ${cred.reasoningEffort}`);
+    }
     // Write the key into exactly one env var. Bearer-mode gateways read
-    // ANTHROPIC_AUTH_TOKEN; x-api-key mode reads ANTHROPIC_API_KEY. These four
-    // paths are the complete OpenAlice ownership boundary — permissions and
-    // every unknown project setting remain untouched and reset reversibly.
+    // ANTHROPIC_AUTH_TOKEN; x-api-key mode reads ANTHROPIC_API_KEY. Those
+    // provider paths plus effortLevel are the OpenAlice ownership boundary —
+    // permissions and every unknown project setting remain untouched and reset
+    // reversibly. effortLevel is sidecar-owned only; it is intentionally absent
+    // from the legacy fallback because older OpenAlice versions never wrote it.
     await writeOwnedJsonConfig({
       cwd,
       configPath: CLAUDE_SETTINGS_PATH,
@@ -319,6 +333,7 @@ export const claudeAdapter: CliAdapter = {
           value: cred.apiKey,
         },
         { path: ['model'], present: !!cred.model, value: cred.model },
+        { path: ['effortLevel'], present: !!cred.reasoningEffort, value: cred.reasoningEffort },
       ],
     });
   },
@@ -342,9 +357,17 @@ export const claudeAdapter: CliAdapter = {
     const authMode: 'x-api-key' | 'bearer' = authToken !== null ? 'bearer' : 'x-api-key';
     const apiKey = authToken ?? xApiKey;
     const model = typeof parsed['model'] === 'string' ? (parsed['model'] as string) : null;
-    if (baseUrl === null && apiKey === null && model === null) return null;
+    const reasoningEffort = claudeProjectEffort(parsed['effortLevel']);
+    if (baseUrl === null && apiKey === null && model === null && reasoningEffort === null) return null;
     // Claude Code is anthropic-only.
-    return { baseUrl, apiKey, model, authMode, wireShape: 'anthropic' };
+    return {
+      baseUrl,
+      apiKey,
+      model,
+      authMode,
+      wireShape: 'anthropic',
+      ...(reasoningEffort ? { reasoningEffort } : {}),
+    };
   },
 
   transcriptDir(cwd: string): string {

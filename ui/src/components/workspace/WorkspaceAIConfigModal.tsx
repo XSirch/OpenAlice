@@ -23,7 +23,7 @@ import {
   type AgentId,
   type SavedCredential,
 } from './api'
-import { api, type Preset, type WireShape } from '../../api'
+import { api, type ModelReasoningEffort, type Preset, type WireShape } from '../../api'
 import {
   AGENT_WIRE_PREFERENCE,
   WIRE_SHAPE_GUIDANCE,
@@ -82,6 +82,8 @@ export interface FormState {
   contextWindow: number
   /** null = let registry/runtime decide; boolean = unknown-model override. */
   reasoning: boolean | null
+  /** null = fill from the registered model default when one is known. */
+  reasoningEffort: ModelReasoningEffort | null
   /** The wire protocol — drives the test + how the adapter is configured. */
   wireShape: WireShape
   wireApi: 'chat' | 'responses'
@@ -106,6 +108,7 @@ const EMPTY_FORM: FormState = {
   model: '',
   contextWindow: DEFAULT_CONTEXT_WINDOW,
   reasoning: null,
+  reasoningEffort: null,
   wireShape: 'anthropic',
   wireApi: 'responses',
   authMode: 'x-api-key',
@@ -124,6 +127,7 @@ export function configToForm(cfg: AgentConfig | null, tab: Tab): FormState {
     model: cfg.model ?? '',
     contextWindow: normalizeContextWindow(cfg.contextWindow),
     reasoning: typeof cfg.reasoning === 'boolean' ? cfg.reasoning : null,
+    reasoningEffort: cfg.reasoningEffort ?? null,
     wireShape: cfg.wireShape ?? DEFAULT_WIRE_BY_TAB[tab],
     wireApi: 'responses',
     authMode: cfg.authMode === 'bearer' ? 'bearer' : 'x-api-key',
@@ -136,6 +140,7 @@ export function formToConfig(form: FormState, agent: AgentId): AgentConfig {
     apiKey: form.apiKey.trim() || null,
     model: form.model.trim() || null,
     wireShape: form.wireShape,
+    ...(form.reasoningEffort ? { reasoningEffort: form.reasoningEffort } : {}),
   }
   if (agent === 'opencode' || agent === 'pi') {
     return {
@@ -275,6 +280,14 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
     if (!vendor) return null
     return presetModel(vendorPreset(vendor, presets), form.model)?.semantics ?? null
   }, [form.baseUrl, form.model, formCredentialVendor, tab, presets])
+  const supportedReasoningEfforts = useMemo(() => {
+    const efforts = selectedModelSemantics?.reasoning?.efforts ?? []
+    // Claude Code project settings support these persisted values. `max` is a
+    // session-only CLI choice, so do not offer a value the injector cannot own.
+    return tab === 'claude'
+      ? efforts.filter((effort) => effort === 'low' || effort === 'medium' || effort === 'high' || effort === 'xhigh')
+      : efforts
+  }, [selectedModelSemantics, tab])
   const semanticsSummary = describeModelSemantics(selectedModelSemantics)
   const gate = { claude: claudeGate, codex: codexGate, opencode: opencodeGate, pi: piGate }[tab]
   const key = testKey(form)
@@ -293,6 +306,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
       savedForm.wireShape !== form.wireShape ||
       ((tab === 'opencode' || tab === 'pi') && savedForm.contextWindow !== form.contextWindow) ||
       ((tab === 'opencode' || tab === 'pi') && savedForm.reasoning !== form.reasoning) ||
+      savedForm.reasoningEffort !== form.reasoningEffort ||
       (form.wireShape === 'anthropic' && savedForm.authMode !== form.authMode)
     )
   }, [bundle, form, tab])
@@ -324,6 +338,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
       apiKey: cred.apiKey ?? '',
       model: defaultModel,
       reasoning: null,
+      reasoningEffort: null,
       wireShape: picked.shape,
       authMode: anthropicAuthModeForBaseUrl(picked.baseUrl),
     })
@@ -756,7 +771,12 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
             <label className="block text-xs font-medium text-muted-foreground mb-1">{t('workspaceSettings.ai.baseUrl')}</label>
             <input
               value={form.baseUrl}
-              onChange={(e) => setForm({ ...form, baseUrl: e.target.value, reasoning: null })}
+              onChange={(e) => setForm({
+                ...form,
+                baseUrl: e.target.value,
+                reasoning: null,
+                reasoningEffort: null,
+              })}
               placeholder={
                 form.wireShape === 'google-generative-ai'
                   ? 'https://generativelanguage.googleapis.com/v1beta'
@@ -819,7 +839,12 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
             <ModelCombobox
               value={form.model}
               suggestions={modelSuggestions}
-              onChange={(v) => setForm({ ...form, model: v, reasoning: v === form.model ? form.reasoning : null })}
+              onChange={(v) => setForm({
+                ...form,
+                model: v,
+                reasoning: v === form.model ? form.reasoning : null,
+                reasoningEffort: v === form.model ? form.reasoningEffort : null,
+              })}
               placeholder={tab === 'claude' ? 'claude-opus-4-8' : tab === 'opencode' || tab === 'pi' ? 'deepseek-chat' : 'gpt-5.5'}
             />
             {modelSuggestions.length > 0 && (
@@ -829,9 +854,70 @@ export function WorkspaceAIConfigModal({ wsId, onClose, initialAgent = 'claude',
             {semanticsSummary && (
               <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                 <strong className="text-foreground">{t('workspaceSettings.ai.registeredAutomatically')}</strong>{' '}
-                {semanticsSummary}. {t('workspaceSettings.ai.nativeEffort', { runtime: TAB_LABEL[tab] })}
+                {semanticsSummary}.
               </div>
             )}
+
+            {supportedReasoningEfforts.length > 0 && (
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  {t('workspaceSettings.ai.reasoningEffort')}
+                </label>
+                <select
+                  aria-label={t('workspaceSettings.ai.reasoningEffortLabel', { agent: TAB_LABEL[tab] })}
+                  value={form.reasoningEffort ?? selectedModelSemantics?.reasoning?.defaultEffort ?? ''}
+                  onChange={(event) => setForm({
+                    ...form,
+                    reasoningEffort: event.target.value
+                      ? event.target.value as ModelReasoningEffort
+                      : null,
+                  })}
+                  className={inputClass}
+                >
+                  {!selectedModelSemantics?.reasoning?.defaultEffort && (
+                    <option value="">{t('workspaceSettings.ai.runtimeDefaultOption')}</option>
+                  )}
+                  {supportedReasoningEfforts.map((effort) => (
+                    <option key={effort} value={effort}>
+                      {effort}{effort === selectedModelSemantics?.reasoning?.defaultEffort
+                        ? ` — ${t('workspaceSettings.ai.registeredDefault')}`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10.5px] leading-snug text-muted-foreground/80 mt-1">
+                  {selectedModelSemantics?.reasoning?.defaultEffort
+                    ? t('workspaceSettings.ai.reasoningEffortHelp', {
+                      runtime: TAB_LABEL[tab],
+                      defaultEffort: selectedModelSemantics.reasoning.defaultEffort,
+                      effort: form.reasoningEffort ?? selectedModelSemantics.reasoning.defaultEffort,
+                    })
+                    : t('workspaceSettings.ai.reasoningEffortUnknownHelp', { runtime: TAB_LABEL[tab] })}
+                </p>
+              </div>
+            )}
+
+            {selectedModelSemantics?.reasoning &&
+              selectedModelSemantics.reasoning.mode !== 'none' &&
+              supportedReasoningEfforts.length === 0 && (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    {t('workspaceSettings.ai.thinkingPolicy')}
+                  </label>
+                  <div className={`${inputClass} cursor-default`}>
+                    {selectedModelSemantics.reasoning.mode === 'required'
+                      ? t('workspaceSettings.ai.thinkingAlwaysOn')
+                      : selectedModelSemantics.reasoning.defaultEnabled === true
+                        ? t('workspaceSettings.ai.thinkingEnabled')
+                        : selectedModelSemantics.reasoning.defaultEnabled === false
+                          ? t('workspaceSettings.ai.thinkingDisabled')
+                          : t('workspaceSettings.ai.thinkingUnknown')}
+                  </div>
+                  <p className="text-[10.5px] leading-snug text-muted-foreground/80 mt-1">
+                    {t('workspaceSettings.ai.thinkingPolicyHelp')}
+                  </p>
+                </div>
+              )}
 
             {(tab === 'opencode' || tab === 'pi') && !selectedModelSemantics?.reasoning && (
               <details className="mt-2 rounded-md border border-border bg-secondary/40 px-3 py-2">

@@ -595,6 +595,7 @@ export function createWorkspaceRoutes(
     contextWindow: number | null;
     wireShape: WireShape | null;
     reasoning: boolean | null;
+    reasoningEffort: WorkspaceAiCred['reasoningEffort'];
   } | null> => {
     const adapter = svc.adapters.get(agentId);
     if (!adapter?.readAiConfig) return null;
@@ -607,6 +608,7 @@ export function createWorkspaceRoutes(
       contextWindow: cfg.contextWindow ?? null,
       wireShape: cfg.wireShape ?? null,
       reasoning: cfg.reasoning ?? null,
+      reasoningEffort: cfg.reasoningEffort ?? null,
     };
   };
 
@@ -2026,6 +2028,7 @@ export function createWorkspaceRoutes(
         contextWindow: detected?.contextWindow ?? null,
         wireShape: detected?.wireShape ?? null,
         ...(typeof detected?.reasoning === 'boolean' ? { reasoning: detected.reasoning } : {}),
+        ...(detected?.reasoningEffort ? { reasoningEffort: detected.reasoningEffort } : {}),
         ...(interactiveSetupStatus !== null ? { interactiveSetupStatus } : {}),
       });
     } catch (err) {

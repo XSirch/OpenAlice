@@ -12,6 +12,7 @@
  */
 
 import type { WireShape } from '../ai-providers/preset-catalog.js';
+import type { ModelReasoningEffort } from '../ai-providers/model-semantics.js';
 import type { HeadlessOutputEvent } from './headless-output.js';
 
 export interface OnDiskSession {
@@ -114,6 +115,8 @@ export interface WorkspaceAiCred {
   contextWindow?: number | null;
   /** Pi/opencode custom-model capability; enables native thinking controls. */
   reasoning?: boolean | null;
+  /** Workspace-local reasoning effort projected into each runtime's native field. */
+  reasoningEffort?: ModelReasoningEffort | null;
   /** Codex only — legacy/explicit wire_api; superseded by wireShape when set. */
   wireApi?: 'chat' | 'responses' | null;
   /** Header mode for an Anthropic wire, regardless of the consuming runtime. */

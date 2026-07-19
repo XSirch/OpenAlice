@@ -141,7 +141,10 @@ export function describeModelSemantics(semantics: ModelSemantics | null | undefi
       adaptive: 'Adaptive reasoning',
       required: 'Reasoning always on',
     }[semantics.reasoning.mode])
-    if (semantics.reasoning.defaultEffort) parts.push(`runtime default: ${semantics.reasoning.defaultEffort}`)
+    if (semantics.reasoning.defaultEffort) parts.push(`default effort: ${semantics.reasoning.defaultEffort}`)
+    else if (semantics.reasoning.defaultEnabled !== undefined) {
+      parts.push(`thinking default: ${semantics.reasoning.defaultEnabled ? 'on' : 'off'}`)
+    }
     if (semantics.reasoning.interleaved) parts.push('interleaved thinking')
   }
   if (semantics.contextWindow) parts.push(`${formatTokenCount(semantics.contextWindow)} context`)
