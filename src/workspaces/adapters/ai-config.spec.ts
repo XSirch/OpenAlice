@@ -308,6 +308,83 @@ describe('codexAdapter AI-config', () => {
 describe('opencodeAdapter AI-config', () => {
   const mcpEnv = { OPENALICE_MCP_URL: 'http://127.0.0.1:47332/mcp', AQ_WS_ID: 'ws-abc' };
 
+  it('prepares OpenCode to derive its theme from the terminal palette', async () => {
+    await mkdir(join(dir, '.git/info'), { recursive: true });
+    await writeFile(join(dir, '.git/info/exclude'), 'existing.local\n');
+
+    await prepareAgentRuntimeWorkspace(opencodeAdapter, {
+      wsId: 'ws-abc',
+      cwd: dir,
+      launcherRepoRoot: '/repo',
+    });
+    await prepareAgentRuntimeWorkspace(opencodeAdapter, {
+      wsId: 'ws-abc',
+      cwd: dir,
+      launcherRepoRoot: '/repo',
+    });
+
+    expect(JSON.parse(await read('tui.json'))).toEqual({
+      $schema: 'https://opencode.ai/tui.json',
+      theme: 'system',
+    });
+    expect((await read('.git/info/exclude')).split(/\r?\n/).filter((line) => line === 'tui.json'))
+      .toEqual(['tui.json']);
+  });
+
+  it('preserves an explicit OpenCode project theme and sibling TUI settings', async () => {
+    await writeFile(join(dir, 'tui.json'), JSON.stringify({ theme: 'catppuccin', scroll_speed: 2 }));
+
+    await prepareAgentRuntimeWorkspace(opencodeAdapter, {
+      wsId: 'ws-abc',
+      cwd: dir,
+      launcherRepoRoot: '/repo',
+    });
+
+    expect(JSON.parse(await read('tui.json'))).toEqual({ theme: 'catppuccin', scroll_speed: 2 });
+  });
+
+  it('adds the system theme without replacing sibling TUI settings', async () => {
+    await writeFile(join(dir, 'tui.json'), JSON.stringify({ scroll_speed: 2 }));
+
+    await prepareAgentRuntimeWorkspace(opencodeAdapter, {
+      wsId: 'ws-abc',
+      cwd: dir,
+      launcherRepoRoot: '/repo',
+    });
+
+    expect(JSON.parse(await read('tui.json'))).toEqual({
+      scroll_speed: 2,
+      $schema: 'https://opencode.ai/tui.json',
+      theme: 'system',
+    });
+  });
+
+  it('leaves a legacy OpenCode theme in provider config for native migration', async () => {
+    await writeFile(join(dir, 'opencode.json'), JSON.stringify({ theme: 'system', share: 'disabled' }));
+
+    await prepareAgentRuntimeWorkspace(opencodeAdapter, {
+      wsId: 'ws-abc',
+      cwd: dir,
+      launcherRepoRoot: '/repo',
+    });
+
+    expect(existsSync(join(dir, 'tui.json'))).toBe(false);
+    expect(JSON.parse(await read('opencode.json'))).toEqual({ theme: 'system', share: 'disabled' });
+  });
+
+  it('leaves JSONC TUI configuration to OpenCode', async () => {
+    await writeFile(join(dir, 'tui.jsonc'), '{ // user-owned\n  "scroll_speed": 2\n}\n');
+
+    await prepareAgentRuntimeWorkspace(opencodeAdapter, {
+      wsId: 'ws-abc',
+      cwd: dir,
+      launcherRepoRoot: '/repo',
+    });
+
+    expect(existsSync(join(dir, 'tui.json'))).toBe(false);
+    expect(await read('tui.jsonc')).toBe('{ // user-owned\n  "scroll_speed": 2\n}\n');
+  });
+
   it('keeps OpenAlice MCP out of opencode env even when an MCP URL is present', () => {
     const env = opencodeAdapter.composeEnv!({ cwd: dir, env: mcpEnv });
     expect(env['OPENCODE_DISABLE_MODELS_FETCH']).toBe('1');

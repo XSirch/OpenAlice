@@ -134,6 +134,7 @@ describe('chat workspace create: bootstrap → inject → commit', () => {
     const excludes = await readFile(join(dir, '.git/info/exclude'), 'utf8');
     expect(excludes).toContain('.claude/openalice-provider.json\n');
     expect(excludes).toContain('.opencode/openalice-provider.json\n');
+    expect(excludes).toContain('tui.json\n');
   });
 });
 

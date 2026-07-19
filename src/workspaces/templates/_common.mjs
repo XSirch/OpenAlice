@@ -63,6 +63,7 @@ const DEFAULT_EXCLUDES = [
   '.codex/env.json',
   '.codex/config.toml',
   'opencode.json',
+  'tui.json',
   '.opencode/openalice-provider.json',
   '.pi/settings.json',
   '.pi/openalice-provider.json',

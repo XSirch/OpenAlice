@@ -333,6 +333,22 @@ Pi terminal appearance follows the same boundary used by Orca:
   OSC/DSR queries, and mode 2031. Pi remains responsible for its own TUI theme;
   OpenAlice does not generate or inject palette-specific Pi themes.
 
+Codex and OpenCode use that terminal boundary differently:
+
+- Codex natively probes OSC 10/11 at startup and derives its contrast-sensitive
+  TUI colors from the reported foreground and background. It needs no project
+  theme injection; OpenAlice's shared visible/headless terminal responders are
+  the complete Orca-aligned integration. Codex does not currently consume mode
+  2031 palette updates after startup, so relaunch a running Codex TUI after
+  switching between light and dark appearances.
+- OpenCode can consume the same terminal palette and mode 2031 updates, but its
+  native default is the fixed `opencode` theme. When a Workspace has no native
+  TUI config or legacy explicit theme, runtime preparation writes
+  `{ "theme": "system" }` to the dedicated `tui.json` project layer.
+- Existing `tui.json`, `tui.jsonc`, and legacy project theme choices remain
+  user-owned. OpenAlice does not generate an OpenCode palette or mix TUI
+  settings into the provider-owned `opencode.json` surface.
+
 Do not add external-Pi version probing or upgrade UX to preserve flags used by
 the packaged runtime. Compatibility for the packaged app is maintained by
 pinning and upgrading the bundled Pi with the OpenAlice release.
@@ -387,7 +403,8 @@ Provider injection into shared native JSON config is node-owned, not
 file-owned. Claude Code's `.claude/settings.local.json` and opencode's
 `opencode.json` preserve unknown/user keys and use their adjacent OpenAlice
 rollback sidecars for conflict-aware reset. Keep all native provider config and
-rollback paths in `_common.mjs`'s local git excludes.
+rollback paths, plus OpenCode's generated `tui.json`, in `_common.mjs`'s local
+git excludes.
 
 ## Packaging Invariants
 
