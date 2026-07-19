@@ -179,6 +179,11 @@ lifecycle also gives Workspaces without an explicit Pi theme the native
 `light/dark` automatic pair. OpenAlice never redirects Pi away from its native
 global packages, settings, auth, or sessions and never replaces an explicit Pi
 project theme.
+OpenCode keeps provider configuration in `opencode.json` and TUI configuration
+in its native `tui.json` project layer. The runtime lifecycle selects the
+native `system` theme only when the project has no explicit OpenCode TUI or
+legacy theme config. Codex needs no project theme setting: it derives its
+palette directly from the terminal's OSC 10/11 replies.
 Claude Code and opencode keep reversible OpenAlice ownership metadata in
 `.claude/openalice-provider.json` and `.opencode/openalice-provider.json` so
 provider reset preserves unrelated native settings. Those files are sensitive

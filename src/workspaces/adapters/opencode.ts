@@ -1,18 +1,22 @@
 import { execFile } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { CliAdapter, OnDiskSession, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
 import { isModelReasoningEffort } from '../../ai-providers/model-semantics.js';
-import { readWorkspaceFile } from '../file-service.js';
+import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
 import type { HeadlessOutputEvent } from '../headless-output.js';
 import { resetOwnedJsonConfig, writeOwnedJsonConfig } from './owned-json-config.js';
 
 const execFileAsync = promisify(execFile);
 
 const OPENCODE_CONFIG_PATH = 'opencode.json';
+const OPENCODE_TUI_CONFIG_PATH = 'tui.json';
+const OPENCODE_TUI_CONFIGC_PATH = 'tui.jsonc';
 const OPENCODE_BINDING_STATE_PATH = '.opencode/openalice-provider.json';
 const OPENCODE_PROVIDER_NAME = 'workspace';
+const OPENCODE_SYSTEM_THEME = 'system';
 const OPENCODE_OWNED_PATHS = [
   ['$schema'],
   ['provider', OPENCODE_PROVIDER_NAME],
@@ -70,6 +74,59 @@ function positiveNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function parseJsonRecord(raw: string | null): Record<string, unknown> | null {
+  if (raw === null) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureOpenCodeTuiConfigExcluded(cwd: string): Promise<void> {
+  // OpenAlice workspaces are Git repositories, but adapter tests and external
+  // callers may prepare a plain directory. Do not manufacture a partial .git.
+  try {
+    if (!statSync(join(cwd, '.git')).isDirectory()) return;
+  } catch {
+    return;
+  }
+  const path = '.git/info/exclude';
+  const current = await readWorkspaceFile(cwd, path) ?? '';
+  if (current.split(/\r?\n/).includes(OPENCODE_TUI_CONFIG_PATH)) return;
+  const separator = current.length === 0 || current.endsWith('\n') ? '' : '\n';
+  await writeWorkspaceFile(cwd, path, `${current}${separator}${OPENCODE_TUI_CONFIG_PATH}\n`);
+}
+
+/**
+ * Select OpenCode's native terminal-derived theme for OpenAlice workspaces.
+ * The dedicated tui.json layer is supported by OpenCode 1.16+ and has higher
+ * precedence than global TUI settings. Existing native project configuration,
+ * including the legacy opencode.json theme that OpenCode migrates itself,
+ * remains user-owned.
+ */
+export async function syncOpenCodeWorkspaceTheme(cwd: string): Promise<boolean> {
+  await ensureOpenCodeTuiConfigExcluded(cwd);
+
+  // A JSONC project file is user-owned. Avoid creating a competing tui.json
+  // because OpenCode accepts both and their same-directory ordering is native.
+  if (await readWorkspaceFile(cwd, OPENCODE_TUI_CONFIGC_PATH) !== null) return false;
+
+  const tui = parseJsonRecord(await readWorkspaceFile(cwd, OPENCODE_TUI_CONFIG_PATH));
+  if (tui === null || Object.prototype.hasOwnProperty.call(tui, 'theme')) return false;
+
+  const legacy = parseJsonRecord(await readWorkspaceFile(cwd, OPENCODE_CONFIG_PATH));
+  if (legacy === null || Object.prototype.hasOwnProperty.call(legacy, 'theme')) return false;
+
+  tui['$schema'] ??= 'https://opencode.ai/tui.json';
+  tui['theme'] = OPENCODE_SYSTEM_THEME;
+  await writeWorkspaceFile(cwd, OPENCODE_TUI_CONFIG_PATH, `${JSON.stringify(tui, null, 2)}\n`);
+  return true;
+}
+
 /**
  * opencode (github.com/anomalyco/opencode, formerly sst/opencode; MIT, by
  * Dax Raad / SST). Provider-agnostic open-source agent CLI — the third adapter
@@ -93,6 +150,11 @@ function positiveNumber(value: number | null | undefined): number | null {
  *     `.codex/env.json`). OpenAlice owns only `provider.workspace`, the matching
  *     top-level model, and its schema marker; unrelated opencode config survives
  *     both writes and reset.
+ *
+ *   - Terminal appearance: the shared runtime lifecycle selects OpenCode's
+ *     native `system` TUI theme through `tui.json` only when the project has
+ *     no explicit TUI/legacy theme config. OpenCode then derives its palette
+ *     from the terminal and handles mode 2031 updates itself.
  *
  *   - Hermetic spawn: `OPENCODE_DISABLE_{MODELS_FETCH,AUTOUPDATE,LSP_DOWNLOAD}`
  *     pinned in `composeEnv` so a trading workbench never phones home at spawn
@@ -132,6 +194,12 @@ export const opencodeAdapter: CliAdapter = {
     // `opencode --session <id>` (composeCommand) resumes by id.
     transcriptDiscovery: 'subprocess',
     headless: true,
+  },
+
+  lifecycle: {
+    async prepareWorkspace({ cwd }): Promise<void> {
+      await syncOpenCodeWorkspaceTheme(cwd);
+    },
   },
 
   composeCommand(_base: readonly string[], ctx: SpawnContext): readonly string[] {

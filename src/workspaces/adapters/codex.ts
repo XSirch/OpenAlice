@@ -38,6 +38,9 @@ const CODEX_INTERACTIVE_PERMISSION_ARGS = [
  *   `~/.codex/config.toml` `[projects."<abs>"] trust_level`. The shared
  *   runtime lifecycle pre-writes that entry so the launcher's spawn doesn't
  *   stall on the prompt.
+ * - Terminal appearance: Codex has no project UI-theme default to replace.
+ *   Its TUI probes OSC 10/11 at startup and derives contrast-sensitive colors
+ *   from the terminal defaults supplied by OpenAlice's shared PTY layer.
  *
  * AI provider model — two modes, mutually exclusive:
  *
