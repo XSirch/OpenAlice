@@ -14,6 +14,7 @@ type Loaded = { metrics: KeyMetrics | null; ratios: FinancialRatios | null }
 export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) {
   const [data, setData] = useState<Loaded | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,6 +41,7 @@ export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) 
           }
           setData({ metrics, ratios })
           setProvider(m?.provider ?? r?.provider ?? null)
+          setUpdatedAt(new Date())
         })
         .finally(() => { if (!cancelled && isInitial) setLoading(false) })
     }
@@ -93,7 +95,15 @@ export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) 
   const info = infoLines.join('\n')
 
   return (
-    <Card title="Key Metrics" info={info}>
+    <Card
+      title="Key Metrics"
+      info={info}
+      right={updatedAt ? (
+        <span className="text-[11px] text-text-muted" title="Horário da última consulta bem-sucedida ao provedor.">
+          Atualizado {updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </span>
+      ) : undefined}
+    >
       {loading && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]" aria-hidden="true">
           {Array.from({ length: 6 }).map((_, i) => (
