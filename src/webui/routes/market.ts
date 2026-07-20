@@ -57,8 +57,9 @@ export function createMarketRoutes(ctx: EngineContext): Hono {
     if (!symbol) return c.json({ error: 'symbol is required' }, 400)
     try {
       const fn = ctx.equityClient[method] as (p: Record<string, unknown>) => Promise<unknown[]>
-      const results = await fn.call(ctx.equityClient, { symbol })
-      return c.json({ results, provider: ctx.config.marketData.providers.equity })
+      const provider = c.req.query('provider')
+      const results = await fn.call(ctx.equityClient, { symbol, ...(provider ? { provider } : {}) })
+      return c.json({ results, provider: provider ?? ctx.config.marketData.providers.equity })
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
     }

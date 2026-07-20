@@ -53,10 +53,10 @@ export type FinancialStatementRow = Record<string, unknown>
 /** First-party per-symbol endpoints (same {results, provider} envelope). */
 function equityEndpoint<T>(
   path: string,
-  params: Record<string, string | number> = {},
+  params: Record<string, string | number | undefined> = {},
 ): Promise<OBBjectResponse<T>> {
   const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) qs.set(k, String(v))
+  for (const [k, v] of Object.entries(params)) if (v !== undefined) qs.set(k, String(v))
   return fetchJson(`/api/market/equity/${path}?${qs}`)
 }
 
@@ -129,9 +129,9 @@ export const marketApi = {
 
   /** Equity-specific endpoints — Alice infers provider from config, no ?provider=. */
   equity: {
-    profile: (symbol: string) => equityEndpoint<EquityProfile>('profile', { symbol }),
+    profile: (symbol: string, provider?: string) => equityEndpoint<EquityProfile>('profile', { symbol, provider }),
     quote: (symbol: string, provider?: string) => quoteEndpoint<EquityQuote>(symbol, provider),
-    metrics: (symbol: string) => equityEndpoint<KeyMetrics>('metrics', { symbol }),
+    metrics: (symbol: string, provider?: string) => equityEndpoint<KeyMetrics>('metrics', { symbol, provider }),
     ratios: (symbol: string) => equityEndpoint<FinancialRatios>('ratios', { symbol }),
     balance: (symbol: string) => equityEndpoint<FinancialStatementRow>('balance', { symbol }),
     income: (symbol: string) => equityEndpoint<FinancialStatementRow>('income', { symbol }),

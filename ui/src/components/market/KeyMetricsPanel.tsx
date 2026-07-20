@@ -6,11 +6,12 @@ import { fmtNumber, fmtPercent, fmtMoneyShort } from './format'
 
 interface Props {
   symbol: string
+  provider?: string
 }
 
 type Loaded = { metrics: KeyMetrics | null; ratios: FinancialRatios | null }
 
-export function KeyMetricsPanel({ symbol }: Props) {
+export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) {
   const [data, setData] = useState<Loaded | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -24,7 +25,7 @@ export function KeyMetricsPanel({ symbol }: Props) {
       // Metrics and ratios both feed this panel, but ratios isn't implemented
       // on every provider (yfinance 500s with "Fetcher not found"). Use
       // allSettled so a single rejection doesn't discard the other source.
-      Promise.allSettled([marketApi.equity.metrics(symbol), marketApi.equity.ratios(symbol)])
+      Promise.allSettled([marketApi.equity.metrics(symbol, requestedProvider), marketApi.equity.ratios(symbol)])
         .then(([mRes, rRes]) => {
           if (cancelled) return
           const m = mRes.status === 'fulfilled' ? mRes.value : null
@@ -48,7 +49,7 @@ export function KeyMetricsPanel({ symbol }: Props) {
     // the quote header because these fields are less price-immediate.
     const timer = setInterval(() => fetch(false), 300_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [symbol])
+  }, [symbol, requestedProvider])
 
   const m = data?.metrics ?? {}
   const r = data?.ratios ?? {}

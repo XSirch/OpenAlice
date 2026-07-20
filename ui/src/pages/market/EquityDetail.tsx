@@ -20,8 +20,8 @@ export function EquityDetail({ symbol, provider }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ProfilePanel symbol={symbol} />
-        <KeyMetricsPanel symbol={symbol} />
+        <ProfilePanel symbol={symbol} provider={provider} />
+        <KeyMetricsPanel symbol={symbol} provider={provider} />
       </div>
 
       <TradeableContractsPanel symbol={symbol} assetClass="equity" />

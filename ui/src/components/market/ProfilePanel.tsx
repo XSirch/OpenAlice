@@ -6,9 +6,10 @@ import { fmtInt } from './format'
 
 interface Props {
   symbol: string
+  provider?: string
 }
 
-export function ProfilePanel({ symbol }: Props) {
+export function ProfilePanel({ symbol, provider: requestedProvider }: Props) {
   const [profile, setProfile] = useState<EquityProfile | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -18,7 +19,7 @@ export function ProfilePanel({ symbol }: Props) {
     let cancelled = false
     setLoading(true)
     setError(null)
-    marketApi.equity.profile(symbol).then((res) => {
+    marketApi.equity.profile(symbol, requestedProvider).then((res) => {
       if (cancelled) return
       if (res.error) setError(res.error)
       setProfile(res.results?.[0] ?? null)
@@ -27,7 +28,7 @@ export function ProfilePanel({ symbol }: Props) {
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [symbol])
+  }, [symbol, requestedProvider])
 
   const sector = profile?.sector as string | undefined
   const industry = (profile?.industry_category ?? profile?.industry_group) as string | undefined
