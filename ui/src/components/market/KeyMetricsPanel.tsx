@@ -6,13 +6,15 @@ import { fmtNumber, fmtPercent, fmtMoneyShort } from './format'
 
 interface Props {
   symbol: string
+  provider?: string
 }
 
 type Loaded = { metrics: KeyMetrics | null; ratios: FinancialRatios | null }
 
-export function KeyMetricsPanel({ symbol }: Props) {
+export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) {
   const [data, setData] = useState<Loaded | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,7 +26,7 @@ export function KeyMetricsPanel({ symbol }: Props) {
       // Metrics and ratios both feed this panel, but ratios isn't implemented
       // on every provider (yfinance 500s with "Fetcher not found"). Use
       // allSettled so a single rejection doesn't discard the other source.
-      Promise.allSettled([marketApi.equity.metrics(symbol), marketApi.equity.ratios(symbol)])
+      Promise.allSettled([marketApi.equity.metrics(symbol, requestedProvider), marketApi.equity.ratios(symbol)])
         .then(([mRes, rRes]) => {
           if (cancelled) return
           const m = mRes.status === 'fulfilled' ? mRes.value : null
@@ -39,6 +41,7 @@ export function KeyMetricsPanel({ symbol }: Props) {
           }
           setData({ metrics, ratios })
           setProvider(m?.provider ?? r?.provider ?? null)
+          setUpdatedAt(new Date())
         })
         .finally(() => { if (!cancelled && isInitial) setLoading(false) })
     }
@@ -48,7 +51,7 @@ export function KeyMetricsPanel({ symbol }: Props) {
     // the quote header because these fields are less price-immediate.
     const timer = setInterval(() => fetch(false), 300_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [symbol])
+  }, [symbol, requestedProvider])
 
   const m = data?.metrics ?? {}
   const r = data?.ratios ?? {}
@@ -84,7 +87,7 @@ export function KeyMetricsPanel({ symbol }: Props) {
   const infoLines: string[] = [
     provider ? `Source: ${provider}` : 'Source: (unknown)',
     'Endpoints: /equity/fundamental/metrics + /equity/fundamental/ratios',
-    'Values are trailing-twelve-months where applicable; market cap is live.',
+    'Values are trailing-twelve-months where applicable. brapi fundamentals follow its provider refresh cadence and are not tick-by-tick prices.',
   ]
   if (data && !data.ratios && data.metrics) {
     infoLines.push('Note: ratios endpoint not implemented by this provider — showing metrics only.')
@@ -92,7 +95,15 @@ export function KeyMetricsPanel({ symbol }: Props) {
   const info = infoLines.join('\n')
 
   return (
-    <Card title="Key Metrics" info={info}>
+    <Card
+      title="Key Metrics"
+      info={info}
+      right={updatedAt ? (
+        <span className="text-[11px] text-text-muted" title="Horário da última consulta bem-sucedida ao provedor.">
+          Atualizado {updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </span>
+      ) : undefined}
+    >
       {loading && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]" aria-hidden="true">
           {Array.from({ length: 6 }).map((_, i) => (

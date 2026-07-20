@@ -29,11 +29,36 @@ describe('brapi provider', () => {
       { date: 1784516400, open: 41.2, high: 41.44, low: 40.47, close: 41.33, volume: 22534600 },
       { date: 1784257200, open: 40.41, high: 41.11, low: 40.41, close: 40.9, volume: 32148200 },
     ] } }] }
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })))
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
 
-    const result = await createExecutor().execute('brapi', 'EquityHistorical', { symbol: 'PETR4' }) as Array<Record<string, unknown>>
+    const result = await createExecutor().execute('brapi', 'EquityHistorical', {
+      symbol: 'PETR4', start_date: '2026-07-01', end_date: '2026-07-20',
+    }) as Array<Record<string, unknown>>
 
     expect(result).toHaveLength(2)
     expect(result.map((row) => row.date)).toEqual(['2026-07-17', '2026-07-20'])
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('startDate=2026-07-01')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('endDate=2026-07-20')
+  })
+
+  it('maps the Brazilian profile and statistics endpoints into the shared models', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: {
+        website: 'https://petrobras.com.br', sector: 'Energia', industry: 'Petróleo e Gás Integrado',
+        longBusinessSummary: 'Integrated energy company.', fullTimeEmployees: 41778,
+      } }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: {
+        marketCap: 527149170000, trailingPE: 5.48, priceToBook: 1.18, enterpriseValue: 1156526200000,
+      } }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const executor = createExecutor()
+
+    const profile = await executor.execute('brapi', 'EquityInfo', { symbol: 'PETR4' }) as Array<Record<string, unknown>>
+    const metrics = await executor.execute('brapi', 'KeyMetrics', { symbol: 'PETR4' }) as Array<Record<string, unknown>>
+
+    expect(profile[0]).toMatchObject({ symbol: 'PETR4', sector: 'Energia', employees: 41778 })
+    expect(metrics[0]).toMatchObject({ symbol: 'PETR4', market_cap: 527149170000, price_to_earnings: 5.48 })
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('statistics?mode=current&symbols=PETR4')
   })
 })

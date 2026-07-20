@@ -3,6 +3,8 @@ import { Provider } from '../../core/provider/abstract/provider.js'
 import { BrapiEquitySearchFetcher } from './models/equity-search.js'
 import { BrapiEquityQuoteFetcher } from './models/equity-quote.js'
 import { BrapiEquityHistoricalFetcher } from './models/equity-historical.js'
+import { BrapiEquityProfileFetcher } from './models/equity-profile.js'
+import { BrapiKeyMetricsFetcher } from './models/key-metrics.js'
 
 export const brapiProvider = new Provider({
   name: 'brapi',
@@ -19,5 +21,7 @@ export const brapiProvider = new Provider({
     EquitySearch: BrapiEquitySearchFetcher,
     EquityQuote: BrapiEquityQuoteFetcher,
     EquityHistorical: BrapiEquityHistoricalFetcher,
+    EquityInfo: BrapiEquityProfileFetcher,
+    KeyMetrics: BrapiKeyMetricsFetcher,
   },
 })

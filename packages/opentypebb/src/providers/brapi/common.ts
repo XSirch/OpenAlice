@@ -34,6 +34,10 @@ interface BrapiResponse {
   results?: Array<{ symbol?: string; data?: BrapiQuote }>
 }
 
+interface BrapiDataResponse<T> {
+  results?: Array<{ symbol?: string; data?: T }>
+}
+
 function unpack(response: BrapiResponse): BrapiQuote[] {
   return (response.results ?? []).flatMap((result) => result.data
     ? [{ ...result.data, symbol: result.data.symbol ?? result.symbol }]
@@ -50,10 +54,28 @@ export async function quote(symbols: string[], apiKey?: string): Promise<BrapiQu
   return unpack(response)
 }
 
-export async function historical(symbol: string, apiKey?: string): Promise<BrapiQuote[]> {
-  const url = `${BRAPI_STOCKS_URL}/historical?symbols=${encodeURIComponent(symbol)}&range=1y&interval=1d`
-  const response = await amakeRequest<BrapiResponse>(url, { headers: headers(apiKey) })
+export async function historical(
+  symbol: string,
+  options: { startDate?: string | null; endDate?: string | null } = {},
+  apiKey?: string,
+): Promise<BrapiQuote[]> {
+  const url = new URL(`${BRAPI_STOCKS_URL}/historical`)
+  url.searchParams.set('symbols', symbol)
+  url.searchParams.set('interval', '1d')
+  if (options.startDate) url.searchParams.set('startDate', options.startDate)
+  if (options.endDate) url.searchParams.set('endDate', options.endDate)
+  if (!options.startDate && !options.endDate) url.searchParams.set('range', '1y')
+  const response = await amakeRequest<BrapiResponse>(url.toString(), { headers: headers(apiKey) })
   return unpack(response)
+}
+
+export async function stockData<T>(path: string, symbol: string, apiKey?: string): Promise<Array<{ symbol: string; data: T }>> {
+  const url = new URL(`${BRAPI_STOCKS_URL}/${path}`)
+  url.searchParams.set('symbols', symbol)
+  const response = await amakeRequest<BrapiDataResponse<T>>(url.toString(), { headers: headers(apiKey) })
+  return (response.results ?? []).flatMap((result) => result.data === undefined
+    ? []
+    : [{ symbol: result.symbol ?? symbol, data: result.data }])
 }
 
 export function isoDate(value: number | string | undefined): string | null {
