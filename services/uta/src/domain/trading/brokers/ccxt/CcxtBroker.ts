@@ -884,7 +884,19 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     const accrue = (b: Record<string, unknown>) => {
       balances.push(b)
       const info = (b['info'] ?? {}) as Record<string, unknown>
-      if (info['totalInitialMargin'] !== undefined) initMargin = initMargin.plus(new Decimal(String(info['totalInitialMargin'])))
+      // Binance can return an empty-string margin field for a futures wallet
+      // that exists but has never been funded. That is not a numeric zero, and
+      // passing it to Decimal throws after an otherwise successful read. Ignore
+      // only malformed/missing margin metadata; wallet balances remain valid.
+      const rawMargin = info['totalInitialMargin']
+      const margin = rawMargin == null ? '' : String(rawMargin).trim()
+      if (margin) {
+        try {
+          initMargin = initMargin.plus(new Decimal(margin))
+        } catch {
+          console.warn(`CcxtBroker[${this.id}]: ignoring invalid totalInitialMargin metadata`)
+        }
+      }
     }
     if (walletTypes?.length) {
       for (const type of walletTypes) {

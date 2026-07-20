@@ -7,12 +7,13 @@ import { TradeableContractsPanel } from '../../components/market/TradeableContra
 
 interface Props {
   symbol: string
+  provider?: string
 }
 
-export function EquityDetail({ symbol }: Props) {
+export function EquityDetail({ symbol, provider }: Props) {
   return (
     <div className="flex flex-col gap-3">
-      <QuoteHeader symbol={symbol} />
+      <QuoteHeader symbol={symbol} provider={provider} />
 
       <div className="h-[360px] shrink-0">
         <KlinePanel selection={{ symbol, assetClass: 'equity' }} />

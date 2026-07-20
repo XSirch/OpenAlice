@@ -62,8 +62,9 @@ function equityEndpoint<T>(
 
 /** Quote is realtime-family (operational identity, like K-lines) — it stays
  *  on the legacy passthrough until the bar-layer/UTA quote arc takes it. */
-function quoteEndpoint<T>(symbol: string): Promise<OBBjectResponse<T>> {
+function quoteEndpoint<T>(symbol: string, provider?: string): Promise<OBBjectResponse<T>> {
   const qs = new URLSearchParams({ symbol })
+  if (provider) qs.set('provider', provider)
   return fetchJson(`/api/market-data-v1/equity/price/quote?${qs}`)
 }
 
@@ -129,7 +130,7 @@ export const marketApi = {
   /** Equity-specific endpoints — Alice infers provider from config, no ?provider=. */
   equity: {
     profile: (symbol: string) => equityEndpoint<EquityProfile>('profile', { symbol }),
-    quote: (symbol: string) => quoteEndpoint<EquityQuote>(symbol),
+    quote: (symbol: string, provider?: string) => quoteEndpoint<EquityQuote>(symbol, provider),
     metrics: (symbol: string) => equityEndpoint<KeyMetrics>('metrics', { symbol }),
     ratios: (symbol: string) => equityEndpoint<FinancialRatios>('ratios', { symbol }),
     balance: (symbol: string) => equityEndpoint<FinancialStatementRow>('balance', { symbol }),
