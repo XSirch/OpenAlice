@@ -72,6 +72,11 @@ Configuration lives in
 }
 ```
 
+`brapi` is an opt-in Brazilian-market vendor. Add its token in **Settings →
+Market Data → Advanced**, then enable `brapi` under Chart Vendors. Its B3
+quotes and daily bars are explicitly delayed/research-only; they never satisfy
+the realtime B3 signal gate and never connect to UTA or an order path.
+
 Self-hosters may point `hub.baseUrl` at their own compatible TraderHub. A
 `hub:<baseUrl>` credential sentinel routes supported keyed-provider requests
 through the hub without copying the hub's upstream credential into OpenAlice.

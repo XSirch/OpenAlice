@@ -42,6 +42,11 @@ const CHART_VENDORS: ChartVendor[] = [
     name: 'TWSE + TPEx 臺灣證交所',
     desc: 'Taiwan listed + OTC (上市/上櫃) — 中文/英文 search over the official company roster, plus official P/E·殖利率·股價淨值比 and company profiles yfinance lacks. No key. K-lines come from Yahoo (2330.TW / 6488.TWO).',
   },
+  {
+    id: 'brapi',
+    name: 'brapi.dev (Brasil)',
+    desc: 'Brazilian equities, FIIs, BDRs and ETFs. Requires a brapi token for production coverage; daily/research data only, never a realtime B3 signal source.',
+  },
 ]
 
 // Data-provider keys — LOW-frequency data (boards, economy, fundamentals). The
@@ -59,6 +64,7 @@ const KEY_GROUPS: { label: string | null; providers: ProviderEntry[] }[] = [
   {
     label: null,
     providers: [
+      { key: 'brapi', name: 'brapi.dev', desc: 'Brazilian shares, FIIs, BDRs and ETFs. This source is delayed and restricted to research; it cannot enable B3 realtime alerts.', hint: 'brapi.dev → Dashboard → API Keys' },
       { key: 'fmp', name: 'FMP', desc: 'Unlocks per-symbol equity fundamentals, discovery, ETF detail — the one key that adds data the hub does not serve.', hint: 'financialmodelingprep.com' },
     ],
   },
