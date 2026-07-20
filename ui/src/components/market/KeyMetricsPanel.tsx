@@ -85,7 +85,7 @@ export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) 
   const infoLines: string[] = [
     provider ? `Source: ${provider}` : 'Source: (unknown)',
     'Endpoints: /equity/fundamental/metrics + /equity/fundamental/ratios',
-    'Values are trailing-twelve-months where applicable; market cap is live.',
+    'Values are trailing-twelve-months where applicable. brapi fundamentals follow its provider refresh cadence and are not tick-by-tick prices.',
   ]
   if (data && !data.ratios && data.metrics) {
     infoLines.push('Note: ratios endpoint not implemented by this provider — showing metrics only.')

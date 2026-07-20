@@ -4,7 +4,11 @@ import { EquityHistoricalQueryParamsSchema, EquityHistoricalDataSchema } from '.
 import { EmptyDataError } from '../../../core/provider/utils/errors.js'
 import { historical, isoDate, type BrapiHistoricalBar } from '../common.js'
 
-export const BrapiEquityHistoricalQueryParamsSchema = EquityHistoricalQueryParamsSchema
+export const BrapiEquityHistoricalQueryParamsSchema = EquityHistoricalQueryParamsSchema.extend({
+  // The chart can request intraday widths, but this research adapter always
+  // returns daily bars rather than pretending those widths are supported.
+  interval: z.string().default('1d').describe('Requested chart interval; brapi research bars are daily.'),
+})
 export type BrapiEquityHistoricalQueryParams = z.infer<typeof BrapiEquityHistoricalQueryParamsSchema>
 
 interface HistoricalHit extends BrapiHistoricalBar { symbol: string }
@@ -18,7 +22,7 @@ export class BrapiEquityHistoricalFetcher extends Fetcher {
 
   static override async extractData(query: BrapiEquityHistoricalQueryParams, credentials: Record<string, string> | null): Promise<HistoricalHit[]> {
     const symbol = query.symbol.trim().replace(/\.SA$/i, '')
-    const rows = await historical(symbol, credentials?.brapi_api_key)
+    const rows = await historical(symbol, { startDate: query.start_date, endDate: query.end_date }, credentials?.brapi_api_key)
     return rows.flatMap((row) => (row.historicalDataPrice ?? []).map((bar) => ({ ...bar, symbol: row.symbol ?? symbol })))
   }
 
