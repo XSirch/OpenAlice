@@ -179,7 +179,13 @@ export function KlinePanel({ selection }: Props) {
       setError(null)
       const days = daysForTimeframe(tf)
       const params: Parameters<typeof barsApi.bars>[0] = { interval }
-      if (selectedBarId) params.barId = selectedBarId
+      // A vendor barId alone is ambiguous across the provider-specific client
+      // families. Keep the page's asset class when the source was selected so
+      // `brapi|PETR4` routes to the equity client instead of failing closed.
+      if (selectedBarId) {
+        params.barId = selectedBarId
+        params.assetClass = selection.assetClass
+      }
       else { params.symbol = selection.symbol; params.assetClass = selection.assetClass }
       if (days != null) params.start = startDateFromToday(days)
 

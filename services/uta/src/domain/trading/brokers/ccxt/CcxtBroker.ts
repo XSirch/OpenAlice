@@ -240,7 +240,16 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     // The init() wrapper below handles option-skipping uniformly via type filtering.
     const cfgRecord = config as unknown as Record<string, unknown>
     const credentials: Record<string, unknown> = {}
-    if (config.options !== undefined) credentials.options = config.options
+    const options = { ...(config.options ?? {}) }
+    // CCXT's Binance adapter throws a rate-limit acknowledgement warning when
+    // listing open orders without a symbol. Alice deliberately performs that
+    // account-wide read only for external-order observation, so acknowledge
+    // the documented CCXT option instead of reporting a false "unavailable"
+    // state. This changes no trading or credential permission.
+    if (config.exchange === 'binance' && options['warnOnFetchOpenOrdersWithoutSymbol'] === undefined) {
+      options['warnOnFetchOpenOrdersWithoutSymbol'] = false
+    }
+    if (Object.keys(options).length) credentials.options = options
     for (const field of CCXT_CREDENTIAL_FIELDS) {
       const v = cfgRecord[field]
       if (v !== undefined) credentials[field] = v
