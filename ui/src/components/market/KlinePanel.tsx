@@ -6,6 +6,7 @@ import {
   HistogramSeries,
   type IChartApi,
   type ISeriesApi,
+  type MouseEventParams,
   type UTCTimestamp,
   type CandlestickData,
   type HistogramData,
@@ -29,7 +30,7 @@ function parseTimeframe(s: string | null): Timeframe {
   return (TIMEFRAMES as string[]).includes(s ?? '') ? (s as Timeframe) : DEFAULT_RANGE
 }
 
-const INTRADAY: ReadonlySet<Interval> = new Set(['1m', '5m', '1h'])
+const INTRADAY: ReadonlySet<Interval> = new Set(['1m', '2m', '5m', '15m', '30m', '1h', '90m'])
 
 function daysForTimeframe(tf: Timeframe): number | null {
   switch (tf) {
@@ -58,6 +59,26 @@ function toUTCTimestamp(s: string): UTCTimestamp {
 
 interface Props {
   selection: { symbol: string; assetClass: AssetClass } | null
+}
+
+interface HoveredCandle {
+  bar: HistoricalBar
+  x: number
+  y: number
+}
+
+function formatCandleTime(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2})(?::\d{2})?)?$/)
+  if (!match) return value
+  return `${match[3]}/${match[2]}/${match[1]}${match[4] ? ` ${match[4]}` : ''}`
+}
+
+function formatPrice(value: number): string {
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+}
+
+function formatVolume(value: number | null | undefined): string {
+  return value == null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
 export function KlinePanel({ selection }: Props) {
@@ -94,6 +115,7 @@ export function KlinePanel({ selection }: Props) {
   const [selectedBarId, setSelectedBarId] = useState<string | null>(sourceParam)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hoveredCandle, setHoveredCandle] = useState<HoveredCandle | null>(null)
   const selectedSourceId = selectedBarId?.split('|')[0] ?? meta?.sourceId
   const brapiIntraday = selectedSourceId === 'brapi' && INTRADAY.has(interval)
 
@@ -247,6 +269,36 @@ export function KlinePanel({ selection }: Props) {
     chartRef.current.timeScale().fitContent()
   }, [bars])
 
+  // The chart owns pointer tracking; translate its crosshair position back to
+  // the original bar so the detail card includes volume as well as OHLC.
+  useEffect(() => {
+    const chart = chartRef.current
+    const candle = candleRef.current
+    const container = containerRef.current
+    if (!chart || !candle || !container || !bars?.length) {
+      setHoveredCandle(null)
+      return
+    }
+    const byTime = new Map(bars.map((bar) => [toUTCTimestamp(bar.date), bar]))
+    const onCrosshairMove = (param: MouseEventParams) => {
+      if (!param.point || typeof param.time !== 'number') {
+        setHoveredCandle(null)
+        return
+      }
+      const bar = byTime.get(param.time as UTCTimestamp)
+      if (!bar) {
+        setHoveredCandle(null)
+        return
+      }
+      // Keep a fixed-size detail card inside the chart even at its right/bottom edge.
+      const x = Math.min(Math.max(8, param.point.x + 14), Math.max(8, container.clientWidth - 218))
+      const y = Math.min(Math.max(8, param.point.y + 14), Math.max(8, container.clientHeight - 172))
+      setHoveredCandle({ bar, x, y })
+    }
+    chart.subscribeCrosshairMove(onCrosshairMove)
+    return () => chart.unsubscribeCrosshairMove(onCrosshairMove)
+  }, [bars])
+
   const title = useMemo(() => {
     if (!selection) return 'Select a symbol'
     return `${selection.symbol} · ${selection.assetClass}`
@@ -341,6 +393,23 @@ export function KlinePanel({ selection }: Props) {
 
       <div className="relative flex-1 min-h-0 border border-border rounded bg-bg-secondary/30">
         <div ref={containerRef} className="absolute inset-0" />
+        {hoveredCandle && (
+          <div
+            className="pointer-events-none absolute z-10 w-[204px] rounded border border-border bg-bg-secondary/95 px-3 py-2 shadow-lg backdrop-blur-sm"
+            style={{ left: hoveredCandle.x, top: hoveredCandle.y }}
+            role="status"
+            aria-label={`Candle de ${formatCandleTime(hoveredCandle.bar.date)}`}
+          >
+            <div className="mb-1.5 text-[11px] font-medium text-text">{formatCandleTime(hoveredCandle.bar.date)}</div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+              <span className="text-text-muted">Abertura <b className="ml-1 font-medium text-text">{formatPrice(hoveredCandle.bar.open)}</b></span>
+              <span className="text-text-muted">Fechamento <b className="ml-1 font-medium text-text">{formatPrice(hoveredCandle.bar.close)}</b></span>
+              <span className="text-text-muted">MÃ¡xima <b className="ml-1 font-medium text-[#3fb950]">{formatPrice(hoveredCandle.bar.high)}</b></span>
+              <span className="text-text-muted">MÃ­nima <b className="ml-1 font-medium text-[#f85149]">{formatPrice(hoveredCandle.bar.low)}</b></span>
+              <span className="col-span-2 text-text-muted">Volume <b className="ml-1 font-medium text-text">{formatVolume(hoveredCandle.bar.volume)}</b></span>
+            </div>
+          </div>
+        )}
         {!selection && (
           <div className="absolute inset-0 flex items-center justify-center text-[13px] text-text-muted">
             Pick an asset to see the K-line.
