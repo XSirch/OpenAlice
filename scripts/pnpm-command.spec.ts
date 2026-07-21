@@ -51,6 +51,14 @@ describe('composePnpmCommand', () => {
       windowsPnpmCommand: 'corepack.cmd pnpm',
     }).args.at(-1)).toBe('corepack.cmd pnpm "--version"')
   })
+
+  it('keeps pnpm/action-setup\'s direct Windows shim as one executable', () => {
+    expect(composePnpmCommand(['--version'], {
+      platform: 'win32',
+      env: { PNPM_HOME: 'C:\\pnpm home' },
+      windowsPnpmCommand: 'C:\\pnpm home\\pnpm.cmd',
+    }).args.at(-1)).toBe('"C:\\pnpm home\\pnpm.cmd" "--version"')
+  })
 })
 
 describe.runIf(process.platform === 'win32')('runPnpmSync on Windows', () => {

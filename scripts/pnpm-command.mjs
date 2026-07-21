@@ -20,8 +20,8 @@ export function composePnpmCommand(commandArgs, options = {}) {
     }
   }
 
-  const pnpmCommand = options.windowsPnpmCommand ?? resolveWindowsPnpmCommand()
-  const commandLine = [pnpmCommand, ...commandArgs.map(quoteCmdArgument)].join(' ')
+  const pnpmCommand = options.windowsPnpmCommand ?? resolveWindowsPnpmCommand(env)
+  const commandLine = [quotePnpmCommand(pnpmCommand), ...commandArgs.map(quoteCmdArgument)].join(' ')
   return {
     command: env.ComSpec ?? env.COMSPEC ?? 'cmd.exe',
     args: ['/d', '/s', '/c', commandLine],
@@ -31,7 +31,15 @@ export function composePnpmCommand(commandArgs, options = {}) {
   }
 }
 
-function resolveWindowsPnpmCommand() {
+function resolveWindowsPnpmCommand(env) {
+  // pnpm/action-setup installs a direct pnpm.cmd shim here. Prefer it over
+  // Node's Corepack shim: on hosted Windows runners Corepack may block while
+  // it resolves its managed release, even though pnpm is already available.
+  const pnpmHome = env.PNPM_HOME
+  if (pnpmHome && existsSync(join(pnpmHome, 'pnpm.cmd'))) {
+    return join(pnpmHome, 'pnpm.cmd')
+  }
+
   const nodeDirectory = dirname(process.execPath)
   if (existsSync(join(nodeDirectory, 'pnpm.cmd'))) {
     return 'pnpm.cmd'
@@ -62,4 +70,12 @@ export function runPnpmSync(commandArgs, options = {}) {
 
 function quoteCmdArgument(value) {
   return `"${String(value).replaceAll('"', '""')}"`
+}
+
+function quotePnpmCommand(command) {
+  // This fallback is a command plus its subcommand, rather than an executable
+  // path. Keep its two tokens separate so cmd.exe can resolve Corepack.
+  return command === 'corepack.cmd pnpm' || !command.includes(' ')
+    ? command
+    : quoteCmdArgument(command)
 }
