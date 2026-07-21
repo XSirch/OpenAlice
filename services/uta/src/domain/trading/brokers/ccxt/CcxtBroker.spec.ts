@@ -979,6 +979,22 @@ describe('CcxtBroker — getAccount', () => {
     expect(info.totalCashValue).toBe('9000')
     expect(info.initMarginReq).toBe('7')            // summed from the futures wallet's info
   })
+
+  it('keeps Binance wallet balances when an unfunded futures wallet reports an empty margin field', async () => {
+    const acc = makeAccount({ exchange: 'binance' })
+    setInitialized(acc, {})
+    const fb = vi.fn()
+      .mockResolvedValueOnce({ USDT: { total: 5000 } })
+      .mockResolvedValueOnce({ USDT: { total: 4000 }, info: { totalInitialMargin: '' } })
+      .mockRejectedValueOnce(new Error('binance {"code":-2015,"msg":"permissions"}'))
+    ;(acc as any).exchange.fetchBalance = fb
+    ;(acc as any).exchange.fetchPositions = vi.fn().mockResolvedValue([])
+
+    const info = await acc.getAccount()
+
+    expect(info.netLiquidation).toBe('9000')
+    expect(info.initMarginReq).toBe('0')
+  })
 })
 
 // ==================== sub-accounts ====================

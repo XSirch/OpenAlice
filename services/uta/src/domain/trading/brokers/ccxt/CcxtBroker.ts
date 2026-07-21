@@ -240,7 +240,16 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     // The init() wrapper below handles option-skipping uniformly via type filtering.
     const cfgRecord = config as unknown as Record<string, unknown>
     const credentials: Record<string, unknown> = {}
-    if (config.options !== undefined) credentials.options = config.options
+    const options = { ...(config.options ?? {}) }
+    // CCXT's Binance adapter throws a rate-limit acknowledgement warning when
+    // listing open orders without a symbol. Alice deliberately performs that
+    // account-wide read only for external-order observation, so acknowledge
+    // the documented CCXT option instead of reporting a false "unavailable"
+    // state. This changes no trading or credential permission.
+    if (config.exchange === 'binance' && options['warnOnFetchOpenOrdersWithoutSymbol'] === undefined) {
+      options['warnOnFetchOpenOrdersWithoutSymbol'] = false
+    }
+    if (Object.keys(options).length) credentials.options = options
     for (const field of CCXT_CREDENTIAL_FIELDS) {
       const v = cfgRecord[field]
       if (v !== undefined) credentials[field] = v
@@ -884,7 +893,19 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     const accrue = (b: Record<string, unknown>) => {
       balances.push(b)
       const info = (b['info'] ?? {}) as Record<string, unknown>
-      if (info['totalInitialMargin'] !== undefined) initMargin = initMargin.plus(new Decimal(String(info['totalInitialMargin'])))
+      // Binance can return an empty-string margin field for a futures wallet
+      // that exists but has never been funded. That is not a numeric zero, and
+      // passing it to Decimal throws after an otherwise successful read. Ignore
+      // only malformed/missing margin metadata; wallet balances remain valid.
+      const rawMargin = info['totalInitialMargin']
+      const margin = rawMargin == null ? '' : String(rawMargin).trim()
+      if (margin) {
+        try {
+          initMargin = initMargin.plus(new Decimal(margin))
+        } catch {
+          console.warn(`CcxtBroker[${this.id}]: ignoring invalid totalInitialMargin metadata`)
+        }
+      }
     }
     if (walletTypes?.length) {
       for (const type of walletTypes) {

@@ -26,3 +26,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0024_alice_invest_config` | 0.81.0-beta | 2026-07-16 | alice-invest.json | Seed the fail-closed Alice Invest configuration. |
 | `0025_connector_inbound_journal` | 0.81.0-beta | 2026-07-16 | connector-inbound-journal.json | Seed the private Connector inbound journal used for durable deduplication. |
 | `0026_external_conversation_bindings` | 0.81.0-beta | 2026-07-16 | external-conversation-bindings.json | Seed private external conversation to resumeId bindings. |
+| `0027_alice_invest_readiness_evidence` | 0.81.0-beta | 2026-07-17 | alice-invest-readiness-evidence.json | Seed the append-only Alice Invest readiness evidence journal. |
