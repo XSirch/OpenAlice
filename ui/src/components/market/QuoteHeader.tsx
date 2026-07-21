@@ -5,9 +5,10 @@ import { fmtNumber, fmtMoneyShort, fmtPercent, fmtInt } from './format'
 
 interface Props {
   symbol: string
+  provider?: string
 }
 
-export function QuoteHeader({ symbol }: Props) {
+export function QuoteHeader({ symbol, provider: requestedProvider }: Props) {
   const [quote, setQuote] = useState<EquityQuote | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -16,7 +17,7 @@ export function QuoteHeader({ symbol }: Props) {
     let cancelled = false
     const fetch = () => {
       setError(null)
-      marketApi.equity.quote(symbol).then((res) => {
+      marketApi.equity.quote(symbol, requestedProvider).then((res) => {
         if (cancelled) return
         if (res.error) setError(res.error)
         setQuote(res.results?.[0] ?? null)
@@ -28,7 +29,7 @@ export function QuoteHeader({ symbol }: Props) {
     // doesn't show yesterday's last print as if it were live.
     const timer = setInterval(fetch, 60_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [symbol])
+  }, [symbol, requestedProvider])
 
   const name = quote?.name as string | undefined
   const exchange = quote?.exchange as string | undefined

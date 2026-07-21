@@ -270,7 +270,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner Telegram bot and linked private chat are required."
+          "blocked_reason": "An owner Telegram bot and linked private chat are required.",
+          "next_action": "The owner must provide a dedicated bot, bind one private chat, and authorize an isolated end-to-end inbound run."
         },
         {
           "id": "AINV-T117",
@@ -288,7 +289,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner Telegram bot and linked private chat are required."
+          "blocked_reason": "An owner Telegram bot and linked private chat are required.",
+          "next_action": "The owner must authorize a real inbound restart-recovery exercise using the bound private chat."
         },
         {
           "id": "AINV-T118",
@@ -306,7 +308,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner Telegram bot and linked private chat are required."
+          "blocked_reason": "An owner Telegram bot and linked private chat are required.",
+          "next_action": "The owner must authorize two controlled duplicate updates from the bound private chat."
         },
         {
           "id": "AINV-T119",
@@ -325,7 +328,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner Telegram bot and linked private chat are required."
+          "blocked_reason": "An owner Telegram bot and linked private chat are required.",
+          "next_action": "The owner must authorize a controlled retry run and verify one visible reply in the bound private chat."
         }
       ]
     },
@@ -500,7 +504,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner-created Custom experiment key is required; existing credentials will not be inspected or reused."
+          "blocked_reason": "An owner-created Custom experiment key is required; existing credentials will not be inspected or reused.",
+          "next_action": "The owner must create and seal a least-privilege OpenRouter Custom experiment credential."
         },
         {
           "id": "AINV-T304",
@@ -518,12 +523,13 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "Depends on T303 and an owner-authorized non-sensitive real call."
+          "blocked_reason": "Depends on T303 and an owner-authorized non-sensitive real call.",
+          "next_action": "After T303, the owner must authorize one non-sensitive structured-output probe with cost recording."
         },
         {
           "id": "AINV-T305",
           "title": "Validate OpenRouter transient failure and fallback",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T304"
           ],
@@ -535,12 +541,14 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "Its required real OpenRouter probe (AINV-T304) cannot run without the owner-authorized credential.",
+          "next_action": "Complete AINV-T303 and AINV-T304, then rerun the existing transient/fallback tests against the recorded probe contract."
         },
         {
           "id": "AINV-T306",
           "title": "Validate OpenRouter tokens, cost, and redaction",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T304"
           ],
@@ -552,7 +560,9 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "Its required token/cost evidence depends on the owner-authorized real OpenRouter probe (AINV-T304).",
+          "next_action": "Complete AINV-T303 and AINV-T304, then record bounded redacted telemetry and the provider cost result."
         }
       ]
     },
@@ -776,7 +786,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "Owner-configured read-only B3 source is required; no credential or real capture is recorded."
+          "blocked_reason": "Owner-configured read-only B3 source is required; no credential or real capture is recorded.",
+          "next_action": "The owner must configure an authorized read-only B3 source and provide a timestamped PETR4/VALE3 capture."
         },
         {
           "id": "AINV-T611",
@@ -816,7 +827,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "A spot read-only owner source with no withdrawal, margin, futures, or leverage is not configured."
+          "blocked_reason": "A spot read-only owner source with no withdrawal, margin, futures, or leverage is not configured.",
+          "next_action": "The owner must configure a spot read-only source with withdrawal, margin, futures, and leverage disabled."
         },
         {
           "id": "AINV-T614",
@@ -834,7 +846,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "Depends on T613 and observed capture from the owner-configured source."
+          "blocked_reason": "Depends on T613 and observed capture from the owner-configured source.",
+          "next_action": "After T613, collect timestamp, bid, ask, volume, reconnect, and rate-limit evidence from the real source."
         },
         {
           "id": "AINV-T615",
@@ -852,7 +865,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "Depends on temporal execution against the real owner-configured spot source."
+          "blocked_reason": "Depends on temporal execution against the real owner-configured spot source.",
+          "next_action": "After T613, run a bounded observed period and retain redacted freshness and outage evidence."
         },
         {
           "id": "AINV-T612",
@@ -1104,7 +1118,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "Requires a real read-only B3 intraday source and an observed period."
+          "blocked_reason": "Requires a real read-only B3 intraday source and an observed period.",
+          "next_action": "After T610B, run the documented B3 shadow period and retain the reproducible ledger report."
         },
         {
           "id": "AINV-T801A",
@@ -1148,12 +1163,13 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "Requires a real read-only crypto source and an observed period."
+          "blocked_reason": "Requires a real read-only crypto source and an observed period.",
+          "next_action": "After T615, run the documented crypto shadow period and retain the reproducible ledger report."
         },
         {
           "id": "AINV-T802",
           "title": "Avaliar evidências do shadow mode B3",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T800B"
           ],
@@ -1168,12 +1184,14 @@
           "validation": [
             "Relatório B3 reproduzível baseado no ledger"
           ],
-          "readiness_impact": "b3_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "b3_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "AINV-T800B requires a real read-only B3 source and an observed shadow period before the ledger can be evaluated.",
+          "next_action": "Complete AINV-T610B and AINV-T800B, then evaluate the resulting reproducible B3 ledger report."
         },
         {
           "id": "AINV-T803",
           "title": "Avaliar evidências do shadow mode cripto",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T801B"
           ],
@@ -1188,7 +1206,9 @@
           "validation": [
             "Relatório cripto reproduzível baseado no ledger"
           ],
-          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "AINV-T801B requires a real read-only crypto source and an observed shadow period before the ledger can be evaluated.",
+          "next_action": "Complete AINV-T613 through AINV-T615 and AINV-T801B, then evaluate the resulting reproducible crypto ledger report."
         },
         {
           "id": "AINV-T804",
@@ -1219,7 +1239,7 @@
         {
           "id": "AINV-T805",
           "title": "Projetar evidência B3 no readiness core",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T802",
             "AINV-T804"
@@ -1234,12 +1254,14 @@
           "validation": [
             "Testes de evidência B3 elegível, stale e fonte delayed"
           ],
-          "readiness_impact": "b3_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "b3_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "The B3 shadow evidence required by AINV-T802 is not available because its real source and temporal run are blocked.",
+          "next_action": "Complete AINV-T802 with a real B3 ledger report, then run the B3-specific readiness evidence tests."
         },
         {
           "id": "AINV-T806",
           "title": "Projetar evidência cripto no readiness core",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T803",
             "AINV-T804"
@@ -1254,12 +1276,14 @@
           "validation": [
             "Testes de evidência cripto elegível, stale e fornecedor indisponível"
           ],
-          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence"
+          "readiness_impact": "crypto_signals: paper_alerts eligible after evidence",
+          "blocked_reason": "The crypto shadow evidence required by AINV-T803 is not available because its real source and temporal run are blocked.",
+          "next_action": "Complete AINV-T803 with a real crypto ledger report, then run the crypto-specific readiness evidence tests."
         },
         {
           "id": "AINV-T807",
           "title": "Persist ReadinessEvidence",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T804"
           ],
@@ -1271,13 +1295,13 @@
             "Persist migrated idempotent evidence with capability, criterion, status, observedAt, source, validationRunId, and optional details"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "ReadinessEvidenceStore restart/idempotency spec and migration 0027 spec passed; npx tsc --noEmit passed"
           ]
         },
         {
           "id": "AINV-T808",
           "title": "Derive readiness from real evidence",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": [
             "AINV-T807",
             "AINV-T802",
@@ -1290,13 +1314,13 @@
             "Derive source, shadow, risk, formatter, ledger, execution-disabled, recovery, and alert state without arbitrary booleans"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Projection specs cover missing, complete, and expired persisted evidence; external shadow evidence remains unavailable"
           ]
         },
         {
           "id": "AINV-T809",
           "title": "Block and timestamp capability changes",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T808"
           ],
@@ -1307,7 +1331,7 @@
             "Require persisted evidence, explicit blockers, and timestamps for every capability promotion"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "readiness projection specs prove explicit missing/expired blockers and evaluated timestamps from persisted evidence"
           ]
         }
       ]
@@ -1394,7 +1418,7 @@
         {
           "id": "AINV-T913",
           "title": "Validate B3 paper flow ledger to Inbox to Connector",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T910",
             "AINV-T805"
@@ -1408,12 +1432,14 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "The B3 readiness evidence prerequisite AINV-T805 is blocked on real source and temporal shadow evidence.",
+          "next_action": "Complete AINV-T805, then exercise the B3 ledger-to-Inbox-to-Connector flow with the capability eligible for paper alerts."
         },
         {
           "id": "AINV-T914",
           "title": "Validate crypto paper flow ledger to Inbox to Connector",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T911",
             "AINV-T806"
@@ -1427,7 +1453,9 @@
           ],
           "validation": [
             "Focused tests and recorded evidence"
-          ]
+          ],
+          "blocked_reason": "The crypto readiness evidence prerequisite AINV-T806 is blocked on real source and temporal shadow evidence.",
+          "next_action": "Complete AINV-T806, then exercise the crypto ledger-to-Inbox-to-Connector flow with the capability eligible for paper alerts."
         },
         {
           "id": "AINV-T915",
@@ -1446,7 +1474,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner Telegram bot and linked private chat are required; no real run is recorded."
+          "blocked_reason": "An owner Telegram bot and linked private chat are required; no real run is recorded.",
+          "next_action": "The owner must authorize delivery of a recorded paper alert to the bound private chat."
         },
         {
           "id": "AINV-T916",
@@ -1464,7 +1493,8 @@
           "validation": [
             "Record real external evidence without secrets"
           ],
-          "blocked_reason": "An owner Telegram bot and controlled outage scenario are required."
+          "blocked_reason": "An owner Telegram bot and controlled outage scenario are required.",
+          "next_action": "The owner must authorize a controlled Telegram outage/recovery scenario with a bound private chat."
         },
         {
           "id": "AINV-T912A",
@@ -1489,7 +1519,7 @@
         {
           "id": "AINV-T912B",
           "title": "Implement monitor target",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912A"
           ],
@@ -1500,13 +1530,13 @@
             "Record an idempotent target transition"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "monitor.spec.ts verifies deterministic target transition and event identity"
           ]
         },
         {
           "id": "AINV-T912C",
           "title": "Implement monitor trailing",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912B"
           ],
@@ -1517,13 +1547,13 @@
             "Record trailing transition without changing original signal"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "monitor.spec.ts verifies activation, monotonic trailing protection, and original-candidate preservation"
           ]
         },
         {
           "id": "AINV-T912D",
           "title": "Persist lifecycle transitions in ledger",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912C"
           ],
@@ -1534,13 +1564,13 @@
             "Persist target, stop, trailing, expiry, and invalidation transitions"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "monitor, monitor-runner, monitor-delivery-store, and ledger focused specs passed (11 tests)"
           ]
         },
         {
           "id": "AINV-T912E",
           "title": "Integrate monitor with scheduler and Guardian",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912D"
           ],
@@ -1552,13 +1582,13 @@
             "Run supervised recoverable ticks without an agent loop"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "AliceInvestMonitorService is started/stopped by Alice under Guardian supervision; focused service spec proves the default fail-closed tick"
           ]
         },
         {
           "id": "AINV-T912F",
           "title": "Deliver monitor updates through Inbox",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T912E"
           ],
@@ -1570,13 +1600,13 @@
             "Deliver only relevant changes after ledger persistence"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "monitor-runner spec proves ledger persistence before Inbox, delivery dedupe, and retry after a 503"
           ]
         },
         {
           "id": "AINV-T912G",
           "title": "Measure gaps and crossings between ticks",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": [
             "AINV-T912E"
           ],
@@ -1715,7 +1745,7 @@
         {
           "id": "AINV-T1005",
           "title": "Expose evidence and blockers in operational API",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T807"
           ],
@@ -1726,13 +1756,13 @@
             "Return only sanitized evidence and capability blockers"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "alice-invest route spec proves sanitization of persisted readiness evidence; npx tsc --noEmit passed"
           ]
         },
         {
           "id": "AINV-T1006",
           "title": "Expose evidence and blockers in operational UI",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T1005"
           ],
@@ -1743,13 +1773,13 @@
             "Distinguish config snapshot from operational evidence"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "AliceInvestPage render specs cover evidence/config separation, fail-closed error state, and execution-disabled surface; cd ui && npx tsc -b passed"
           ]
         },
         {
           "id": "AINV-T1007",
           "title": "Validate real operational readiness",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T809",
             "AINV-T1006"
@@ -1761,7 +1791,7 @@
             "Confirm UI/API reflect persisted evidence and no unsupported promotion"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Route, readiness-projection, and UI render specs passed; persisted evidence remains insufficient for any unsupported promotion"
           ]
         }
       ]
@@ -1773,7 +1803,7 @@
         {
           "id": "AINV-T1100",
           "title": "Add Alice Invest validation CI",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": [
             "AINV-T1007"
           ],
@@ -1785,13 +1815,13 @@
             "Run the defined Alice Invest matrix and publish results"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Workflow YAML parsed locally; GitHub Actions execution is still required"
           ]
         },
         {
           "id": "AINV-T1101",
           "title": "Fix full validation-suite failures",
-          "status": "pending",
+          "status": "validated",
           "depends_on": [
             "AINV-T1100"
           ],
@@ -1805,13 +1835,13 @@
             "Resolve real failures without masking checks"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "pnpm test passed: 354 files passed, 2 skipped; 3,195 tests passed, 22 skipped"
           ]
         },
         {
           "id": "AINV-T1102",
           "title": "Publish CI validation summary",
-          "status": "pending",
+          "status": "blocked",
           "depends_on": [
             "AINV-T1101"
           ],
@@ -1823,8 +1853,10 @@
             "Green workflow on its corresponding commit and command/result summary"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
-          ]
+            "Monitor telemetry store and service specs cover persisted idempotent gap facts and stale input; crossing/outage paths are covered by the deterministic service implementation"
+          ],
+          "blocked_reason": "Publication requires a green GitHub Actions workflow for the corresponding commit, which cannot be produced locally.",
+          "next_action": "Open the published branch as a master PR and wait for the Alice Invest validation workflow to complete green."
         },
         {
           "id": "AINV-T1103",
@@ -1869,8 +1901,9 @@
           "depends_on": ["AINV-T1106"],
           "scope": [".github/workflows", "docs/alice-invest-validation-report.md"],
           "acceptance_criteria": ["CI correspondente ao commit de correção termina verde"],
-          "validation": ["Aguardando PR de promoção e execução do GitHub Actions"],
-          "blocked_reason": "A branch dev está publicada, mas ainda não existe PR nem workflow de validação executado e verde para o commit atual."
+          "validation": ["PR #1 de dev para master foi mergeado; aguardando workflow de validação verde para o commit atual da master"],
+          "blocked_reason": "O PR de dev para master foi mergeado, mas ainda não existe workflow de validação configurado e executado com sucesso para o commit atual da master.",
+          "next_action": "Publish this branch, open the master PR, and obtain a green Alice Invest validation workflow for its merge commit."
         }
       ]
     }

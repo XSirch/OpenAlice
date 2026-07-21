@@ -6,6 +6,10 @@ Status: blocked on an owner-configured, read-only B3 source. No configured
 credential was inspected or repurposed for this work. Therefore B3 remains
 `research_only` and intraday signals are disabled.
 
+The optional `brapi` integration is available for delayed B3 research data
+(quotes and daily bars). It is deliberately not evidence for this gate: its
+configured cadence is not a realtime market-data entitlement.
+
 The reusable evidence evaluator requires fresh, timestamped OHLCV observations
 for PETR4, VALE3 and BOVA11/IBOV, plus successful reconnection evidence. It
 classifies the result from observed capability and freshness; missing proof,

@@ -26,3 +26,23 @@ Disable the relevant switch on stale data, provider error or suspicious output.
 Inspect the append-only signal ledger, Inbox provenance and Connector IO journal.
 Guardian restart resumes scheduled work from markers; duplicate lifecycle events
 are idempotent. Back up OPENALICE_HOME using documented atomic file copies.
+
+## Active signal monitor
+
+The monitor is a bounded supervised tick, never an agent loop. Alice starts and
+stops it inside the Guardian-supervised process tree. A tick first
+persists its lifecycle event, then attempts Inbox delivery only for a
+`paper_alerts` capability with notifications enabled. Its delivery receipt is
+durable, so a later tick can retry a transient Inbox failure without adding a
+second lifecycle event. B3 observes the configured market-open gate; crypto is
+24/7. Stale or absent source timestamps fail closed. For a candle that crosses
+both stop and target, the deterministic policy attributes the stop first.
+
+The monitor writes a bounded telemetry journal for missed tick gaps, terminal
+crossings, stale inputs and internal outages. It contains only capability,
+signal correlation and short operational facts; it never stores source payloads
+or credentials. These records are operational diagnostics, not readiness proof.
+
+Do not enable monitoring or alerts as evidence. Guardian integration and real
+source input still require the pending backlog work; temporal shadow evidence
+is required before any readiness promotion.

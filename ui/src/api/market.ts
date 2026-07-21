@@ -53,17 +53,18 @@ export type FinancialStatementRow = Record<string, unknown>
 /** First-party per-symbol endpoints (same {results, provider} envelope). */
 function equityEndpoint<T>(
   path: string,
-  params: Record<string, string | number> = {},
+  params: Record<string, string | number | undefined> = {},
 ): Promise<OBBjectResponse<T>> {
   const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) qs.set(k, String(v))
+  for (const [k, v] of Object.entries(params)) if (v !== undefined) qs.set(k, String(v))
   return fetchJson(`/api/market/equity/${path}?${qs}`)
 }
 
 /** Quote is realtime-family (operational identity, like K-lines) — it stays
  *  on the legacy passthrough until the bar-layer/UTA quote arc takes it. */
-function quoteEndpoint<T>(symbol: string): Promise<OBBjectResponse<T>> {
+function quoteEndpoint<T>(symbol: string, provider?: string): Promise<OBBjectResponse<T>> {
   const qs = new URLSearchParams({ symbol })
+  if (provider) qs.set('provider', provider)
   return fetchJson(`/api/market-data-v1/equity/price/quote?${qs}`)
 }
 
@@ -128,9 +129,9 @@ export const marketApi = {
 
   /** Equity-specific endpoints — Alice infers provider from config, no ?provider=. */
   equity: {
-    profile: (symbol: string) => equityEndpoint<EquityProfile>('profile', { symbol }),
-    quote: (symbol: string) => quoteEndpoint<EquityQuote>(symbol),
-    metrics: (symbol: string) => equityEndpoint<KeyMetrics>('metrics', { symbol }),
+    profile: (symbol: string, provider?: string) => equityEndpoint<EquityProfile>('profile', { symbol, provider }),
+    quote: (symbol: string, provider?: string) => quoteEndpoint<EquityQuote>(symbol, provider),
+    metrics: (symbol: string, provider?: string) => equityEndpoint<KeyMetrics>('metrics', { symbol, provider }),
     ratios: (symbol: string) => equityEndpoint<FinancialRatios>('ratios', { symbol }),
     balance: (symbol: string) => equityEndpoint<FinancialStatementRow>('balance', { symbol }),
     income: (symbol: string) => equityEndpoint<FinancialStatementRow>('income', { symbol }),

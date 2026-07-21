@@ -51,6 +51,7 @@ import { createIndexTools } from './tool/indices.js'
 import { createEconomyTools } from './tool/economy.js'
 import { SessionStore } from './core/session.js'
 import { createInboxStore } from './core/inbox-store.js'
+import { AliceInvestMonitorService } from './domain/alice-invest/signals/monitor-service.js'
 import { startInboxConnectorBridge } from './services/connector-client/index.js'
 import { ToolCenter } from './core/tool-center.js'
 import { WorkspaceToolCenter } from './core/workspace-tool-center.js'
@@ -296,6 +297,8 @@ async function main() {
   // ==================== Inbox store ====================
 
   const inboxStore = createInboxStore()
+  const aliceInvestMonitor = new AliceInvestMonitorService(inboxStore)
+  aliceInvestMonitor.start()
 
   // ==================== Entity store (durable cross-workspace tracked-index) ====================
 
@@ -420,6 +423,7 @@ async function main() {
   const shutdown = async () => {
     stopped = true
     newsCollector?.stop()
+    aliceInvestMonitor.stop()
     for (const plugin of [...corePlugins, ...optionalPlugins.values()]) {
       await plugin.stop()
     }

@@ -1,0 +1,83 @@
+name: Alice Invest Validation
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: alice-invest-validation-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx tsc --noEmit
+      - run: cd ui && npx tsc -b
+      - run: pnpm test
+      - run: pnpm test:connector-replay
+      - run: pnpm test:connector-service
+      - run: pnpm test:e2e
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@v3
+      - name: Run Docker smoke
+        env:
+          OPENALICE_DOCKER_SMOKE_LOG_FILE: artifacts/alice-invest-docker-smoke.log
+        run: pnpm docker:smoke
+      - name: Upload Docker diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alice-invest-docker-smoke
+          path: artifacts/alice-invest-docker-smoke.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  summary:
+    if: always()
+    needs: [checks, docker-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish validation summary
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          DOCKER_SMOKE: ${{ needs.docker-smoke.result }}
+        run: |
+          {
+            echo "## Alice Invest validation"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- checks: \`${CHECKS}\`"
+            echo "- docker smoke: \`${DOCKER_SMOKE}\`"
+            echo "- Readiness: global=not_ready; fixed_income=research_only; b3_signals=research_only; crypto_signals=research_only"
+            echo "- Financial execution: disabled (\`execution_enabled=false\`)"
+            echo "- External blockers: owner Telegram, owner OpenRouter key, read-only B3/crypto sources, temporal shadow evidence"
+          } >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
