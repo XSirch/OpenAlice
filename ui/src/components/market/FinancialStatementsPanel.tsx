@@ -107,7 +107,7 @@ export function FinancialStatementsPanel({ symbol, provider }: Props) {
   const info = [
     entry?.provider ? `Source: ${entry.provider}` : 'Source: (unknown)',
     `Endpoint: /api/market/equity/${tab === 'cashflow' ? 'cash' : tab}`,
-    'Annual periods, most recent first. Values scaled (K / M / B / T).',
+    'Annual periods, most recent first. Each column shows its reporting-date base. Values scaled (K / M / B / T).',
     'Blank cells are line items this provider doesn\u2019t report for the current period.',
   ].join('\n')
 
@@ -203,5 +203,10 @@ function periodLabel(row: FinancialStatementRow): string {
   const period = row.fiscal_period as string | undefined
   const ending = row.period_ending as string | undefined
   const year = ending?.slice(0, 4) ?? ''
-  return `${period ?? 'FY'} ${year}`.trim()
+  return [`${period ?? 'FY'} ${year}`.trim(), formatReportingDate(ending)].filter(Boolean).join(' · ')
+}
+
+function formatReportingDate(value: string | undefined): string {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : ''
 }

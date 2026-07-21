@@ -13,7 +13,23 @@ export class BrapiKeyMetricsFetcher extends Fetcher {
     return BrapiKeyMetricsQueryParamsSchema.parse(params)
   }
   static override async extractData(query: BrapiKeyMetricsQueryParams, credentials: Record<string, string> | null) {
-    return stockData<Record<string, unknown>>('statistics?mode=current', query.symbol.replace(/\.SA$/i, ''), credentials?.brapi_api_key)
+    const symbol = query.symbol.replace(/\.SA$/i, '')
+    const [statistics, financialData] = await Promise.allSettled([
+      stockData<Record<string, unknown>>('statistics?mode=current', symbol, credentials?.brapi_api_key),
+      stockData<Record<string, unknown>>('financial-data?mode=current', symbol, credentials?.brapi_api_key),
+    ])
+    const rows = new Map<string, Record<string, unknown>>()
+    for (const result of [statistics, financialData]) {
+      if (result.status !== 'fulfilled') continue
+      for (const row of result.value) {
+        rows.set(row.symbol, { ...rows.get(row.symbol), ...row.data })
+      }
+    }
+    if (rows.size > 0) return [...rows.entries()].map(([resolvedSymbol, data]) => ({ symbol: resolvedSymbol, data }))
+
+    const failure = [statistics, financialData].find((result) => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
+    return []
   }
   static override transformData(_query: BrapiKeyMetricsQueryParams, rows: Array<{ symbol: string; data: Record<string, unknown> }>) {
     if (!rows.length) throw new EmptyDataError('No brapi key metrics returned. Your brapi plan may not include statistics.')
@@ -31,8 +47,14 @@ export class BrapiKeyMetricsFetcher extends Fetcher {
       enterprise_value: data['enterpriseValue'] ?? null,
       dividend_yield: data['dividendYield'] ?? data['yield'] ?? null,
       net_profit_margin: data['profitMargins'] ?? null,
+      return_on_equity: data['returnOnEquity'] ?? null,
+      return_on_assets: data['returnOnAssets'] ?? null,
+      gross_profit_margin: data['grossMargins'] ?? null,
+      operating_profit_margin: data['operatingMargins'] ?? null,
+      current_ratio: data['currentRatio'] ?? null,
+      debt_to_equity: data['debtToEquity'] ?? null,
       beta: data['beta'] ?? null,
-      currency: 'BRL',
+      currency: data['financialCurrency'] ?? 'BRL',
     }))
   }
 }

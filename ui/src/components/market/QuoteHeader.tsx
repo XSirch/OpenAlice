@@ -36,6 +36,7 @@ export function QuoteHeader({ symbol, provider: requestedProvider }: Props) {
   const lastPrice = quote?.last_price as number | undefined
   const change = quote?.change as number | undefined
   const changePct = quote?.change_percent as number | undefined
+  const lastTimestamp = quote?.last_timestamp as string | undefined
   const up = (change ?? 0) >= 0
   // First-load: no quote yet and no error → show skeletons in place of the
   // (otherwise dash-filled) value slots. `quote` stays set across the 60s
@@ -86,6 +87,12 @@ export function QuoteHeader({ symbol, provider: requestedProvider }: Props) {
         </div>
       </div>
 
+      {lastTimestamp && (
+        <div className="self-end pb-0.5 text-[11px] text-text-muted whitespace-nowrap" title={lastTimestamp}>
+          Base da cotação: {formatQuoteTimestamp(lastTimestamp)}
+        </div>
+      )}
+
       {/* Bid / ask intentionally omitted — they're real-time L1 quote data
           that belongs at the execution layer (UTA), not in analysis. */}
       <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-1 text-[11px]">
@@ -104,6 +111,15 @@ export function QuoteHeader({ symbol, provider: requestedProvider }: Props) {
       {error && <div className="w-full text-[11px] text-red">{error}</div>}
     </div>
   )
+}
+
+function formatQuoteTimestamp(value: string): string {
+  const timestamp = new Date(value)
+  if (Number.isNaN(timestamp.getTime())) return value
+  return timestamp.toLocaleString([], {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 function Field({ label, value, loading }: { label: string; value: string; loading?: boolean }) {

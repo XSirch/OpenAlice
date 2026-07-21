@@ -42,7 +42,7 @@ describe('brapi provider', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain('endDate=2026-07-20')
   })
 
-  it('maps the Brazilian profile and statistics endpoints into the shared models', async () => {
+  it('maps the Brazilian profile, statistics, and financial data endpoints into the shared models', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: {
         website: 'https://petrobras.com.br', sector: 'Energia', industry: 'Petróleo e Gás Integrado',
@@ -51,6 +51,10 @@ describe('brapi provider', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: {
         marketCap: 527149170000, trailingPE: 5.48, priceToBook: 1.18, enterpriseValue: 1156526200000,
       } }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: {
+        returnOnEquity: 0.21, returnOnAssets: 0.08, grossMargins: 0.34, operatingMargins: 0.18,
+        currentRatio: 1.4, debtToEquity: 0.7, financialCurrency: 'BRL',
+      } }] }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const executor = createExecutor()
 
@@ -58,8 +62,13 @@ describe('brapi provider', () => {
     const metrics = await executor.execute('brapi', 'KeyMetrics', { symbol: 'PETR4' }) as Array<Record<string, unknown>>
 
     expect(profile[0]).toMatchObject({ symbol: 'PETR4', sector: 'Energia', employees: 41778 })
-    expect(metrics[0]).toMatchObject({ symbol: 'PETR4', market_cap: 527149170000, price_to_earnings: 5.48 })
+    expect(metrics[0]).toMatchObject({
+      symbol: 'PETR4', market_cap: 527149170000, price_to_earnings: 5.48,
+      return_on_equity: 0.21, return_on_assets: 0.08, gross_profit_margin: 0.34,
+      operating_profit_margin: 0.18, current_ratio: 1.4, debt_to_equity: 0.7,
+    })
     expect(fetchMock.mock.calls[1]?.[0]).toContain('statistics?mode=current&symbols=PETR4')
+    expect(fetchMock.mock.calls[2]?.[0]).toContain('financial-data?mode=current&symbols=PETR4')
   })
 
   it('maps dividends and annual financial statements into the shared research contracts', async () => {
