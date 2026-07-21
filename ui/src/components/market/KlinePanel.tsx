@@ -13,11 +13,11 @@ import {
 import { barsApi, type AssetClass, type HistoricalBar, type BarSourceCandidate, type BarMeta } from '../../api/market'
 import { Skeleton } from '../StateViews'
 
-type Interval = '1m' | '5m' | '1h' | '1d'
-type Timeframe = '1D' | '5D' | '1M' | '3M' | '1Y' | '5Y' | 'All'
+type Interval = '1m' | '2m' | '5m' | '15m' | '30m' | '1h' | '90m' | '1d' | '5d' | '1wk' | '1mo' | '3mo'
+type Timeframe = '1D' | '5D' | '7D' | '1M' | '3M' | '1Y' | '5Y' | 'All'
 
-const INTERVALS: Interval[] = ['1m', '5m', '1h', '1d']
-const TIMEFRAMES: Timeframe[] = ['1D', '5D', '1M', '3M', '1Y', '5Y', 'All']
+const INTERVALS: Interval[] = ['1m', '2m', '5m', '15m', '30m', '1h', '90m', '1d', '5d', '1wk', '1mo', '3mo']
+const TIMEFRAMES: Timeframe[] = ['1D', '5D', '7D', '1M', '3M', '1Y', '5Y', 'All']
 const DEFAULT_INTERVAL: Interval = '1d'
 const DEFAULT_RANGE: Timeframe = '1Y'
 
@@ -35,6 +35,7 @@ function daysForTimeframe(tf: Timeframe): number | null {
   switch (tf) {
     case '1D': return 1
     case '5D': return 5
+    case '7D': return 7
     case '1M': return 30
     case '3M': return 90
     case '1Y': return 365
@@ -93,6 +94,8 @@ export function KlinePanel({ selection }: Props) {
   const [selectedBarId, setSelectedBarId] = useState<string | null>(sourceParam)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selectedSourceId = selectedBarId?.split('|')[0] ?? meta?.sourceId
+  const brapiIntraday = selectedSourceId === 'brapi' && INTRADAY.has(interval)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -177,7 +180,10 @@ export function KlinePanel({ selection }: Props) {
     const run = (isInitial: boolean) => {
       if (isInitial) setLoading(true)
       setError(null)
-      const days = daysForTimeframe(tf)
+      const requestedDays = daysForTimeframe(tf)
+      // BRAPI makes all intraday candle widths available, but its upstream
+      // history endpoint retains at most seven days of them.
+      const days = brapiIntraday && (requestedDays == null || requestedDays > 7) ? 7 : requestedDays
       const params: Parameters<typeof barsApi.bars>[0] = { interval }
       // A vendor barId alone is ambiguous across the provider-specific client
       // families. Keep the page's asset class when the source was selected so
@@ -212,7 +218,7 @@ export function KlinePanel({ selection }: Props) {
     const pollMs = INTRADAY.has(interval) ? 60_000 : 300_000
     const timer = setInterval(() => run(false), pollMs)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [selection, selectedBarId, interval, tf])
+  }, [selection, selectedBarId, interval, tf, brapiIntraday])
 
   // Push bars into chart and fit.
   useEffect(() => {
@@ -272,6 +278,11 @@ export function KlinePanel({ selection }: Props) {
           {bars && bars.length > 0 && (
             <span className="text-[11px] text-text-muted/60 truncate">
               {bars.length} bars · {bars[0].date} → {bars[bars.length - 1].date}
+            </span>
+          )}
+          {brapiIntraday && (
+            <span className="text-[11px] text-amber-300/80 truncate" title="BRAPI fornece candles intraday para, no máximo, os últimos sete dias.">
+              BRAPI intraday: máximo de 7 dias
             </span>
           )}
         </div>
