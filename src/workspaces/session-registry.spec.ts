@@ -23,7 +23,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'sr-'))
 })
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true })
+  await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
 })
 
 // Petname wsId so bootFixup proves it scans the new human-readable file shape.
@@ -45,6 +45,18 @@ function rec(over: Partial<SessionRecord> = {}): SessionRecord {
 }
 
 describe('SessionRegistry persistence', () => {
+  it('serializes concurrent writes for one workspace', async () => {
+    const reg = await SessionRegistry.load(root, noopLogger)
+    await Promise.all(Array.from({ length: 12 }, (_, index) => reg.create(rec({
+      id: `claude-calm-amber-river-${index}`,
+      resumeId: `resume-calm-amber-river-${index}`,
+      name: `c${index}`,
+    }))))
+    const reloaded = await SessionRegistry.load(root, noopLogger)
+    await reloaded.ensureLoaded(WS)
+    expect(reloaded.listFor(WS)).toHaveLength(12)
+  })
+
   // Regression: parseRecords rebuilt each record field-by-field and dropped
   // `title`, so the chat-sidebar title reverted to the `c1` name on every
   // server restart / registry reload even though flush had written it to disk.

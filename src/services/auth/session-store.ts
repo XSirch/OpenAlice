@@ -47,7 +47,15 @@ interface SessionsFile {
 // validate-and-touch path; an in-memory mirror keeps us off disk for the
 // common case. The on-disk file is the source of truth across restarts.
 let cache: SessionsFile | null = null
-let writePromise: Promise<void> | null = null
+let writeChain: Promise<void> = Promise.resolve()
+let mutationChain: Promise<void> = Promise.resolve()
+
+/** Serialize cache load/mutate/flush as one transaction. */
+function mutate<T>(operation: () => Promise<T>): Promise<T> {
+  const next = mutationChain.catch(() => undefined).then(operation)
+  mutationChain = next.then(() => undefined, () => undefined)
+  return next
+}
 
 async function loadCache(): Promise<SessionsFile> {
   if (cache) return cache
@@ -67,22 +75,21 @@ async function loadCache(): Promise<SessionsFile> {
 
 async function flush(): Promise<void> {
   if (!cache) return
-  // Coalesce concurrent writes — last writer wins.
-  if (writePromise) {
-    await writePromise
-  }
   const snapshot: SessionsFile = { version: 1, sessions: [...cache.sessions] }
-  writePromise = (async () => {
-    const path = SESSIONS_FILE()
+  const path = SESSIONS_FILE()
+  // Every writer uses the same `${path}.tmp`, so merely awaiting a current
+  // write is insufficient: multiple waiters can otherwise resume together and
+  // collide on Windows. Chain the complete write instead.
+  const next = writeChain.catch(() => undefined).then(async () => {
     await mkdir(dirname(path), { recursive: true })
     const tmp = `${path}.tmp`
     const data = JSON.stringify(snapshot, null, 2) + '\n'
     await writeFile(tmp, data, { mode: 0o600 })
     await rename(tmp, path)
     await chmod(path, 0o600).catch(() => { /* noop */ })
-  })()
-  await writePromise
-  writePromise = null
+  })
+  writeChain = next
+  await next
 }
 
 /** Create a new session, persist, return the SID cookie value. */
@@ -91,20 +98,22 @@ export async function createSession(opts: {
   ip?: string
   ttlMs?: number
 } = {}): Promise<SessionRecord> {
-  const file = await loadCache()
-  const now = new Date()
-  const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS
-  const record: SessionRecord = {
-    sid: randomBytes(SID_BYTES).toString('base64url'),
-    createdAt: now.toISOString(),
-    lastSeenAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
-    userAgent: opts.userAgent,
-    ip: opts.ip,
-  }
-  file.sessions.push(record)
-  await flush()
-  return record
+  return mutate(async () => {
+    const file = await loadCache()
+    const now = new Date()
+    const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS
+    const record: SessionRecord = {
+      sid: randomBytes(SID_BYTES).toString('base64url'),
+      createdAt: now.toISOString(),
+      lastSeenAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+      userAgent: opts.userAgent,
+      ip: opts.ip,
+    }
+    file.sessions.push(record)
+    await flush()
+    return record
+  })
 }
 
 /**
@@ -120,46 +129,51 @@ export async function createSession(opts: {
 const TOUCH_THROTTLE_MS = 30_000
 
 export async function validateAndTouch(sid: string, opts: { ttlMs?: number } = {}): Promise<SessionRecord | null> {
-  const file = await loadCache()
-  const idx = file.sessions.findIndex((s) => s.sid === sid)
-  if (idx < 0) return null
-  const sess = file.sessions[idx]
-  const now = new Date()
-  if (new Date(sess.expiresAt).getTime() < now.getTime()) {
-    file.sessions.splice(idx, 1)
-    await flush()
-    return null
-  }
-  const lastSeen = new Date(sess.lastSeenAt).getTime()
-  const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS
-  if (now.getTime() - lastSeen > TOUCH_THROTTLE_MS) {
-    sess.lastSeenAt = now.toISOString()
-    sess.expiresAt = new Date(now.getTime() + ttlMs).toISOString()
-    await flush()
-  }
-  return sess
+  return mutate(async () => {
+    const file = await loadCache()
+    const idx = file.sessions.findIndex((s) => s.sid === sid)
+    if (idx < 0) return null
+    const sess = file.sessions[idx]
+    const now = new Date()
+    if (new Date(sess.expiresAt).getTime() < now.getTime()) {
+      file.sessions.splice(idx, 1)
+      await flush()
+      return null
+    }
+    const lastSeen = new Date(sess.lastSeenAt).getTime()
+    const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS
+    if (now.getTime() - lastSeen > TOUCH_THROTTLE_MS) {
+      sess.lastSeenAt = now.toISOString()
+      sess.expiresAt = new Date(now.getTime() + ttlMs).toISOString()
+      await flush()
+    }
+    return sess
+  })
 }
 
 /** Forget a single session — typical "logout" path. Idempotent. */
 export async function revokeSession(sid: string): Promise<void> {
-  const file = await loadCache()
-  const before = file.sessions.length
-  file.sessions = file.sessions.filter((s) => s.sid !== sid)
-  if (file.sessions.length !== before) {
-    await flush()
-  }
+  await mutate(async () => {
+    const file = await loadCache()
+    const before = file.sessions.length
+    file.sessions = file.sessions.filter((s) => s.sid !== sid)
+    if (file.sessions.length !== before) await flush()
+  })
 }
 
 /** Wipe every session. Used on token rotation + "log out everywhere" UI. */
 export async function revokeAllSessions(): Promise<void> {
-  const file = await loadCache()
-  if (file.sessions.length === 0) return
-  file.sessions = []
-  await flush()
+  await mutate(async () => {
+    const file = await loadCache()
+    if (file.sessions.length === 0) return
+    file.sessions = []
+    await flush()
+  })
 }
 
 /** Read-only inspection — list current sessions (for Settings UI). */
 export async function listSessions(): Promise<SessionRecord[]> {
+  await mutationChain
   const file = await loadCache()
   return [...file.sessions]
 }
@@ -170,7 +184,10 @@ export async function listSessions(): Promise<SessionRecord[]> {
  * goes through the file. Does NOT remove the file itself.
  */
 export async function _reset(): Promise<void> {
-  cache = null
+  await mutate(async () => {
+    await writeChain.catch(() => undefined)
+    cache = null
+  })
 }
 
 /**
@@ -179,5 +196,8 @@ export async function _reset(): Promise<void> {
  * sessions.json + restart" achieves the same effect at the OS level.
  */
 export async function _unlinkFile(): Promise<void> {
-  await unlink(SESSIONS_FILE()).catch(() => { /* fine */ })
+  await mutate(async () => {
+    await writeChain.catch(() => undefined)
+    await unlink(SESSIONS_FILE()).catch(() => { /* fine */ })
+  })
 }
