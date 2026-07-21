@@ -69,13 +69,45 @@ export async function historical(
   return unpack(response)
 }
 
-export async function stockData<T>(path: string, symbol: string, apiKey?: string): Promise<Array<{ symbol: string; data: T }>> {
+export async function stockData<T>(
+  path: string,
+  symbol: string,
+  apiKey?: string,
+  parameters: Record<string, string | undefined> = {},
+): Promise<Array<{ symbol: string; data: T }>> {
   const url = new URL(`${BRAPI_STOCKS_URL}/${path}`)
   url.searchParams.set('symbols', symbol)
+  for (const [key, value] of Object.entries(parameters)) {
+    if (value) url.searchParams.set(key, value)
+  }
   const response = await amakeRequest<BrapiDataResponse<T>>(url.toString(), { headers: headers(apiKey) })
   return (response.results ?? []).flatMap((result) => result.data === undefined
     ? []
     : [{ symbol: result.symbol ?? symbol, data: result.data }])
+}
+
+export async function stockStatements(
+  path: string,
+  symbol: string,
+  period: 'annual' | 'quarter',
+  apiKey?: string,
+): Promise<Array<{ symbol: string; data: Record<string, unknown> }>> {
+  const rows = await stockData<Record<string, unknown>[]>(path, symbol, apiKey, {
+    period: period === 'quarter' ? 'quarterly' : 'annual',
+  })
+  return rows.flatMap(({ symbol: resolvedSymbol, data }) => data.map((row) => ({ symbol: resolvedSymbol, data: row })))
+}
+
+export function normalizeStatementRow(data: Record<string, unknown>, aliases: Record<string, string>): Record<string, unknown> {
+  const endDate = typeof data['endDate'] === 'string' ? data['endDate'] : null
+  const type = data['type'] === 'quarterly' ? 'Q' : 'FY'
+  return {
+    ...data,
+    period_ending: endDate ?? '',
+    fiscal_period: type,
+    fiscal_year: endDate ? Number.parseInt(endDate.slice(0, 4), 10) : null,
+    ...Object.fromEntries(Object.entries(aliases).map(([target, source]) => [target, data[source] ?? null])),
+  }
 }
 
 export function isoDate(value: number | string | undefined): string | null {

@@ -133,9 +133,9 @@ export const marketApi = {
     quote: (symbol: string, provider?: string) => quoteEndpoint<EquityQuote>(symbol, provider),
     metrics: (symbol: string, provider?: string) => equityEndpoint<KeyMetrics>('metrics', { symbol, provider }),
     ratios: (symbol: string) => equityEndpoint<FinancialRatios>('ratios', { symbol }),
-    balance: (symbol: string) => equityEndpoint<FinancialStatementRow>('balance', { symbol }),
-    income: (symbol: string) => equityEndpoint<FinancialStatementRow>('income', { symbol }),
-    cashflow: (symbol: string) => equityEndpoint<FinancialStatementRow>('cash', { symbol }),
+    balance: (symbol: string, provider?: string) => equityEndpoint<FinancialStatementRow>('balance', { symbol, provider }),
+    income: (symbol: string, provider?: string) => equityEndpoint<FinancialStatementRow>('income', { symbol, provider }),
+    cashflow: (symbol: string, provider?: string) => equityEndpoint<FinancialStatementRow>('cash', { symbol, provider }),
   },
 }
 
