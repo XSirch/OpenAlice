@@ -40,6 +40,24 @@ describe('brapi provider', () => {
     expect(result.map((row) => row.date)).toEqual(['2026-07-17', '2026-07-20'])
     expect(fetchMock.mock.calls[0]?.[0]).toContain('startDate=2026-07-01')
     expect(fetchMock.mock.calls[0]?.[0]).toContain('endDate=2026-07-20')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('interval=1d')
+  })
+
+  it('preserves intraday timestamps and caps BRAPI intraday windows at seven days', async () => {
+    const payload = { results: [{ symbol: 'PETR4', data: { historicalDataPrice: [
+      { date: 1784516400, open: 41.2, high: 41.44, low: 40.47, close: 41.33, volume: 22534600 },
+    ] } }] }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createExecutor().execute('brapi', 'EquityHistorical', {
+      symbol: 'PETR4', interval: '5m', start_date: '2026-07-01', end_date: '2026-07-20',
+    }) as Array<Record<string, unknown>>
+
+    expect(result[0]?.date).toBe('2026-07-20 03:00:00')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('interval=5m')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('startDate=2026-07-13')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('endDate=2026-07-20')
   })
 
   it('maps the Brazilian profile, statistics, and financial data endpoints into the shared models', async () => {

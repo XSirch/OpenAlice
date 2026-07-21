@@ -30,6 +30,14 @@ export interface BrapiHistoricalBar {
   volume?: number | null
 }
 
+export const BRAPI_INTRADAY_INTERVALS = new Set([
+  '1m', '2m', '5m', '15m', '30m', '60m', '1h', '90m',
+])
+
+export function isBrapiIntradayInterval(interval: string): boolean {
+  return BRAPI_INTRADAY_INTERVALS.has(interval)
+}
+
 interface BrapiResponse {
   results?: Array<{ symbol?: string; data?: BrapiQuote }>
 }
@@ -56,17 +64,41 @@ export async function quote(symbols: string[], apiKey?: string): Promise<BrapiQu
 
 export async function historical(
   symbol: string,
-  options: { startDate?: string | null; endDate?: string | null } = {},
+  options: { startDate?: string | null; endDate?: string | null; interval?: string } = {},
   apiKey?: string,
 ): Promise<BrapiQuote[]> {
   const url = new URL(`${BRAPI_STOCKS_URL}/historical`)
   url.searchParams.set('symbols', symbol)
-  url.searchParams.set('interval', '1d')
-  if (options.startDate) url.searchParams.set('startDate', options.startDate)
-  if (options.endDate) url.searchParams.set('endDate', options.endDate)
-  if (!options.startDate && !options.endDate) url.searchParams.set('range', '1y')
+  const interval = options.interval ?? '1d'
+  url.searchParams.set('interval', interval)
+  const window = clampBrapiIntradayWindow(options, interval)
+  if (window.startDate) url.searchParams.set('startDate', window.startDate)
+  if (window.endDate) url.searchParams.set('endDate', window.endDate)
+  if (!window.startDate && !window.endDate) url.searchParams.set('range', isBrapiIntradayInterval(interval) ? '7d' : '1y')
   const response = await amakeRequest<BrapiResponse>(url.toString(), { headers: headers(apiKey) })
   return unpack(response)
+}
+
+/** BRAPI serves intraday candles for a maximum seven-day window. Clamp here so
+ * CLI/API callers get the same safe request as the chart, rather than a 400 or
+ * an unexpected daily fallback from the upstream service. */
+function clampBrapiIntradayWindow(
+  options: { startDate?: string | null; endDate?: string | null },
+  interval: string,
+): { startDate?: string | null; endDate?: string | null } {
+  if (!isBrapiIntradayInterval(interval) || !options.startDate) return options
+  const end = parseUtcDate(options.endDate) ?? new Date()
+  const earliest = new Date(end)
+  earliest.setUTCDate(earliest.getUTCDate() - 7)
+  const requestedStart = parseUtcDate(options.startDate)
+  if (!requestedStart || requestedStart >= earliest) return options
+  return { ...options, startDate: earliest.toISOString().slice(0, 10) }
+}
+
+function parseUtcDate(value: string | null | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
 export async function stockData<T>(
@@ -117,4 +149,10 @@ export function isoDate(value: number | string | undefined): string | null {
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10)
   }
   return null
+}
+
+/** Preserve the time component of intraday candles. */
+export function isoTimestamp(value: number | string | undefined): string | null {
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value ?? '')
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 19).replace('T', ' ')
 }
