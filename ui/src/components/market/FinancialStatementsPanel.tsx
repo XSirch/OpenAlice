@@ -65,16 +65,17 @@ const ROWS: Record<Tab, Array<{ key: string; label: string; indent?: boolean }>>
 
 interface Props {
   symbol: string
+  provider?: string
 }
 
 type CacheEntry = { rows: FinancialStatementRow[]; provider?: string; error?: string }
 
-export function FinancialStatementsPanel({ symbol }: Props) {
+export function FinancialStatementsPanel({ symbol, provider }: Props) {
   const [tab, setTab] = useState<Tab>('income')
   const [cache, setCache] = useState<Partial<Record<Tab, CacheEntry>>>({})
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { setCache({}) }, [symbol])
+  useEffect(() => { setCache({}) }, [symbol, provider])
 
   useEffect(() => {
     if (cache[tab]) return
@@ -84,7 +85,7 @@ export function FinancialStatementsPanel({ symbol }: Props) {
       tab === 'income'   ? marketApi.equity.income   :
                            marketApi.equity.cashflow
     let cancelled = false
-    fetcher(symbol).then((res) => {
+    fetcher(symbol, provider).then((res) => {
       if (cancelled) return
       setCache((prev) => ({
         ...prev,
@@ -97,7 +98,7 @@ export function FinancialStatementsPanel({ symbol }: Props) {
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [symbol, tab, cache])
+  }, [symbol, provider, tab, cache])
 
   const entry = cache[tab]
   const rows = entry?.rows ?? []

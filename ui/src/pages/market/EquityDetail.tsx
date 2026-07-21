@@ -26,7 +26,7 @@ export function EquityDetail({ symbol, provider }: Props) {
 
       <TradeableContractsPanel symbol={symbol} assetClass="equity" />
 
-      <FinancialStatementsPanel symbol={symbol} />
+      <FinancialStatementsPanel symbol={symbol} provider={provider} />
     </div>
   )
 }
