@@ -27,7 +27,7 @@ beforeEach(async () => {
   resumeSequence = 0
 })
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true })
+  await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
 })
 
 type CreateInput = Parameters<HeadlessTaskRegistry['create']>[0]
