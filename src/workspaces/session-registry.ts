@@ -79,6 +79,8 @@ export class SessionRegistry {
   private readonly byWs = new Map<string, Map<string, SessionRecord>>();
   /** wsId set of workspaces whose file has been loaded (or known-absent). */
   private readonly loaded = new Set<string>();
+  /** One atomic-write queue per Workspace session file. */
+  private readonly flushChains = new Map<string, Promise<void>>();
 
   private constructor(
     private readonly dir: string,
@@ -270,6 +272,17 @@ export class SessionRegistry {
   }
 
   private async flush(wsId: string): Promise<void> {
+    const previous = this.flushChains.get(wsId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(() => this.flushNow(wsId));
+    this.flushChains.set(wsId, next);
+    try {
+      await next;
+    } finally {
+      if (this.flushChains.get(wsId) === next) this.flushChains.delete(wsId);
+    }
+  }
+
+  private async flushNow(wsId: string): Promise<void> {
     const records = this.byWs.get(wsId);
     if (!records) return;
     const payload: FileShape = {

@@ -32,7 +32,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   delete process.env['OPENALICE_SESSIONS_FILE']
-  await rm(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
 })
 
 beforeEach(async () => {
@@ -41,6 +41,12 @@ beforeEach(async () => {
 })
 
 describe('session-store', () => {
+  it('serializes concurrent session writes', async () => {
+    const sessions = await Promise.all(Array.from({ length: 12 }, () => createSession()))
+    expect(new Set(sessions.map((session) => session.sid))).toHaveLength(12)
+    expect(await listSessions()).toHaveLength(12)
+  })
+
   it('createSession returns a record with a base64url SID', async () => {
     const s = await createSession({ userAgent: 'test', ip: '127.0.0.1' })
     expect(s.sid).toMatch(/^[A-Za-z0-9_-]+$/)

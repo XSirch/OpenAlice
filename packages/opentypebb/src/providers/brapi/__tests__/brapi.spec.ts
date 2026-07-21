@@ -61,4 +61,36 @@ describe('brapi provider', () => {
     expect(metrics[0]).toMatchObject({ symbol: 'PETR4', market_cap: 527149170000, price_to_earnings: 5.48 })
     expect(fetchMock.mock.calls[1]?.[0]).toContain('statistics?mode=current&symbols=PETR4')
   })
+
+  it('maps dividends and annual financial statements into the shared research contracts', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: {
+        cashDividends: [{ rate: 0.75, lastDatePrior: '2026-04-15T03:00:00.000Z' }],
+      } }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: [{
+        type: 'yearly', endDate: '2025-12-31', cash: 35608000000, totalAssets: 1223389000000,
+      }] }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: [{
+        type: 'yearly', endDate: '2025-12-31', totalRevenue: 497549000000, netIncome: 110605000000,
+      }] }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ symbol: 'PETR4', data: [{
+        type: 'yearly', endDate: '2025-12-31', operatingCashFlow: 200333000000, freeCashFlow: 114219000000,
+      }] }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const executor = createExecutor()
+
+    const dividends = await executor.execute('brapi', 'HistoricalDividends', { symbol: 'PETR4', start_date: '2026-01-01' }) as Array<Record<string, unknown>>
+    const balance = await executor.execute('brapi', 'BalanceSheet', { symbol: 'PETR4', period: 'annual' }) as Array<Record<string, unknown>>
+    const income = await executor.execute('brapi', 'IncomeStatement', { symbol: 'PETR4', period: 'annual' }) as Array<Record<string, unknown>>
+    const cash = await executor.execute('brapi', 'CashFlowStatement', { symbol: 'PETR4', period: 'annual' }) as Array<Record<string, unknown>>
+
+    expect(dividends[0]).toMatchObject({ symbol: 'PETR4', ex_dividend_date: '2026-04-15', amount: 0.75 })
+    expect(balance[0]).toMatchObject({ period_ending: '2025-12-31', cash_and_cash_equivalents: 35608000000, total_assets: 1223389000000 })
+    expect(income[0]).toMatchObject({ period_ending: '2025-12-31', revenue: 497549000000, consolidated_net_income: 110605000000 })
+    expect(cash[0]).toMatchObject({ period_ending: '2025-12-31', net_cash_from_operating_activities: 200333000000, free_cash_flow: 114219000000 })
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('dividends?symbols=PETR4&startDate=2026-01-01')
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('balance-sheet?symbols=PETR4&period=annual')
+    expect(fetchMock.mock.calls[2]?.[0]).toContain('income-statement?symbols=PETR4&period=annual')
+    expect(fetchMock.mock.calls[3]?.[0]).toContain('cash-flow?symbols=PETR4&period=annual')
+  })
 })

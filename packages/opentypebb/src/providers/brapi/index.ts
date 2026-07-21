@@ -5,6 +5,10 @@ import { BrapiEquityQuoteFetcher } from './models/equity-quote.js'
 import { BrapiEquityHistoricalFetcher } from './models/equity-historical.js'
 import { BrapiEquityProfileFetcher } from './models/equity-profile.js'
 import { BrapiKeyMetricsFetcher } from './models/key-metrics.js'
+import { BrapiBalanceSheetFetcher } from './models/balance-sheet.js'
+import { BrapiIncomeStatementFetcher } from './models/income-statement.js'
+import { BrapiCashFlowStatementFetcher } from './models/cash-flow.js'
+import { BrapiHistoricalDividendsFetcher } from './models/historical-dividends.js'
 
 export const brapiProvider = new Provider({
   name: 'brapi',
@@ -23,5 +27,9 @@ export const brapiProvider = new Provider({
     EquityHistorical: BrapiEquityHistoricalFetcher,
     EquityInfo: BrapiEquityProfileFetcher,
     KeyMetrics: BrapiKeyMetricsFetcher,
+    BalanceSheet: BrapiBalanceSheetFetcher,
+    IncomeStatement: BrapiIncomeStatementFetcher,
+    CashFlowStatement: BrapiCashFlowStatementFetcher,
+    HistoricalDividends: BrapiHistoricalDividendsFetcher,
   },
 })
