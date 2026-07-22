@@ -102,7 +102,7 @@ jobs:
         run: pnpm electron:build
 
       - name: Smoke Guardian takeover through Electron
-        run: pnpm electron:smoke:guardian-recovery --skip-build
+        run: xvfb-run --auto-servernum pnpm electron:smoke:guardian-recovery --skip-build
         timeout-minutes: 5
         # GitHub's Ubuntu runners cannot configure Electron's setuid sandbox.
         # This smoke runs in an isolated disposable worker and does not alter

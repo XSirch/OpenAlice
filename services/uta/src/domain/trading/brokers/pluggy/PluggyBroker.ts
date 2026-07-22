@@ -35,6 +35,9 @@ export class PluggyBroker implements IBroker {
 
   private snapshot: CustodySnapshot | null = null
   private loadedAt = 0
+  /** A portfolio render asks for equity and positions concurrently. Reuse the
+   * same Pluggy round trip instead of authenticating and reading custody twice. */
+  private loadInFlight: Promise<CustodySnapshot> | null = null
 
   constructor(config: { id: string; label?: string }) {
     this.id = config.id
@@ -128,6 +131,16 @@ export class PluggyBroker implements IBroker {
 
   private async load(force = false): Promise<CustodySnapshot> {
     if (!force && this.snapshot && Date.now() - this.loadedAt < REFRESH_MS) return this.snapshot
+    if (this.loadInFlight) return this.loadInFlight
+    this.loadInFlight = this.refreshSnapshot()
+    try {
+      return await this.loadInFlight
+    } finally {
+      this.loadInFlight = null
+    }
+  }
+
+  private async refreshSnapshot(): Promise<CustodySnapshot> {
     const config = await readOpenFinanceConfig()
     const pluggy = config.pluggy
     if (!pluggy.enabled || !pluggy.clientId || !pluggy.clientSecret) {
