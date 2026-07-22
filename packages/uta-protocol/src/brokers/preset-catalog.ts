@@ -15,7 +15,7 @@ import { createHash, randomBytes } from 'node:crypto'
 
 // ==================== Types ====================
 
-export type BrokerEngine = 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'mock'
+export type BrokerEngine = 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'pluggy' | 'mock'
 
 export interface ModeOption {
   id: string
@@ -469,6 +469,27 @@ Paste the **private key of the authorized wallet** below. LeverUp's team confirm
 
 // ==================== Testing presets ====================
 
+/**
+ * Internal preset for the automatic MeuPluggy UTA. Credentials intentionally
+ * live only in the sealed Open Finance configuration, never in accounts.json
+ * or the general broker setup form.
+ */
+export const PLUGGY_PRESET: BrokerPresetDef = {
+  id: 'pluggy-readonly',
+  label: 'MeuPluggy (read-only)',
+  description: 'Open Finance investment custody imported through MeuPluggy. Managed from Portfolio.',
+  category: 'recommended',
+  defaultName: 'meu-pluggy',
+  badge: 'PG',
+  badgeColor: 'text-accent',
+  engine: 'pluggy',
+  guardCategory: 'securities',
+  zodSchema: z.object({}),
+  subtitleFields: [],
+  fingerprintFields: [],
+  toEngineConfig: () => ({}),
+}
+
 export const SIMULATOR_PRESET: BrokerPresetDef = {
   id: 'mock-simulator',
   label: 'Simulator (testing only)',
@@ -509,6 +530,7 @@ export const BROKER_PRESET_CATALOG: BrokerPresetDef[] = [
   ALPACA_PRESET,
   LONGBRIDGE_PRESET,
   HYPERLIQUID_PRESET,
+  PLUGGY_PRESET,
   // ---- Crypto ----
   BINANCE_PRESET,
   OKX_PRESET,

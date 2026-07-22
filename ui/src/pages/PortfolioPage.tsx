@@ -440,6 +440,7 @@ function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
   const unconvertedCurrencies = Object.keys(custodyTotals).filter((currency) => currency !== 'USD' && !fxByCurrency.has(currency))
   const combinedTotalUsd = total + convertedCustodyUsd
   const custodyTotalBrl = custodyTotals.BRL ?? 0
+  const pluggyUta = accounts.some((account) => account.id === 'meu-pluggy')
   const allocation = Object.entries(custody?.positions.reduce<Record<string, number>>((groups, position) => {
     const label = position.type?.trim() || 'Other investments'
     groups[label] = (groups[label] ?? 0) + (position.currency === 'BRL' ? position.value ?? 0 : 0)
@@ -468,7 +469,7 @@ function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
             {accounts.slice(0, 3).map((account) => (
               <AccountSummaryRow key={account.id} label={account.label} detail={account.provider} value={fmt(Number(account.equity), 'USD')} status={account.health === 'offline' ? 'offline' : 'live'} />
             ))}
-            {custody && <AccountSummaryRow label="MeuPluggy" detail={`${custody.positions.length} read-only positions`} value={fmt(custodyTotalBrl, 'BRL')} status="connected" />}
+            {custody && !pluggyUta && <AccountSummaryRow label="MeuPluggy" detail={`${custody.positions.length} read-only positions`} value={fmt(custodyTotalBrl, 'BRL')} status="connected" />}
             {accounts.length === 0 && !custody && <p className="py-3 text-[12px] text-text-muted">Connect a broker or MeuPluggy account to see your holdings here.</p>}
           </div>
         </OverviewCard>
@@ -477,12 +478,12 @@ function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
       <Metric
         size="lg"
         label={unconvertedCurrencies.length === 0 ? 'Total Equity (including Open Finance) · USD' : 'Broker equity · USD'}
-        value={fmt(unconvertedCurrencies.length === 0 ? combinedTotalUsd : total, 'USD')}
+        value={fmt(pluggyUta || unconvertedCurrencies.length > 0 ? total : combinedTotalUsd, 'USD')}
         delta={todayDelta ?? { value: '— today', sign: 'flat' }}
       />
       <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
         <Metric size="sm" label="Cash" value={fmt(cash, 'USD')} />
-        {Object.entries(custodyTotals).map(([currency, value]) => <Metric key={currency} size="sm" label={`Open Finance custody · ${currency}`} value={fmt(value, currency)} />)}
+        {!pluggyUta && Object.entries(custodyTotals).map(([currency, value]) => <Metric key={currency} size="sm" label={`Open Finance custody · ${currency}`} value={fmt(value, currency)} />)}
         <Metric
           size="sm"
           label="Unrealized PnL"
