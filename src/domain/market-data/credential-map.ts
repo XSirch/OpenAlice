@@ -25,6 +25,7 @@ const sdkKeyMapping: Record<string, string> = {
   tiingo: 'tiingo_token',
   biztoc: 'biztoc_api_key',
   brapi: 'brapi_api_key',
+  hgbrasil: 'hgbrasil_api_key',
 }
 
 function applyMapping(

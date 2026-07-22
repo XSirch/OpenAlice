@@ -37,6 +37,7 @@ const VENDOR_CAPABILITY: Record<string, BarCapability> = {
   eastmoney: 'delayed',
   twse: 'delayed', // K-lines via Yahoo chart (symbols are .TW/.TWO)
   brapi: 'delayed', // B3 research data; the configured source is not realtime.
+  hgbrasil: 'delayed', // B3 research data; quotes can lag 15–45 minutes.
 }
 
 const BAR_INTERVALS: readonly BarInterval[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w']

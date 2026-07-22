@@ -11,11 +11,10 @@ interface MarketDetailPageProps {
 
 export function MarketDetailPage({ spec }: MarketDetailPageProps) {
   const { assetClass, symbol, source } = spec.params
-  // A selected brapi result carries `brapi|TICKER`. Propagate that identity to
-  // the quote header rather than falling back to yfinance (which needs `.SA`).
-  // Other source ids may be broker accounts, so they intentionally retain the
-  // generic default-provider path.
-  const quoteProvider = source?.startsWith('brapi|') ? 'brapi' : undefined
+  // A selected regional-vendor result carries `{vendor}|TICKER`. Propagate its
+  // identity to the quote header rather than falling back to yfinance.
+  const quoteProvider = source?.startsWith('brapi|') ? 'brapi'
+    : source?.startsWith('hgbrasil|') ? 'hgbrasil' : undefined
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
