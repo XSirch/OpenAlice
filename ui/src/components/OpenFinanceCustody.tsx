@@ -45,9 +45,9 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
   const refresh = async () => { setBusy(true); setError(null); try { const next = await api.openFinance.custody(); setSnapshot(next); onSnapshotChange?.(next) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
 
   return (
-    <section className="border border-border rounded-lg bg-bg-secondary p-5" aria-label="Open Finance custody">
+    <section className="border border-border rounded-lg bg-bg-secondary p-5" aria-label="MeuPluggy account settings">
       <div className="flex items-start justify-between gap-4">
-        <div><h2 className="text-sm font-semibold text-text">Open Finance custody</h2><p className="mt-1 text-[12px] text-text-muted">Read-only positions via MeuPluggy. No trading or payment permission is requested.</p></div>
+        <div><h2 className="text-sm font-semibold text-text">MeuPluggy account</h2><p className="mt-1 text-[12px] text-text-muted">Manage the read-only custody account shown in your Portfolio overview. No trading or payment permission is requested.</p></div>
         {configured && <span className="rounded border border-border px-2 py-0.5 text-[10px] text-text-muted">Pluggy configured</span>}
       </div>
       {!configured && (
