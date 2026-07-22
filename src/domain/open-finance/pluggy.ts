@@ -37,7 +37,13 @@ interface PluggyInvestment {
   updatedAt?: string
 }
 
+interface PluggyItem {
+  id?: string
+  connector?: { name?: string }
+}
+
 interface PluggyListResponse { results?: PluggyInvestment[]; data?: PluggyInvestment[] }
+interface PluggyItemsResponse { results?: PluggyItem[]; data?: PluggyItem[] }
 
 async function pluggyFetch(path: string, init: RequestInit): Promise<Response> {
   const response = await fetch(`${PLUGGY_API_URL}${path}`, { ...init, signal: AbortSignal.timeout(15_000) })
@@ -62,13 +68,19 @@ export async function createPluggyApiKey(credentials: PluggyCredentials): Promis
 /** Read only investment custody. No payment, item mutation, or account-write endpoint is used. */
 export async function fetchPluggyCustody(credentials: PluggyCredentials): Promise<CustodySnapshot> {
   const apiKey = await createPluggyApiKey(credentials)
-  const response = await pluggyFetch('/investments', { headers: { 'X-API-KEY': apiKey } })
-  const body = await response.json() as PluggyListResponse
-  const records = body.results ?? body.data ?? []
+  const headers = { 'X-API-KEY': apiKey }
+  const itemsResponse = await pluggyFetch('/items', { headers })
+  const itemsBody = await itemsResponse.json() as PluggyItemsResponse
+  const items = (itemsBody.results ?? itemsBody.data ?? []).filter((item): item is PluggyItem & { id: string } => Boolean(item.id))
+  const records = (await Promise.all(items.map(async (item) => {
+    const response = await pluggyFetch(`/investments?itemId=${encodeURIComponent(item.id)}`, { headers })
+    const body = await response.json() as PluggyListResponse
+    return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: item.connector?.name }))
+  }))).flat()
   return {
     provider: 'pluggy',
     fetchedAt: new Date().toISOString(),
-    positions: records.map((investment, index) => ({
+    positions: records.map(({ investment, institution }, index) => ({
       id: investment.id ?? `${investment.code ?? investment.name ?? 'investment'}-${index}`,
       name: investment.name ?? investment.code ?? 'Unnamed investment',
       code: investment.code,
@@ -76,7 +88,7 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials): Promis
       quantity: finiteNumber(investment.quantity),
       value: finiteNumber(investment.value ?? investment.amount),
       currency: investment.currencyCode ?? 'BRL',
-      institution: typeof investment.institution === 'string' ? investment.institution : investment.institution?.name,
+      institution: typeof investment.institution === 'string' ? investment.institution : investment.institution?.name ?? institution,
       updatedAt: investment.updatedAt,
     })),
   }
