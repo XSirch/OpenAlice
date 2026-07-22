@@ -10,6 +10,7 @@ interface HgResponse {
   results?: HgResult[]
   message?: string
   error?: string | boolean
+  errors?: Array<{ code?: string; message?: string }>
 }
 
 export function ticker(symbol: string): string {
@@ -23,9 +24,10 @@ export async function request(path: string, tickers: string[], key: string, para
   url.searchParams.set('key', key)
   for (const [name, value] of Object.entries(params)) if (value) url.searchParams.set(name, value)
   const response = await amakeRequest<HgResponse>(url.toString())
-  if (!Array.isArray(response.results)) {
+  if (!Array.isArray(response.results) || response.results.length === 0) {
     const keyStatus = response.metadata?.key_status
-    const reason = response.message ?? response.metadata?.message ?? (typeof response.error === 'string' ? response.error : null)
+    const apiErrors = response.errors?.map((error) => [error.code, error.message].filter(Boolean).join(': ')).filter(Boolean).join('; ')
+    const reason = response.message ?? response.metadata?.message ?? apiErrors ?? (typeof response.error === 'string' ? response.error : null)
     throw new OpenBBError(`HG Brasil returned no results${keyStatus ? ` (key status: ${keyStatus})` : ''}${reason ? `: ${reason}` : '. Check the key type, plan access, and endpoint availability.'}`)
   }
   return response.results
