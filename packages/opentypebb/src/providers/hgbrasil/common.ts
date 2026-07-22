@@ -1,10 +1,16 @@
 import { amakeRequest } from '../../core/provider/utils/helpers.js'
+import { OpenBBError } from '../../core/provider/utils/errors.js'
 
 const BASE_URL = 'https://api.hgbrasil.com/v2/finance'
 
 export type HgResult = Record<string, unknown> & { symbol?: string; ticker?: string; quote?: Record<string, unknown>; market?: Record<string, unknown>; statements?: Array<Record<string, unknown>> }
 
-interface HgResponse { results?: HgResult[] }
+interface HgResponse {
+  metadata?: { key_status?: string; message?: string }
+  results?: HgResult[]
+  message?: string
+  error?: string | boolean
+}
 
 export function ticker(symbol: string): string {
   const bare = symbol.trim().toUpperCase().replace(/\.SA$/, '')
@@ -17,7 +23,12 @@ export async function request(path: string, tickers: string[], key: string, para
   url.searchParams.set('key', key)
   for (const [name, value] of Object.entries(params)) if (value) url.searchParams.set(name, value)
   const response = await amakeRequest<HgResponse>(url.toString())
-  return response.results ?? []
+  if (!Array.isArray(response.results)) {
+    const keyStatus = response.metadata?.key_status
+    const reason = response.message ?? response.metadata?.message ?? (typeof response.error === 'string' ? response.error : null)
+    throw new OpenBBError(`HG Brasil returned no results${keyStatus ? ` (key status: ${keyStatus})` : ''}${reason ? `: ${reason}` : '. Check the key type, plan access, and endpoint availability.'}`)
+  }
+  return response.results
 }
 
 export function symbolOf(row: HgResult): string {
