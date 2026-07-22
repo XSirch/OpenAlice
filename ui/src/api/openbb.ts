@@ -13,7 +13,9 @@ export const marketDataApi = {
       headers,
       body: JSON.stringify({ provider, key }),
     })
-    return res.json()
+    const body = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null
+    if (!res.ok) return { ok: false, error: body?.error ?? `Connection test failed (HTTP ${res.status})` }
+    return { ok: body?.ok === true, error: body?.error ?? (body?.ok === true ? undefined : 'Connection test returned no diagnostic.') }
   },
 
   async hubStatus(baseUrl?: string): Promise<HubStatus> {
