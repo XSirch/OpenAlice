@@ -99,7 +99,7 @@ export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) 
       title="Key Metrics"
       info={info}
       right={updatedAt ? (
-        <span className="text-[11px] text-text-muted" title="Horário da última consulta bem-sucedida ao provedor.">
+        <span className="text-[11px] text-muted-foreground" title="Horário da última consulta bem-sucedida ao provedor.">
           Atualizado {updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
       ) : undefined}
@@ -114,13 +114,13 @@ export function KeyMetricsPanel({ symbol, provider: requestedProvider }: Props) 
           ))}
         </dl>
       )}
-      {error && !loading && <div className="text-[12px] text-red">{error}</div>}
+      {error && !loading && <div className="text-[12px] text-destructive">{error}</div>}
       {!loading && !error && data && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
           {rows.map(([k, v]) => (
             <div key={k} className="flex items-baseline justify-between border-b border-border/30 py-1 last:border-b-0">
-              <dt className="text-text-muted/70">{k}</dt>
-              <dd className="font-mono text-text tabular-nums">{v}</dd>
+              <dt className="text-muted-foreground/70">{k}</dt>
+              <dd className="font-mono text-foreground tabular-nums">{v}</dd>
             </div>
           ))}
         </dl>

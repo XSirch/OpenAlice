@@ -12,10 +12,23 @@ import {
   type HistogramData,
 } from 'lightweight-charts'
 import { barsApi, type AssetClass, type HistoricalBar, type BarSourceCandidate, type BarMeta } from '../../api/market'
+import { readSemanticColor } from '../../theme/semanticColors'
+import { useEffectivePalette, useEffectiveTheme } from '../../theme/useEffectiveTheme'
 import { Skeleton } from '../StateViews'
 
 type Interval = '1m' | '2m' | '5m' | '15m' | '30m' | '1h' | '90m' | '1d' | '5d' | '1wk' | '1mo' | '3mo'
 type Timeframe = '1D' | '5D' | '7D' | '1M' | '3M' | '1Y' | '5Y' | 'All'
+export type KlineInterval = Interval
+export type KlineTimeframe = Timeframe
+
+export interface KlineSnapshot {
+  bars: HistoricalBar[] | null
+  meta: BarMeta | null
+  loading: boolean
+  error: string | null
+  interval: KlineInterval
+  timeframe: KlineTimeframe
+}
 
 const INTERVALS: Interval[] = ['1m', '2m', '5m', '15m', '30m', '1h', '90m', '1d', '5d', '1wk', '1mo', '3mo']
 const TIMEFRAMES: Timeframe[] = ['1D', '5D', '7D', '1M', '3M', '1Y', '5Y', 'All']
@@ -58,6 +71,8 @@ function toUTCTimestamp(s: string): UTCTimestamp {
 
 interface Props {
   selection: { symbol: string; assetClass: AssetClass } | null
+  source?: string
+  onSnapshot?: (snapshot: KlineSnapshot) => void
 }
 
 interface HoveredCandle {
@@ -80,12 +95,18 @@ function formatVolume(value: number | null | undefined): string {
   return value == null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
-export function KlinePanel({ selection }: Props) {
+export function KlinePanel({ selection, source, onSnapshot }: Props) {
+  const effectiveTheme = useEffectiveTheme()
+  const effectivePalette = useEffectivePalette()
   const [searchParams, setSearchParams] = useSearchParams()
   const interval = parseInterval(searchParams.get('interval'))
   const tf = parseTimeframe(searchParams.get('range'))
   // The provider picked at search time (a barId), if any — opens the chart on it.
-  const sourceParam = searchParams.get('source')
+  // The focused tab owns source identity. Router search can still describe a
+  // previously focused tab, so never inherit it when the caller passes none.
+  const sourceParam = source ?? null
+  const selectionSymbol = selection?.symbol
+  const selectionAssetClass = selection?.assetClass
 
   // Local setter named `selectInterval` rather than `setInterval` so it
   // doesn't shadow the global timer function we use for polling below.
@@ -118,36 +139,42 @@ export function KlinePanel({ selection }: Props) {
   const selectedSourceId = selectedBarId?.split('|')[0] ?? meta?.sourceId
   const brapiIntraday = selectedSourceId === 'brapi' && INTRADAY.has(interval)
 
+  useEffect(() => {
+    onSnapshot?.({ bars, meta, loading, error, interval, timeframe: tf })
+  }, [bars, error, interval, loading, meta, onSnapshot, tf])
+
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null)
 
-  // Build chart once.
+  // Canvas cannot consume CSS custom properties. Rebuild when the active
+  // semantic palette changes so its colors stay aligned with the application.
   useEffect(() => {
     if (!containerRef.current) return
+    const colors = readKlineChartColors()
     const chart = createChart(containerRef.current, {
       layout: {
         background: { color: 'transparent' },
-        textColor: '#c9d1d9',
-        panes: { separatorColor: '#30363d', separatorHoverColor: '#58a6ff33' },
+        textColor: colors.text,
+        panes: { separatorColor: colors.grid, separatorHoverColor: colors.primaryMuted },
       },
       grid: {
-        vertLines: { color: '#21262d' },
-        horzLines: { color: '#21262d' },
+        vertLines: { color: colors.grid },
+        horzLines: { color: colors.grid },
       },
-      rightPriceScale: { borderColor: '#30363d' },
-      timeScale: { borderColor: '#30363d', timeVisible: false, secondsVisible: false },
+      rightPriceScale: { borderColor: colors.grid },
+      timeScale: { borderColor: colors.grid, timeVisible: false, secondsVisible: false },
       autoSize: true,
     })
 
     const candle = chart.addSeries(CandlestickSeries, {
-      upColor: '#3fb950',
-      downColor: '#f85149',
-      borderUpColor: '#3fb950',
-      borderDownColor: '#f85149',
-      wickUpColor: '#3fb950',
-      wickDownColor: '#f85149',
+      upColor: colors.positive,
+      downColor: colors.negative,
+      borderUpColor: colors.positive,
+      borderDownColor: colors.negative,
+      wickUpColor: colors.positive,
+      wickDownColor: colors.negative,
     })
 
     const volume = chart.addSeries(HistogramSeries, {
@@ -166,12 +193,12 @@ export function KlinePanel({ selection }: Props) {
       candleRef.current = null
       volumeRef.current = null
     }
-  }, [])
+  }, [effectiveTheme, effectivePalette])
 
   // Toggle time-axis detail when interval flips between intraday and daily.
   useEffect(() => {
     chartRef.current?.timeScale().applyOptions({ timeVisible: INTRADAY.has(interval) })
-  }, [interval])
+  }, [interval, effectiveTheme, effectivePalette])
 
   // Discover the available bar sources for this symbol (populates the picker).
   // Seed the picked source from the URL (?source=barId, set at search time);
@@ -179,24 +206,18 @@ export function KlinePanel({ selection }: Props) {
   useEffect(() => {
     setSelectedBarId(sourceParam)
     setCandidates([])
-    if (!selection || selection.assetClass === 'commodity') return
+    if (!selectionSymbol) return
     let cancelled = false
-    barsApi.searchSources(selection.symbol, 12)
+    barsApi.searchSources(selectionSymbol, 12)
       .then((r) => { if (!cancelled) setCandidates(r.candidates) })
       .catch(() => { if (!cancelled) setCandidates([]) })
     return () => { cancelled = true }
-  }, [selection, sourceParam])
+  }, [selectionSymbol, sourceParam])
 
   // Fetch bars: an explicitly-picked source (barId) or the vendor default
   // (symbol+assetClass). Re-polls so a long-open tab doesn't show stale bars.
   useEffect(() => {
-    if (!selection) { setBars(null); setMeta(null); setError(null); return }
-    if (selection.assetClass === 'commodity') {
-      setBars(null)
-      setMeta(null)
-      setError('Commodity K-line support is coming in the next step.')
-      return
-    }
+    if (!selectionSymbol || !selectionAssetClass) { setBars(null); setMeta(null); setError(null); return }
     let cancelled = false
     const run = (isInitial: boolean) => {
       if (isInitial) setLoading(true)
@@ -211,9 +232,9 @@ export function KlinePanel({ selection }: Props) {
       // `brapi|PETR4` routes to the equity client instead of failing closed.
       if (selectedBarId) {
         params.barId = selectedBarId
-        params.assetClass = selection.assetClass
+        params.assetClass = selectionAssetClass
       }
-      else { params.symbol = selection.symbol; params.assetClass = selection.assetClass }
+      else { params.symbol = selectionSymbol; params.assetClass = selectionAssetClass }
       if (days != null) params.start = startDateFromToday(days)
 
       barsApi.bars(params)
@@ -239,7 +260,7 @@ export function KlinePanel({ selection }: Props) {
     const pollMs = INTRADAY.has(interval) ? 60_000 : 300_000
     const timer = setInterval(() => run(false), pollMs)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [selection, selectedBarId, interval, tf, brapiIntraday])
+  }, [selectionAssetClass, selectionSymbol, selectedBarId, interval, tf, brapiIntraday])
 
   // Push bars into chart and fit.
   useEffect(() => {
@@ -257,16 +278,17 @@ export function KlinePanel({ selection }: Props) {
       low: b.low,
       close: b.close,
     }))
+    const colors = readKlineChartColors()
     const volumeData: HistogramData[] = bars.map((b) => ({
       time: toUTCTimestamp(b.date),
       value: b.volume ?? 0,
-      color: b.close >= b.open ? '#3fb95055' : '#f8514955',
+      color: b.close >= b.open ? colors.positiveMuted : colors.negativeMuted,
     }))
 
     candleRef.current.setData(candleData)
     volumeRef.current.setData(volumeData)
     chartRef.current.timeScale().fitContent()
-  }, [bars])
+  }, [bars, effectiveTheme, effectivePalette])
 
   // The chart owns pointer tracking; translate its crosshair position back to
   // the original bar so the detail card includes volume as well as OHLC.
@@ -294,6 +316,7 @@ export function KlinePanel({ selection }: Props) {
       const y = Math.min(Math.max(8, param.point.y + 14), Math.max(8, container.clientHeight - 172))
       setHoveredCandle({ bar, x, y })
     }
+    if (typeof chart.subscribeCrosshairMove !== 'function' || typeof chart.unsubscribeCrosshairMove !== 'function') return
     chart.subscribeCrosshairMove(onCrosshairMove)
     return () => chart.unsubscribeCrosshairMove(onCrosshairMove)
   }, [bars])
@@ -317,34 +340,34 @@ export function KlinePanel({ selection }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between py-2 px-1 gap-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13px] font-medium text-text truncate">{title}</span>
+          <span className="text-[13px] font-medium text-foreground truncate">{title}</span>
           {meta && (
             <span
-              className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted font-medium"
+              className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium"
               title={`Provider: ${meta.barId}${meta.barCapability ? ` (${meta.barCapability})` : ''}`}
             >
               {meta.sourceId}{meta.barCapability ? ` · ${meta.barCapability}` : ''}
             </span>
           )}
           {bars && bars.length > 0 && (
-            <span className="text-[11px] text-text-muted/60 truncate">
+            <span className="text-[11px] text-muted-foreground/60 truncate">
               {bars.length} bars · {bars[0].date} → {bars[bars.length - 1].date}
             </span>
           )}
           {brapiIntraday && (
-            <span className="text-[11px] text-amber-300/80 truncate" title="BRAPI fornece candles intraday para, no máximo, os últimos sete dias.">
+            <span className="text-[11px] text-warning/80 truncate" title="BRAPI fornece candles intraday para, no máximo, os últimos sete dias.">
               BRAPI intraday: máximo de 7 dias
             </span>
           )}
         </div>
         <div className="flex items-center gap-5 flex-wrap">
-          {sourceOptions.length > 1 && (
+          {selectionAssetClass !== 'commodity' && sourceOptions.length > 1 && (
             <label className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Source</span>
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground/70">Source</span>
               <select
                 value={selectedBarId ?? meta?.barId ?? ''}
                 onChange={(e) => setSelectedBarId(e.target.value || null)}
-                className="bg-bg-tertiary border border-border rounded px-2 py-1 text-[12px] text-text cursor-pointer max-w-[240px]"
+                className="bg-muted border border-border rounded px-2 py-1 text-[12px] text-foreground cursor-pointer max-w-[240px]"
                 title="Which provider's K-line to show — sources are never merged; you pick"
               >
                 {sourceOptions.map((c) => (
@@ -356,7 +379,7 @@ export function KlinePanel({ selection }: Props) {
             </label>
           )}
           <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Interval</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground/70">Interval</span>
             <div className="flex border border-border rounded overflow-hidden" title="Candle width (how much time each bar covers)">
               {INTERVALS.map((iv, i) => (
                 <button
@@ -364,7 +387,7 @@ export function KlinePanel({ selection }: Props) {
                   onClick={() => selectInterval(iv)}
                   className={`px-2 py-1 text-[12px] transition-colors cursor-pointer ${
                     i > 0 ? 'border-l border-border' : ''
-                  } ${interval === iv ? 'bg-bg-tertiary text-text' : 'text-text-muted hover:text-text'}`}
+                  } ${interval === iv ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   {iv}
                 </button>
@@ -372,7 +395,7 @@ export function KlinePanel({ selection }: Props) {
             </div>
           </label>
           <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Range</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground/70">Range</span>
             <div className="flex border border-border rounded overflow-hidden" title="How far back to load history">
               {TIMEFRAMES.map((t, i) => (
                 <button
@@ -380,7 +403,7 @@ export function KlinePanel({ selection }: Props) {
                   onClick={() => setTf(t)}
                   className={`px-2 py-1 text-[12px] transition-colors cursor-pointer ${
                     i > 0 ? 'border-l border-border' : ''
-                  } ${tf === t ? 'bg-bg-tertiary text-text' : 'text-text-muted hover:text-text'}`}
+                  } ${tf === t ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   {t}
                 </button>
@@ -390,27 +413,27 @@ export function KlinePanel({ selection }: Props) {
         </div>
       </div>
 
-      <div className="relative flex-1 min-h-0 border border-border rounded bg-bg-secondary/30">
+      <div className="relative flex-1 min-h-0 border border-border rounded bg-secondary/30">
         <div ref={containerRef} className="absolute inset-0" />
         {hoveredCandle && (
           <div
-            className="pointer-events-none absolute z-10 w-[204px] rounded border border-border bg-bg-secondary/95 px-3 py-2 shadow-lg backdrop-blur-sm"
+            className="pointer-events-none absolute z-10 w-[204px] rounded border border-border bg-secondary/95 px-3 py-2 shadow-lg backdrop-blur-sm"
             style={{ left: hoveredCandle.x, top: hoveredCandle.y }}
             role="status"
             aria-label={`Candle de ${formatCandleTime(hoveredCandle.bar.date)}`}
           >
-            <div className="mb-1.5 text-[11px] font-medium text-text">{formatCandleTime(hoveredCandle.bar.date)}</div>
+            <div className="mb-1.5 text-[11px] font-medium text-foreground">{formatCandleTime(hoveredCandle.bar.date)}</div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-              <span className="text-text-muted">Abertura <b className="ml-1 font-medium text-text">{formatPrice(hoveredCandle.bar.open)}</b></span>
-              <span className="text-text-muted">Fechamento <b className="ml-1 font-medium text-text">{formatPrice(hoveredCandle.bar.close)}</b></span>
-              <span className="text-text-muted">M{'\u00e1'}xima <b className="ml-1 font-medium text-[#3fb950]">{formatPrice(hoveredCandle.bar.high)}</b></span>
-              <span className="text-text-muted">M{'\u00ed'}nima <b className="ml-1 font-medium text-[#f85149]">{formatPrice(hoveredCandle.bar.low)}</b></span>
-              <span className="col-span-2 text-text-muted">Volume <b className="ml-1 font-medium text-text">{formatVolume(hoveredCandle.bar.volume)}</b></span>
+              <span className="text-muted-foreground">Abertura <b className="ml-1 font-medium text-foreground">{formatPrice(hoveredCandle.bar.open)}</b></span>
+              <span className="text-muted-foreground">Fechamento <b className="ml-1 font-medium text-foreground">{formatPrice(hoveredCandle.bar.close)}</b></span>
+              <span className="text-muted-foreground">M{'\u00e1'}xima <b className="ml-1 font-medium text-success">{formatPrice(hoveredCandle.bar.high)}</b></span>
+              <span className="text-muted-foreground">M{'\u00ed'}nima <b className="ml-1 font-medium text-destructive">{formatPrice(hoveredCandle.bar.low)}</b></span>
+              <span className="col-span-2 text-muted-foreground">Volume <b className="ml-1 font-medium text-foreground">{formatVolume(hoveredCandle.bar.volume)}</b></span>
             </div>
           </div>
         )}
         {!selection && (
-          <div className="absolute inset-0 flex items-center justify-center text-[13px] text-text-muted">
+          <div className="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground">
             Pick an asset to see the K-line.
           </div>
         )}
@@ -420,14 +443,26 @@ export function KlinePanel({ selection }: Props) {
           </div>
         )}
         {selection && loading && (
-          <div className="absolute top-2 right-2 text-[11px] text-text-muted">Loading…</div>
+          <div className="absolute top-2 right-2 text-[11px] text-muted-foreground">Loading…</div>
         )}
         {selection && error && !loading && (
-          <div className="absolute inset-0 flex items-center justify-center text-[13px] text-text-muted px-8 text-center">
+          <div className="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground px-8 text-center">
             {error}
           </div>
         )}
       </div>
     </div>
   )
+}
+
+function readKlineChartColors() {
+  return {
+    text: readSemanticColor('chart-axis'),
+    grid: readSemanticColor('chart-grid'),
+    primaryMuted: readSemanticColor('primary-muted'),
+    positive: readSemanticColor('chart-positive'),
+    negative: readSemanticColor('chart-negative'),
+    positiveMuted: readSemanticColor('chart-positive-muted'),
+    negativeMuted: readSemanticColor('chart-negative-muted'),
+  }
 }

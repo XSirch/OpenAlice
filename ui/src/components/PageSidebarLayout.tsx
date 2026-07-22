@@ -7,6 +7,7 @@ const MIN_WIDTH = 200
 const MAX_WIDTH = 420
 const MAIN_PANE_MIN_WIDTH = 500
 const COLLAPSED_WIDTH = 44
+const RESIZE_HANDLE_WIDTH = 10
 
 function clampWidth(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
@@ -44,8 +45,8 @@ function responsiveMaxWidth(containerWidth: number): number {
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, proportional, reserveMain))
 }
 
-function useIsDesktop(): boolean {
-  const query = '(min-width: 768px)'
+function useIsDesktop(minWidth: number): boolean {
+  const query = `(min-width: ${minWidth}px)`
   const [matches, setMatches] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia(query).matches : true,
   )
@@ -56,7 +57,7 @@ function useIsDesktop(): boolean {
     setMatches(mq.matches)
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
-  }, [])
+  }, [query])
 
   return matches
 }
@@ -68,6 +69,8 @@ interface PageSidebarLayoutProps {
   sidebar: ReactNode | ((controls: PageSidebarControls) => ReactNode)
   children: ReactNode
   defaultWidth?: number
+  /** Keep a page-specific navigator in a drawer below this viewport width. */
+  desktopMinWidth?: number
 }
 
 export interface PageSidebarControls {
@@ -87,9 +90,10 @@ export function PageSidebarLayout({
   sidebar,
   children,
   defaultWidth = 260,
+  desktopMinWidth = 768,
 }: PageSidebarLayoutProps) {
   const { t } = useTranslation()
-  const isDesktop = useIsDesktop()
+  const isDesktop = useIsDesktop(desktopMinWidth)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => readStoredCollapsed(storageKey))
@@ -174,7 +178,7 @@ export function PageSidebarLayout({
       <button
         type="button"
         onClick={() => updateCollapsed(true)}
-        className="oa-icon-action flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay hover:text-text"
+        className="oa-icon-action flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         aria-label={t('common.collapsePanel', { title })}
         title={t('common.focusContent')}
       >
@@ -192,29 +196,23 @@ export function PageSidebarLayout({
   if (isDesktop) {
     return (
       <div ref={rootRef} className="flex h-full min-h-0 w-full overflow-hidden">
-        {collapsed ? (
-          <aside
-            className="flex h-full shrink-0 flex-col items-center border-r border-border/80 bg-bg-secondary py-1.5"
-            style={{ width: COLLAPSED_WIDTH }}
+        <div
+          data-testid="page-sidebar-desktop"
+          data-state={collapsed ? 'collapsed' : 'expanded'}
+          className="relative h-full min-h-0 shrink-0 overflow-hidden border-r border-border/80 bg-secondary transition-[width] duration-[var(--motion-slow)] [transition-timing-function:var(--motion-ease-out)] motion-reduce:transition-none"
+          style={{ width: collapsed ? COLLAPSED_WIDTH : width + RESIZE_HANDLE_WIDTH }}
+        >
+          <div
+            data-testid="page-sidebar-expanded"
+            aria-hidden={collapsed}
+            inert={collapsed ? true : undefined}
+            className={`absolute inset-y-0 left-0 flex transition-opacity duration-[var(--motion-fast)] [transition-timing-function:var(--motion-ease-standard)] motion-reduce:delay-0 motion-reduce:transition-none ${
+              collapsed
+                ? 'pointer-events-none opacity-0'
+                : 'opacity-100 delay-[60ms]'
+            }`}
+            style={{ width: width + RESIZE_HANDLE_WIDTH }}
           >
-            <button
-              type="button"
-              onClick={() => updateCollapsed(false)}
-              className="oa-icon-action flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay hover:text-text"
-              aria-label={t('common.openPanel', { title })}
-              title={t('common.openPanel', { title })}
-            >
-              <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden />
-            </button>
-            <span
-              aria-hidden
-              className="mt-3 select-none text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted [writing-mode:vertical-rl] rotate-180"
-            >
-              {title}
-            </span>
-          </aside>
-        ) : (
-          <>
             <div
               className="h-full min-h-0 shrink-0"
               style={{ width }}
@@ -222,8 +220,35 @@ export function PageSidebarLayout({
               {sidebarPanel}
             </div>
             <ResizeHandle width={width} maxWidth={maxWidth} onPointerDown={beginResize} />
-          </>
-        )}
+          </div>
+          <aside
+            data-testid="page-sidebar-collapsed"
+            aria-hidden={!collapsed}
+            inert={!collapsed ? true : undefined}
+            className={`absolute inset-y-0 left-0 flex shrink-0 flex-col items-center bg-secondary py-1.5 transition-opacity duration-[var(--motion-fast)] [transition-timing-function:var(--motion-ease-standard)] motion-reduce:delay-0 motion-reduce:transition-none ${
+              collapsed
+                ? 'opacity-100 delay-[80ms]'
+                : 'pointer-events-none opacity-0'
+            }`}
+            style={{ width: COLLAPSED_WIDTH }}
+          >
+            <button
+              type="button"
+              onClick={() => updateCollapsed(false)}
+              className="oa-icon-action flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label={t('common.openPanel', { title })}
+              title={t('common.openPanel', { title })}
+            >
+              <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden />
+            </button>
+            <span
+              aria-hidden
+              className="mt-3 select-none text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground [writing-mode:vertical-rl] rotate-180"
+            >
+              {title}
+            </span>
+          </aside>
+        </div>
         <div className="min-h-0 min-w-0 flex flex-1 flex-col">
           {children}
         </div>
@@ -232,23 +257,23 @@ export function PageSidebarLayout({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 bg-bg-secondary/40 px-3">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 bg-secondary/40 px-3">
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="oa-icon-action flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay hover:text-text"
+          className="oa-icon-action flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           aria-label={t('common.openPanel', { title })}
           title={title}
         >
           <PanelLeftOpen size={17} strokeWidth={1.75} aria-hidden />
         </button>
-        <span className="min-w-0 truncate text-[13px] font-semibold text-text">{title}</span>
+        <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">{title}</span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
 
       <div
-        className={`absolute inset-0 z-30 bg-black/40 transition-opacity duration-200 ${
+        className={`absolute inset-0 z-30 bg-backdrop transition-opacity duration-200 ${
           drawerOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         onClick={() => setDrawerOpen(false)}
@@ -267,7 +292,7 @@ export function PageSidebarLayout({
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}
-              className="text-text-muted hover:text-text p-1 -ml-1"
+              className="text-muted-foreground hover:text-foreground p-1 -ml-1"
               aria-label={t('common.closePanel', { title })}
             >
               <X size={15} strokeWidth={1.75} aria-hidden />
@@ -303,7 +328,7 @@ function ResizeHandle({
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors group-hover:bg-accent/50 group-active:bg-accent/70"
+        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors group-hover:bg-primary/50 group-active:bg-primary/70"
       />
     </div>
   )
