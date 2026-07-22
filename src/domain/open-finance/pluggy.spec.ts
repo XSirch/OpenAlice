@@ -25,6 +25,21 @@ describe('Pluggy custody client', () => {
     await expect(createPluggyApiKey({ clientId: 'id', clientSecret: 'secret' })).rejects.toThrow('Pluggy did not return an API key.')
   })
 
+  it('omits closed Pluggy records with no material balance or quantity', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ connector: { name: 'Corretora' } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [
+        { id: 'closed', name: 'CDB closed', quantity: 0, balance: 0, value: 0.01, currencyCode: 'BRL' },
+        { id: 'residual', name: 'CDB residual', quantity: 0, balance: 0.004, value: 0.01, currencyCode: 'BRL' },
+        { id: 'open', name: 'CDB open', quantity: 10, balance: 1000, value: 100, currencyCode: 'BRL' },
+      ] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await fetchPluggyCustody({ clientId: 'id', clientSecret: 'secret' }, ['a1'])
+    expect(snapshot.positions.map((position) => position.id)).toEqual(['open'])
+  })
+
   it('does not make a global item-list request when no item ID is configured', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
