@@ -25,7 +25,6 @@ const DEFAULT_RANGE: Timeframe = '1Y'
 function parseInterval(s: string | null): Interval {
   return (INTERVALS as string[]).includes(s ?? '') ? (s as Interval) : DEFAULT_INTERVAL
 }
-
 function parseTimeframe(s: string | null): Timeframe {
   return (TIMEFRAMES as string[]).includes(s ?? '') ? (s as Timeframe) : DEFAULT_RANGE
 }
@@ -404,8 +403,8 @@ export function KlinePanel({ selection }: Props) {
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
               <span className="text-text-muted">Abertura <b className="ml-1 font-medium text-text">{formatPrice(hoveredCandle.bar.open)}</b></span>
               <span className="text-text-muted">Fechamento <b className="ml-1 font-medium text-text">{formatPrice(hoveredCandle.bar.close)}</b></span>
-              <span className="text-text-muted">MÃ¡xima <b className="ml-1 font-medium text-[#3fb950]">{formatPrice(hoveredCandle.bar.high)}</b></span>
-              <span className="text-text-muted">MÃ­nima <b className="ml-1 font-medium text-[#f85149]">{formatPrice(hoveredCandle.bar.low)}</b></span>
+              <span className="text-text-muted">M{'\u00e1'}xima <b className="ml-1 font-medium text-[#3fb950]">{formatPrice(hoveredCandle.bar.high)}</b></span>
+              <span className="text-text-muted">M{'\u00ed'}nima <b className="ml-1 font-medium text-[#f85149]">{formatPrice(hoveredCandle.bar.low)}</b></span>
               <span className="col-span-2 text-text-muted">Volume <b className="ml-1 font-medium text-text">{formatVolume(hoveredCandle.bar.volume)}</b></span>
             </div>
           </div>
