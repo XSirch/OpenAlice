@@ -11,6 +11,8 @@ export interface CustodyPosition {
   type?: string
   quantity?: number
   value?: number
+  originalAmount?: number
+  profit?: number
   grossAmount?: number
   unitValue?: number
   currency: string
