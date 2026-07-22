@@ -13,6 +13,10 @@ export interface CustodyPosition {
   quantity?: number
   /** Current net position value, after fees and taxes when supplied by the institution. */
   value?: number
+  /** Amount originally invested, as reported by the institution. */
+  originalAmount?: number
+  /** Accumulated return reported by the institution, including its fees/taxes when available. */
+  profit?: number
   grossAmount?: number
   unitValue?: number
   currency: string
@@ -35,6 +39,8 @@ interface PluggyInvestment {
   quantity?: number
   balance?: number
   amount?: number
+  amountOriginal?: number
+  amountProfit?: number
   value?: number
   currencyCode?: string
   institution?: { name?: string } | string
@@ -96,6 +102,8 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
       // Pluggy's `value` is the unit quota/asset price. The position total is
       // `balance` (net) and, when that is unavailable, `amount` (gross).
       value: finiteNumber(investment.balance ?? investment.amount),
+      originalAmount: finiteNumber(investment.amountOriginal),
+      profit: finiteNumber(investment.amountProfit),
       grossAmount: finiteNumber(investment.amount),
       unitValue: finiteNumber(investment.value),
       currency: investment.currencyCode ?? 'BRL',
