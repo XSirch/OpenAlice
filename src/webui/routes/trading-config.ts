@@ -11,6 +11,7 @@ import {
   mintInstanceId,
 } from '@traderalice/uta-protocol'
 import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
+import { readPublicOpenFinanceConfig } from '../../core/open-finance-config.js'
 import { resolveUTAUrl } from '../../services/uta-supervisor/url.js'
 import { describeTradingMode } from '../../services/trading-mode.js'
 import {
@@ -146,6 +147,16 @@ export function createTradingConfigRoutes(ctx: EngineContext) {
   app.get('/', async (c) => {
     try {
       const utas = await readUTAsConfig()
+      const openFinance = await readPublicOpenFinanceConfig()
+      if (openFinance.pluggy.enabled && openFinance.pluggy.configured && !utas.some((uta) => uta.id === 'meu-pluggy')) {
+        // Virtual config entry for the automatic UTA. It is never persisted in
+        // accounts.json because its credentials belong to sealed Open Finance
+        // state, but renderer surfaces should treat it like every other UTA.
+        utas.push({
+          id: 'meu-pluggy', label: 'MeuPluggy', presetId: 'pluggy-readonly', enabled: true,
+          guards: [], presetConfig: {}, keyless: false, readOnly: true, asVendor: false, editable: false,
+        })
+      }
       const maskedUTAs = utas.map((a) => maskSecrets({ ...a }))
       return c.json({ utas: maskedUTAs })
     } catch (err) {

@@ -31,6 +31,8 @@ import type { CurrencyClientLike } from '@/domain/market-data/client/types.js'
 import { buildSDKCredentials } from '@/domain/market-data/credential-map.js'
 import { startOrderSyncPoller } from './domain/trading/order-sync-poller.js'
 import { buildKeylessDataUTAs } from './domain/trading/keyless-data-sources.js'
+import { buildOpenFinanceUTAs } from './domain/trading/open-finance-uta.js'
+import { readPublicOpenFinanceConfig } from '@/core/open-finance-config.js'
 import { createTradingRoutes } from './http/routes-trading.js'
 import { createSimulatorRoutes } from './http/routes-simulator.js'
 import type { UTAEngineContext } from './types.js'
@@ -69,11 +71,12 @@ async function main(): Promise<void> {
   const survivors = await purgeEphemeralUTAs(await readUTAsConfig())
   const userIds = new Set(survivors.map((u) => u.id))
   const dataUTAs: UTAConfig[] = buildKeylessDataUTAs(config.trading.keylessDataSources, userIds)
+  const openFinanceUTAs: UTAConfig[] = buildOpenFinanceUTAs(await readPublicOpenFinanceConfig(), new Set([...userIds, ...dataUTAs.map((uta) => uta.id)]))
   if (dataUTAs.length > 0) {
     console.log(`[uta] keyless data sources enabled: ${dataUTAs.map((u) => u.id).join(', ')}`)
   }
 
-  for (const accCfg of [...dataUTAs, ...survivors]) {
+  for (const accCfg of [...dataUTAs, ...openFinanceUTAs, ...survivors]) {
     if (accCfg.enabled === false) continue
     // One account's init must never abort the whole bootstrap (broker
     // construction is sync; the connection is async + health-tracked, so this

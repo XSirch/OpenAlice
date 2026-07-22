@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { readOpenFinanceConfig, readPublicOpenFinanceConfig, writeOpenFinanceConfig } from '../../core/open-finance-config.js'
 import { fetchPluggyCustody } from '../../domain/open-finance/pluggy.js'
+import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 
@@ -9,7 +10,11 @@ export function createOpenFinanceRoutes() {
   const app = new Hono()
   app.get('/', async (c) => c.json(await readPublicOpenFinanceConfig()))
   app.put('/', async (c) => {
-    try { return c.json(await writeOpenFinanceConfig(updateSchema.parse(await c.req.json()))) }
+    try {
+      const result = await writeOpenFinanceConfig(updateSchema.parse(await c.req.json()))
+      triggerUTARestart().catch(() => { /* account health reports restart failures */ })
+      return c.json(result)
+    }
     catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
   })
   app.get('/custody', async (c) => {
