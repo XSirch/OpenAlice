@@ -11,9 +11,11 @@ export interface CustodyPosition {
   type?: string
   quantity?: number
   value?: number
+  grossAmount?: number
+  unitValue?: number
   currency: string
   institution?: string
-  updatedAt?: string
+  asOf?: string
 }
 
 export interface CustodySnapshot {

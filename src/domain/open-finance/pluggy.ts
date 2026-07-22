@@ -11,10 +11,13 @@ export interface CustodyPosition {
   code?: string
   type?: string
   quantity?: number
+  /** Current net position value, after fees and taxes when supplied by the institution. */
   value?: number
+  grossAmount?: number
+  unitValue?: number
   currency: string
   institution?: string
-  updatedAt?: string
+  asOf?: string
 }
 
 export interface CustodySnapshot {
@@ -30,14 +33,16 @@ interface PluggyInvestment {
   code?: string
   type?: string
   quantity?: number
+  balance?: number
   amount?: number
   value?: number
   currencyCode?: string
   institution?: { name?: string } | string
-  updatedAt?: string
+  date?: string
 }
 
 interface PluggyListResponse { results?: PluggyInvestment[]; data?: PluggyInvestment[] }
+interface PluggyItem { connector?: { name?: string } }
 
 async function pluggyFetch(path: string, init: RequestInit): Promise<Response> {
   const response = await fetch(`${PLUGGY_API_URL}${path}`, { ...init, signal: AbortSignal.timeout(15_000) })
@@ -65,23 +70,31 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
   const apiKey = await createPluggyApiKey(credentials)
   const headers = { 'X-API-KEY': apiKey }
   const records = (await Promise.all(itemIds.map(async (itemId) => {
-    const response = await pluggyFetch(`/investments?itemId=${encodeURIComponent(itemId)}`, { headers })
-    const body = await response.json() as PluggyListResponse
-    return (body.results ?? body.data ?? []).map((investment) => ({ investment }))
+    const [itemResponse, investmentsResponse] = await Promise.all([
+      pluggyFetch(`/items/${encodeURIComponent(itemId)}`, { headers }),
+      pluggyFetch(`/investments?itemId=${encodeURIComponent(itemId)}`, { headers }),
+    ])
+    const item = await itemResponse.json() as PluggyItem
+    const body = await investmentsResponse.json() as PluggyListResponse
+    return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: item.connector?.name }))
   }))).flat()
   return {
     provider: 'pluggy',
     fetchedAt: new Date().toISOString(),
-    positions: records.map(({ investment }, index) => ({
+    positions: records.map(({ investment, institution }, index) => ({
       id: investment.id ?? `${investment.code ?? investment.name ?? 'investment'}-${index}`,
       name: investment.name ?? investment.code ?? 'Unnamed investment',
       code: investment.code,
       type: investment.type,
       quantity: finiteNumber(investment.quantity),
-      value: finiteNumber(investment.value ?? investment.amount),
+      // Pluggy's `value` is the unit quota/asset price. The position total is
+      // `balance` (net) and, when that is unavailable, `amount` (gross).
+      value: finiteNumber(investment.balance ?? investment.amount),
+      grossAmount: finiteNumber(investment.amount),
+      unitValue: finiteNumber(investment.value),
       currency: investment.currencyCode ?? 'BRL',
-      institution: typeof investment.institution === 'string' ? investment.institution : investment.institution?.name,
-      updatedAt: investment.updatedAt,
+      institution: typeof investment.institution === 'string' ? investment.institution : investment.institution?.name ?? institution,
+      asOf: investment.date,
     })),
   }
 }
