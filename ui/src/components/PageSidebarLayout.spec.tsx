@@ -41,10 +41,23 @@ describe('PageSidebarLayout', () => {
       </PageSidebarLayout>,
     )
 
+    const desktopSidebar = screen.getByTestId('page-sidebar-desktop')
+    const expandedSurface = screen.getByTestId('page-sidebar-expanded')
+    const collapsedSurface = screen.getByTestId('page-sidebar-collapsed')
+    expect(desktopSidebar.getAttribute('data-state')).toBe('expanded')
+    expect(desktopSidebar.getAttribute('style')).toContain('width: 270px')
+    expect(desktopSidebar.className).toContain('transition-[width]')
+    expect(desktopSidebar.className).toContain('motion-reduce:transition-none')
+    expect(expandedSurface.hasAttribute('inert')).toBe(false)
+    expect(collapsedSurface.hasAttribute('inert')).toBe(true)
+
     fireEvent.click(screen.getByRole('button', { name: 'Collapse Market' }))
     expect(window.localStorage.getItem('openalice.page-sidebar-collapsed.market.v1')).toBe('1')
+    expect(desktopSidebar.getAttribute('data-state')).toBe('collapsed')
+    expect(desktopSidebar.getAttribute('style')).toContain('width: 44px')
+    expect(expandedSurface.hasAttribute('inert')).toBe(true)
+    expect(collapsedSurface.hasAttribute('inert')).toBe(false)
     expect(screen.getByRole('button', { name: 'Open Market' })).toBeTruthy()
-    expect(screen.queryByText('Market navigation')).toBeNull()
 
     view.unmount()
     render(
@@ -56,6 +69,8 @@ describe('PageSidebarLayout', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Market' }))
     expect(window.localStorage.getItem('openalice.page-sidebar-collapsed.market.v1')).toBe('0')
+    expect(screen.getByTestId('page-sidebar-desktop').getAttribute('data-state')).toBe('expanded')
+    expect(screen.getByTestId('page-sidebar-expanded').hasAttribute('inert')).toBe(false)
     expect(screen.getByText('Market navigation')).toBeTruthy()
   })
 
@@ -90,6 +105,31 @@ describe('PageSidebarLayout', () => {
     expect(drawer.getAttribute('data-state')).toBe('open')
 
     fireEvent.click(screen.getByRole('button', { name: 'Select message' }))
+    expect(drawer.getAttribute('data-state')).toBe('closed')
+  })
+
+  it('keeps a page navigator in the drawer below its custom desktop breakpoint', () => {
+    render(
+      <PageSidebarLayout
+        storageKey="settings"
+        title="Settings"
+        desktopMinWidth={960}
+        sidebar={({ closeMobileDrawer }) => (
+          <button type="button" onClick={closeMobileDrawer}>Select General</button>
+        )}
+      >
+        <div>Settings content</div>
+      </PageSidebarLayout>,
+    )
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(min-width: 960px)')
+    const drawer = screen.getByTestId('page-sidebar-drawer')
+    expect(drawer.getAttribute('data-state')).toBe('closed')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }))
+    expect(drawer.getAttribute('data-state')).toBe('open')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select General' }))
     expect(drawer.getAttribute('data-state')).toBe('closed')
   })
 })

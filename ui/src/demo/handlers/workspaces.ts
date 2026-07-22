@@ -1,7 +1,21 @@
 import { http, HttpResponse } from 'msw'
 import { demoChatWorkspace, demoWorkspaces, demoTemplates } from '../fixtures/workspaces'
 import { demoWorkspaceFiles } from '../fixtures/inbox'
-import type { DepartedWorkspace, WorkspaceMetadataPatch } from '../../components/workspace/api'
+import {
+  createDemoWebPiSnapshot,
+  demoWebPiFollowUp,
+  demoWebPiSeeds,
+  type DemoWebPiSeed,
+} from '../fixtures/webpi'
+import type {
+  AgentConfig,
+  AgentConfigBundle,
+  AgentId,
+  DepartedWorkspace,
+  SessionRecord,
+  WebPiSnapshot,
+  WorkspaceMetadataPatch,
+} from '../../components/workspace/api'
 
 const demoManagerSession = {
   id: 'demo-manager-session',
@@ -19,8 +33,94 @@ const demoManagerSession = {
 }
 
 let demoManagerMessages: unknown[] = []
+let demoQuickChatSequence = 0
 
-function demoManagerSnapshot() {
+function webPiKey(wsId: string, sessionId: string): string {
+  return `${wsId}::${sessionId}`
+}
+
+function createSeededWebPiSessions(): Map<string, WebPiSnapshot> {
+  return new Map(demoWebPiSeeds.map((seed) => [
+    webPiKey(seed.wsId, seed.sessionId),
+    createDemoWebPiSnapshot(seed),
+  ]))
+}
+
+let demoWebPiSessions = createSeededWebPiSessions()
+
+export function resetDemoWorkspaceWebPiState(): void {
+  demoManagerMessages = []
+  demoQuickChatSequence = 0
+  demoWebPiSessions = createSeededWebPiSessions()
+  for (let index = 0; index < demoWorkspaces.length; index += 1) {
+    const workspace = demoWorkspaces[index]!
+    demoWorkspaces[index] = {
+      ...workspace,
+      sessions: workspace.sessions.filter((session) => !session.id.startsWith('demo-quick-chat-')),
+    }
+  }
+}
+
+function setDemoWebPiSession(seed: DemoWebPiSeed): WebPiSnapshot {
+  const snapshot = createDemoWebPiSnapshot(seed)
+  demoWebPiSessions.set(webPiKey(seed.wsId, seed.sessionId), snapshot)
+  return snapshot
+}
+
+function findDemoWebPiSession(wsId: string, sessionId: string): WebPiSnapshot | null {
+  return demoWebPiSessions.get(webPiKey(wsId, sessionId)) ?? null
+}
+
+function ensureDemoWebPiSession(wsId: string, sessionId: string): WebPiSnapshot | null {
+  const existing = findDemoWebPiSession(wsId, sessionId)
+  if (existing) return existing
+  const record = demoWorkspaces
+    .find((workspace) => workspace.id === wsId)
+    ?.sessions.find((session) => session.id === sessionId && session.agent === 'pi')
+  if (!record) return null
+  return setDemoWebPiSession({
+    wsId,
+    sessionId,
+    resumeId: record.resumeId,
+    startedAt: record.startedAt ?? Date.now(),
+    messages: [],
+  })
+}
+
+function appendDemoWebPiMessages(
+  wsId: string,
+  sessionId: string,
+  messages: readonly unknown[],
+): WebPiSnapshot | null {
+  const current = ensureDemoWebPiSession(wsId, sessionId)
+  if (!current) return null
+  const next: WebPiSnapshot = {
+    ...current,
+    phase: 'idle',
+    messages: [...current.messages, ...messages],
+    streamingMessage: null,
+    revision: current.revision + 1,
+  }
+  demoWebPiSessions.set(webPiKey(wsId, sessionId), next)
+  return next
+}
+
+// Demo mutations live only for the current MSW worker lifetime. Keeping agent
+// config state here lets the real Settings -> save event -> Quick Start refresh
+// path be exercised without touching a user's Workspace files.
+const demoAgentConfigs = new Map<string, Partial<Record<AgentId, AgentConfig>>>()
+
+function demoAgentConfigBundle(workspaceId: string): AgentConfigBundle {
+  const saved = demoAgentConfigs.get(workspaceId)
+  return {
+    claude: saved?.claude ?? null,
+    codex: saved?.codex ?? null,
+    opencode: saved?.opencode ?? null,
+    pi: saved?.pi ?? null,
+  }
+}
+
+function demoManagerSnapshot(): WebPiSnapshot {
   return {
     recordId: demoManagerSession.id,
     wsId: demoManagerSession.wsId,
@@ -153,6 +253,8 @@ const demoTemplateUpgradePlan = (workspaceId: string) => ({
 })
 
 export const workspacesHandlers = [
+  http.put('/api/workspaces/terminal-view-attributes', () =>
+    HttpResponse.json({ ok: true, changed: true })),
   http.get('/api/workspaces', () => HttpResponse.json({ workspaces: demoWorkspaces })),
   http.get('/api/workspaces/manager', () => HttpResponse.json({
     manager: {
@@ -453,8 +555,8 @@ export const workspacesHandlers = [
   http.get('/api/workspaces/credentials', () =>
     HttpResponse.json({
       credentials: [
-        { slug: 'openai-1', vendor: 'openai', label: 'OpenAI', authType: 'api-key', wires: { 'openai-chat': '' }, lastModel: 'gpt-5.6', resolvedModel: 'gpt-5.6', apiKey: null },
-        { slug: 'minimax-1', vendor: 'minimax', label: 'MiniMax', authType: 'api-key', wires: { 'openai-chat': '' }, lastModel: 'MiniMax-M2.1', resolvedModel: 'MiniMax-M2.1', apiKey: null },
+        { slug: 'openai-1', vendor: 'openai', label: 'OpenAI', authType: 'api-key', wires: { 'openai-chat': 'https://api.openai.com/v1' }, lastModel: 'gpt-5.6', resolvedModel: 'gpt-5.6', apiKey: 'demo-openai-key-not-secret' },
+        { slug: 'minimax-1', vendor: 'minimax', label: 'MiniMax', authType: 'api-key', wires: { 'openai-chat': 'https://api.minimax.io/v1' }, lastModel: 'MiniMax-M2.1', resolvedModel: 'MiniMax-M2.1', apiKey: 'demo-minimax-key-not-secret' },
       ],
     }),
   ),
@@ -571,25 +673,80 @@ export const workspacesHandlers = [
   }),
 
   // Quick-chat launch — honor an explicit Chat Workspace target and otherwise
-  // reuse the recent demo Chat workspace. The terminal is a scripted replay.
+  // reuse the recent demo Chat workspace. Pi launches use the real WebPi UI
+  // with a recorded native-message response; other runtimes retain the TUI
+  // placeholder so visitors can still see that OpenAlice is multi-runtime.
   http.post('/api/workspaces/quick-chat', async ({ request }) => {
-    const body = (await request.json().catch(() => null)) as { targetWsId?: unknown } | null
+    const body = (await request.json().catch(() => null)) as {
+      prompt?: unknown
+      agent?: unknown
+      targetWsId?: unknown
+    } | null
     const explicit = typeof body?.targetWsId === 'string'
       ? demoWorkspaces.find((workspace) => workspace.id === body.targetWsId)
       : undefined
-    const ws = explicit ?? demoChatWorkspace
+    const fallback = demoWorkspaces.find((workspace) => workspace.id === demoChatWorkspace.id)
+    const ws = explicit ?? fallback
+    if (!ws) return HttpResponse.json({ error: 'workspace_not_found' }, { status: 404 })
+
+    const prompt = typeof body?.prompt === 'string' && body.prompt.trim()
+      ? body.prompt.trim()
+      : 'Show me how this Workspace is doing.'
+    const agent = typeof body?.agent === 'string' && ws.agents.includes(body.agent)
+      ? body.agent
+      : 'pi'
+    const startedAt = Date.now()
+    const now = new Date(startedAt).toISOString()
+    const sessionId = `demo-quick-chat-${++demoQuickChatSequence}`
+    const resumeId = `demo-resume-quick-chat-${demoQuickChatSequence}`
+    const prefix = ({ claude: 'c', codex: 'x', opencode: 'o', pi: 'p' } as Record<string, string>)[agent]
+      ?? agent.slice(0, 1)
+    const name = `${prefix}${ws.sessions.filter((session) => session.agent === agent).length + 1}`
+    const surface = agent === 'pi' ? 'webpi' as const : 'terminal' as const
+    const record: SessionRecord = {
+      id: sessionId,
+      wsId: ws.id,
+      agent,
+      name,
+      createdAt: now,
+      lastActiveAt: now,
+      state: 'running',
+      surface,
+      resumeId,
+      pid: 0,
+      startedAt,
+      title: prompt,
+    }
+    const updatedWorkspace = {
+      ...ws,
+      agents: ws.agents.includes(agent) ? ws.agents : [...ws.agents, agent],
+      sessions: [...ws.sessions, record],
+    }
+    const workspaceIndex = demoWorkspaces.findIndex((workspace) => workspace.id === ws.id)
+    demoWorkspaces[workspaceIndex] = updatedWorkspace
+
+    if (surface === 'webpi') {
+      setDemoWebPiSession({
+        wsId: ws.id,
+        sessionId,
+        resumeId,
+        startedAt,
+        messages: demoWebPiFollowUp(prompt),
+      })
+    }
     return HttpResponse.json(
       {
-        workspace: ws,
+        workspace: updatedWorkspace,
         session: {
-          sessionId: 'demo-session',
+          sessionId,
           wsId: ws.id,
-          name: 'c1',
+          name,
           pid: 0,
-          startedAt: Date.now(),
-          agent: 'claude',
-          resumeId: 'demo-resume-quick-chat',
-          title: null,
+          startedAt,
+          agent,
+          resumeId,
+          title: prompt,
+          surface,
         },
       },
       { status: 201 },
@@ -597,27 +754,76 @@ export const workspacesHandlers = [
   }),
   http.post('/api/workspaces/:id/sessions/:sid/pause', () => HttpResponse.json(true)),
   http.post('/api/workspaces/:id/sessions/:sid/resume', () => HttpResponse.json(null)),
-  http.delete('/api/workspaces/:id/sessions/:sid', () => HttpResponse.json(true)),
+  http.delete('/api/workspaces/:id/sessions/:sid', ({ params }) => {
+    const wsId = String(params.id)
+    const sessionId = String(params.sid)
+    const workspaceIndex = demoWorkspaces.findIndex((candidate) => candidate.id === String(params.id))
+    const workspace = demoWorkspaces[workspaceIndex]
+    if (workspace) {
+      demoWorkspaces[workspaceIndex] = {
+        ...workspace,
+        sessions: workspace.sessions.filter((session) => session.id !== sessionId),
+      }
+    }
+    demoWebPiSessions.delete(webPiKey(wsId, sessionId))
+    return HttpResponse.json(true)
+  }),
   http.get('/api/workspaces/:id/sessions/:sid/diagnostics', () =>
     HttpResponse.json({ status: 'demo' }),
   ),
-  http.post('/api/workspaces/:id/sessions/:sid/webpi/open', () =>
-    HttpResponse.json({ snapshot: demoManagerSnapshot() })),
-  http.get('/api/workspaces/:id/sessions/:sid/webpi', () =>
-    HttpResponse.json({ snapshot: demoManagerSnapshot() })),
-  http.post('/api/workspaces/:id/sessions/:sid/webpi/prompt', async ({ request }) => {
-    const body = await request.json().catch(() => ({})) as { message?: string }
-    demoManagerMessages = [
-      ...demoManagerMessages,
-      { role: 'user', content: body.message ?? '' },
-      { role: 'assistant', content: 'Demo manager: I would inspect the live CLI indexes before changing any desk.' },
-    ]
-    return HttpResponse.json({ snapshot: demoManagerSnapshot() })
+  http.post('/api/workspaces/:id/sessions/:sid/webpi/open', ({ params }) => {
+    const wsId = String(params.id)
+    const sessionId = String(params.sid)
+    const snapshot = wsId === demoManagerSession.wsId && sessionId === demoManagerSession.id
+      ? demoManagerSnapshot()
+      : ensureDemoWebPiSession(wsId, sessionId)
+    return snapshot
+      ? HttpResponse.json({ snapshot })
+      : HttpResponse.json({ error: 'webpi_session_not_found' }, { status: 404 })
   }),
-  http.post('/api/workspaces/:id/sessions/:sid/webpi/abort', () =>
-    HttpResponse.json({ snapshot: demoManagerSnapshot() })),
+  http.get('/api/workspaces/:id/sessions/:sid/webpi', ({ params, request }) => {
+    const wsId = String(params.id)
+    const sessionId = String(params.sid)
+    const snapshot = wsId === demoManagerSession.wsId && sessionId === demoManagerSession.id
+      ? demoManagerSnapshot()
+      : findDemoWebPiSession(wsId, sessionId)
+    if (!snapshot) return HttpResponse.json({ error: 'webpi_session_not_found' }, { status: 404 })
+    const revision = Number.parseInt(new URL(request.url).searchParams.get('revision') ?? '', 10)
+    return Number.isFinite(revision) && revision === snapshot.revision
+      ? HttpResponse.json({ unchanged: true })
+      : HttpResponse.json({ snapshot })
+  }),
+  http.post('/api/workspaces/:id/sessions/:sid/webpi/prompt', async ({ params, request }) => {
+    const body = await request.json().catch(() => ({})) as { message?: string }
+    const wsId = String(params.id)
+    const sessionId = String(params.sid)
+    const message = body.message?.trim() ?? ''
+    if (wsId === demoManagerSession.wsId && sessionId === demoManagerSession.id) {
+      demoManagerMessages = [
+        ...demoManagerMessages,
+        { role: 'user', content: message },
+        { role: 'assistant', content: 'Demo manager: I would inspect the live CLI indexes before changing any desk.' },
+      ]
+      return HttpResponse.json({ snapshot: demoManagerSnapshot() })
+    }
+    const snapshot = appendDemoWebPiMessages(wsId, sessionId, demoWebPiFollowUp(message))
+    return snapshot
+      ? HttpResponse.json({ snapshot })
+      : HttpResponse.json({ error: 'webpi_session_not_found' }, { status: 404 })
+  }),
+  http.post('/api/workspaces/:id/sessions/:sid/webpi/abort', ({ params }) => {
+    const wsId = String(params.id)
+    const sessionId = String(params.sid)
+    const snapshot = wsId === demoManagerSession.wsId && sessionId === demoManagerSession.id
+      ? demoManagerSnapshot()
+      : findDemoWebPiSession(wsId, sessionId)
+    return snapshot
+      ? HttpResponse.json({ snapshot })
+      : HttpResponse.json({ error: 'webpi_session_not_found' }, { status: 404 })
+  }),
 
-  http.get('/api/workspaces/:id/agent-config', () => HttpResponse.json({})),
+  http.get('/api/workspaces/:id/agent-config', ({ params }) =>
+    HttpResponse.json(demoAgentConfigBundle(String(params.id)))),
   http.get('/api/workspaces/:id/agent-readiness', () =>
     HttpResponse.json({
       agents: {
@@ -668,12 +874,37 @@ export const workspacesHandlers = [
       },
     }),
   ),
-  // Credential detection — demo workspaces have no on-disk config, so report
-  // none (no overwrite notice; the picker defaults to the first compatible).
-  http.get('/api/workspaces/:id/agent-config/:agent/credential', () =>
-    HttpResponse.json({ slug: null, model: null, contextWindow: null, wireShape: null }),
-  ),
-  http.put('/api/workspaces/:id/agent-config/:agent', () => HttpResponse.json({ ok: true })),
+  http.get('/api/workspaces/:id/agent-config/:agent/credential', ({ params }) => {
+    const workspaceId = String(params.id)
+    const agent = String(params.agent) as AgentId
+    const config = demoAgentConfigs.get(workspaceId)?.[agent]
+    const configured = Boolean(config?.baseUrl && config.apiKey && config.model)
+    const baseUrl = config?.baseUrl ?? ''
+    const slug = baseUrl.includes('api.openai.com')
+      ? 'openai-1'
+      : baseUrl.includes('api.minimax.io')
+        ? 'minimax-1'
+        : null
+    return HttpResponse.json({
+      configured,
+      slug: configured ? slug : null,
+      model: configured ? config?.model ?? null : null,
+      contextWindow: configured ? config?.contextWindow ?? null : null,
+      wireShape: configured ? config?.wireShape ?? null : null,
+      reasoning: configured ? config?.reasoning ?? null : null,
+      reasoningEffort: configured ? config?.reasoningEffort ?? null : null,
+    })
+  }),
+  http.put('/api/workspaces/:id/agent-config/:agent', async ({ params, request }) => {
+    const workspaceId = String(params.id)
+    const agent = String(params.agent) as AgentId
+    const config = await request.json() as AgentConfig
+    demoAgentConfigs.set(workspaceId, {
+      ...demoAgentConfigs.get(workspaceId),
+      [agent]: config,
+    })
+    return HttpResponse.json({ ok: true })
+  }),
   http.post('/api/workspaces/:id/agent-config/:agent/test', () =>
     HttpResponse.json({ ok: true, response: 'Demo mode — test is stubbed.' }),
   ),

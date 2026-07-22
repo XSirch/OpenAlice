@@ -29,6 +29,7 @@ import { secProvider } from '../../providers/sec/index.js'
 import { eastmoneyProvider } from '../../providers/eastmoney/index.js'
 import { twseProvider } from '../../providers/twse/index.js'
 import { brapiProvider } from '../../providers/brapi/index.js'
+import { hgbrasilProvider } from '../../providers/hgbrasil/index.js'
 
 // --- Extension routers ---
 import { equityRouter } from '../../extensions/equity/equity-router.js'
@@ -64,6 +65,7 @@ export function createRegistry(): Registry {
   registry.includeProvider(eastmoneyProvider)
   registry.includeProvider(twseProvider)
   registry.includeProvider(brapiProvider)
+  registry.includeProvider(hgbrasilProvider)
   return registry
 }
 

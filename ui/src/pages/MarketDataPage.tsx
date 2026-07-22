@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type AppConfig } from '../api'
 import { SaveIndicator } from '../components/SaveIndicator'
-import { ConfigSection, Field, inputClass } from '../components/form'
+import { ConfigSection, Field, SettingsScrollArea, inputClass } from '../components/form'
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
 import { PageHeader } from '../components/PageHeader'
@@ -47,6 +47,11 @@ const CHART_VENDORS: ChartVendor[] = [
     name: 'brapi.dev (Brasil)',
     desc: 'Brazilian equities, FIIs, BDRs and ETFs. Requires a brapi token for production coverage; daily/research data only, never a realtime B3 signal source.',
   },
+  {
+    id: 'hgbrasil',
+    name: 'HG Brasil Finance',
+    desc: 'Brazilian B3 shares, FIIs, BDRs, ETFs and fundamentals. Delayed research data only; it cannot enable realtime B3 signals.',
+  },
 ]
 
 // Data-provider keys — LOW-frequency data (boards, economy, fundamentals). The
@@ -65,6 +70,7 @@ const KEY_GROUPS: { label: string | null; providers: ProviderEntry[] }[] = [
     label: null,
     providers: [
       { key: 'brapi', name: 'brapi.dev', desc: 'Brazilian shares, FIIs, BDRs and ETFs. This source is delayed and restricted to research; it cannot enable B3 realtime alerts.', hint: 'brapi.dev → Dashboard → API Keys' },
+      { key: 'hgbrasil', name: 'HG Brasil Finance', desc: 'B3 shares, FIIs, dividends and fundamentals. Quotes are delayed and restricted to research; it cannot enable B3 realtime alerts.', hint: 'hgbrasil.com → Console → Chave de integração' },
       { key: 'fmp', name: 'FMP', desc: 'Unlocks per-symbol equity fundamentals, discovery, ETF detail — the one key that adds data the hub does not serve.', hint: 'financialmodelingprep.com' },
     ],
   },
@@ -254,7 +260,7 @@ export function MarketDataPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-5">
+      <SettingsScrollArea className="px-4 py-5 md:px-8">
         <div className={`max-w-[880px] mx-auto ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <HubCard
             hub={hub}
@@ -277,8 +283,8 @@ export function MarketDataPage() {
             highlightFmp={highlightFmp}
           />
         </div>
-        {loadError && <p className="text-[13px] text-red mt-4 max-w-[880px] mx-auto">Failed to load configuration.</p>}
-      </div>
+        {loadError && <p className="text-[13px] text-destructive mt-4 max-w-[880px] mx-auto">Failed to load configuration.</p>}
+      </SettingsScrollArea>
     </div>
   )
 }
@@ -297,17 +303,17 @@ function HubCard({
   const host = hub.baseUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
 
   return (
-    <section className="mb-6 border border-border/60 rounded-xl bg-bg-secondary/50 p-5">
+    <section className="mb-6 border border-border/60 rounded-xl bg-secondary/50 p-5">
       <div className="flex items-center justify-between mb-1.5">
         <h2 className="text-[14px] font-semibold">Data Hub</h2>
         <Toggle size="sm" checked={hub.enabled} onChange={onToggle} />
       </div>
       {hub.enabled ? (
         <div className="flex items-center gap-2 mb-1.5">
-          {ping === 'checking' && <span className="w-2 h-2 rounded-full bg-text-muted/40 animate-pulse shrink-0" />}
-          {ping === 'ok' && <span className="w-2 h-2 rounded-full bg-green shrink-0" />}
-          {ping === 'down' && <span className="w-2 h-2 rounded-full bg-red shrink-0" />}
-          <span className="text-[13px] text-text">
+          {ping === 'checking' && <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-pulse shrink-0" />}
+          {ping === 'ok' && <span className="w-2 h-2 rounded-full bg-success shrink-0" />}
+          {ping === 'down' && <span className="w-2 h-2 rounded-full bg-destructive shrink-0" />}
+          <span className="text-[13px] text-foreground">
             {ping === 'checking' && 'Checking…'}
             {ping === 'ok' && <>Connected · <span className="font-mono text-[12px]">{host}</span></>}
             {ping === 'down' && 'Unreachable — using local sources'}
@@ -315,11 +321,11 @@ function HubCard({
         </div>
       ) : (
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="w-2 h-2 rounded-full border border-text-muted/40 shrink-0" />
-          <span className="text-[13px] text-text-muted">Off — boards and series use your own keys and vendors.</span>
+          <span className="w-2 h-2 rounded-full border border-muted-foreground/40 shrink-0" />
+          <span className="text-[13px] text-muted-foreground">Off — boards and series use your own keys and vendors.</span>
         </div>
       )}
-      <p className="text-[12px] text-text-muted">
+      <p className="text-[12px] text-muted-foreground">
         Low-frequency data is served from the hosted hub — no API keys needed.
         Anonymous reads of public data; your own keys always take precedence.
       </p>
@@ -332,24 +338,24 @@ function HubCard({
 function SourcesCard({ rows, onAddFmp }: { rows: SourceRow[]; onAddFmp: () => void }) {
   return (
     <section className="mb-6">
-      <h2 className="text-[13px] font-semibold text-text-muted uppercase tracking-wider mb-2">Data Sources</h2>
-      <div className="border border-border/60 rounded-xl bg-bg-secondary/50 divide-y divide-border/40">
+      <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Data Sources</h2>
+      <div className="border border-border/60 rounded-xl bg-secondary/50 divide-y divide-border/40">
         {rows.map((row) => (
           <div key={row.name} className="flex items-center gap-3 px-4 py-3">
             <span
-              className={`w-2 h-2 rounded-full shrink-0 ${row.state === 'ok' ? 'bg-green' : 'border border-text-muted/50'}`}
+              className={`w-2 h-2 rounded-full shrink-0 ${row.state === 'ok' ? 'bg-success' : 'border border-muted-foreground/50'}`}
             />
             <div className="flex-1 min-w-0">
-              <span className="text-[13px] text-text font-medium">{row.name}</span>
-              {row.detail && <span className="text-[12px] text-text-muted/60 ml-2">{row.detail}</span>}
+              <span className="text-[13px] text-foreground font-medium">{row.name}</span>
+              {row.detail && <span className="text-[12px] text-muted-foreground/60 ml-2">{row.detail}</span>}
             </div>
-            <span className={`text-[12px] ${row.state === 'ok' ? 'text-text-muted' : 'text-text-muted/60'}`}>
+            <span className={`text-[12px] ${row.state === 'ok' ? 'text-muted-foreground' : 'text-muted-foreground/60'}`}>
               {row.source}
             </span>
             {row.cta && (
               <button
                 onClick={onAddFmp}
-                className="shrink-0 border border-accent/40 text-accent rounded-md px-2.5 py-1 text-[12px] font-medium cursor-pointer hover:bg-accent/10 transition-colors"
+                className="shrink-0 border border-primary/40 text-primary rounded-md px-2.5 py-1 text-[12px] font-medium cursor-pointer hover:bg-primary/10 transition-colors"
               >
                 Add key
               </button>
@@ -372,8 +378,8 @@ function ChartVendorsSection({
 }) {
   return (
     <section className="mb-6">
-      <h2 className="text-[13px] font-semibold text-text-muted uppercase tracking-wider mb-2">Chart Vendors</h2>
-      <p className="text-[12px] text-text-muted/70 mb-2.5 max-w-[640px]">
+      <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Chart Vendors</h2>
+      <p className="text-[12px] text-muted-foreground/70 mb-2.5 max-w-[640px]">
         Live K-line &amp; quote sources — queried per symbol, never via the hub. Switch one on and it
         joins the search pool; what it covers is found by searching, not configured here. yfinance is
         the always-on global default.
@@ -382,19 +388,19 @@ function ChartVendorsSection({
         {CHART_VENDORS.map((v) => {
           const on = v.alwaysOn || extraVendors.includes(v.id)
           return (
-            <div key={v.id} className="border border-border/60 rounded-xl bg-bg-secondary/50 px-4 py-3.5">
+            <div key={v.id} className="border border-border/60 rounded-xl bg-secondary/50 px-4 py-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${on ? 'bg-green' : 'border border-text-muted/50'}`} />
-                  <span className="text-[13px] font-semibold text-text truncate">{v.name}</span>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${on ? 'bg-success' : 'border border-muted-foreground/50'}`} />
+                  <span className="text-[13px] font-semibold text-foreground truncate">{v.name}</span>
                 </div>
                 {v.alwaysOn ? (
-                  <span className="text-[11px] text-text-muted/60 uppercase tracking-wider shrink-0">always on</span>
+                  <span className="text-[11px] text-muted-foreground/60 uppercase tracking-wider shrink-0">always on</span>
                 ) : (
                   <Toggle size="sm" checked={on} onChange={(val) => onToggle(v.id, val)} />
                 )}
               </div>
-              <p className="text-[12px] text-text-muted/70 mt-1.5 leading-relaxed">{v.desc}</p>
+              <p className="text-[12px] text-muted-foreground/70 mt-1.5 leading-relaxed">{v.desc}</p>
             </div>
           )
         })}
@@ -428,14 +434,14 @@ function AdvancedSection({
     <section className="mb-8">
       <button
         onClick={onToggle}
-        className="flex items-center gap-1.5 text-[13px] font-semibold text-text-muted hover:text-text cursor-pointer transition-colors py-1"
+        className="flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors py-1"
       >
         <span className={`inline-block transition-transform text-[10px] ${open ? 'rotate-90' : ''}`}>▶</span>
         Advanced
       </button>
 
       {open && (
-        <div className="mt-2 border border-border/60 rounded-xl bg-bg-secondary/30 px-5">
+        <div className="mt-2 border border-border/60 rounded-xl bg-secondary/30 px-5">
           <KeyProvidersSection
             providerKeys={providerKeys}
             onKeyChange={onKeyChange}
@@ -452,7 +458,7 @@ function AdvancedSection({
               value={hub.baseUrl}
               onChange={(e) => onHubChange({ ...hub, baseUrl: e.target.value })}
               placeholder="https://traderhub.openalice.ai"
-              className="w-full max-w-[420px] px-2.5 py-1.5 bg-bg text-text border border-border rounded-md text-[12px] font-mono outline-none focus:border-accent"
+              className="w-full max-w-[420px] px-2.5 py-1.5 bg-background text-foreground border border-border rounded-md text-[12px] font-mono outline-none focus:border-primary"
             />
           </ConfigSection>
         </div>
@@ -478,10 +484,10 @@ function TestButton({
       disabled={disabled}
       className={`shrink-0 border rounded-md px-3 py-2 text-[13px] font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-default ${
         status === 'ok'
-          ? 'border-green text-green'
+          ? 'border-success text-success'
           : status === 'error'
-            ? 'border-red text-red'
-            : 'border-border text-text-muted hover:bg-bg-tertiary hover:text-text'
+            ? 'border-destructive text-destructive'
+            : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
       }`}
     >
       {status === 'testing' ? '...' : status === 'ok' ? 'OK' : status === 'error' ? 'Fail' : 'Test'}
@@ -508,22 +514,30 @@ function KeyProvidersSection({
     return init
   })
   const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
+  const [testError, setTestError] = useState<Record<string, string>>({})
 
   const handleKeyChange = (keyName: string, value: string) => {
     setLocalKeys((prev) => ({ ...prev, [keyName]: value }))
     setTestStatus((prev) => ({ ...prev, [keyName]: 'idle' }))
+    setTestError((prev) => ({ ...prev, [keyName]: '' }))
     onKeyChange(keyName, value)
   }
 
   const testProvider = async (keyName: string) => {
     const key = localKeys[keyName]
-    if (!key) return
+    if (!key) {
+      setTestError((prev) => ({ ...prev, [keyName]: 'Enter an API key before testing.' }))
+      return
+    }
     setTestStatus((prev) => ({ ...prev, [keyName]: 'testing' }))
+    setTestError((prev) => ({ ...prev, [keyName]: '' }))
     try {
       const result = await api.marketData.testProvider(keyName, key)
       setTestStatus((prev) => ({ ...prev, [keyName]: result.ok ? 'ok' : 'error' }))
-    } catch {
+      if (!result.ok) setTestError((prev) => ({ ...prev, [keyName]: result.error ?? 'Connection test failed without a diagnostic.' }))
+    } catch (error) {
       setTestStatus((prev) => ({ ...prev, [keyName]: 'error' }))
+      setTestError((prev) => ({ ...prev, [keyName]: error instanceof Error ? error.message : 'Connection test failed before reaching the provider.' }))
     }
   }
 
@@ -536,23 +550,24 @@ function KeyProvidersSection({
         {KEY_GROUPS.map((group, gi) => (
           <div key={gi}>
             {group.label && (
-              <p className="text-[11px] text-text-muted/60 uppercase tracking-wider border-t border-border/40 pt-3 mb-3">
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider border-t border-border/40 pt-3 mb-3">
                 {group.label}
               </p>
             )}
             <div className="space-y-4">
               {group.providers.map(({ key, name, desc, hint }) => {
                 const status = testStatus[key] || 'idle'
+                const error = testError[key]
                 const isFmp = key === 'fmp'
                 return (
                   <div
                     key={key}
                     ref={isFmp ? fmpRef : undefined}
-                    className={`rounded-lg transition-shadow ${isFmp && highlightFmp ? 'ring-2 ring-accent/60' : ''}`}
+                    className={`rounded-lg transition-shadow ${isFmp && highlightFmp ? 'ring-2 ring-primary/60' : ''}`}
                   >
                     <Field label={name} description={hint}>
-                      <p className="text-[12px] text-text-muted/70 mb-2">{desc}</p>
-                      <div className="flex items-center gap-2">
+                      <p className="text-[12px] text-muted-foreground/70 mb-2">{desc}</p>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <input
                           className={inputClass}
                           type="password"
@@ -566,6 +581,7 @@ function KeyProvidersSection({
                           onClick={() => testProvider(key)}
                         />
                       </div>
+                      {error && <p className="mt-1 text-[12px] text-destructive" role="alert">{error}</p>}
                     </Field>
                   </div>
                 )

@@ -69,8 +69,9 @@ export const tradingApi = {
 
   // ==================== FX rates ====================
 
-  async fxRates(): Promise<{ rates: Array<{ currency: string; rate: number; source: string; updatedAt: string }> }> {
-    return fetchJson('/api/trading/fx-rates')
+  async fxRates(currencies: string[] = []): Promise<{ rates: Array<{ currency: string; rate: number; source: string; updatedAt: string }> }> {
+    const query = currencies.length > 0 ? `?currencies=${encodeURIComponent(currencies.join(','))}` : ''
+    return fetchJson(`/api/trading/fx-rates${query}`)
   },
 
   // ==================== Per-UTA ====================

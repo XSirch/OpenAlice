@@ -1,0 +1,36 @@
+import { Hono } from 'hono'
+import { z } from 'zod'
+import { readOpenFinanceConfig, readPublicOpenFinanceConfig, writeOpenFinanceConfig } from '../../core/open-finance-config.js'
+import { fetchPluggyCustody } from '../../domain/open-finance/pluggy.js'
+import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
+
+const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
+
+export function createOpenFinanceRoutes() {
+  const app = new Hono()
+  app.get('/', async (c) => c.json(await readPublicOpenFinanceConfig()))
+  app.put('/', async (c) => {
+    try {
+      const result = await writeOpenFinanceConfig(updateSchema.parse(await c.req.json()))
+      triggerUTARestart().catch(() => { /* account health reports restart failures */ })
+      return c.json(result)
+    }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
+  })
+  app.get('/custody', async (c) => {
+    try {
+      const config = await readOpenFinanceConfig()
+      if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
+      return c.json(await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds))
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  app.post('/test', async (c) => {
+    try {
+      const config = await readOpenFinanceConfig()
+      if (!config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy client ID and secret are required.' }, 400)
+      const snapshot = await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds)
+      return c.json({ ok: true, positions: snapshot.positions.length })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  return app
+}

@@ -7,9 +7,10 @@
 
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-import type { z } from 'zod'
+import { z } from 'zod'
 import type { IBroker } from './types.js'
 import { MockBroker } from './mock/MockBroker.js'
+import { PluggyBroker } from './pluggy/PluggyBroker.js'
 import type { BrokerEngine } from '@traderalice/uta-protocol'
 import {
   BROKER_PACK_API_VERSION,
@@ -71,6 +72,12 @@ async function loadBrokerEngineUncached(engine: BrokerEngine): Promise<BrokerEng
     return {
       configSchema: MockBroker.configSchema,
       createBroker: (config) => Object.assign(MockBroker.fromConfig(config), { brokerEngine: 'mock' }),
+    }
+  }
+  if (engine === 'pluggy') {
+    return {
+      configSchema: z.object({}),
+      createBroker: (config) => new PluggyBroker(config),
     }
   }
   if (!isInstallableBrokerEngine(engine)) throw new Error(`Unknown broker engine "${engine}"`)

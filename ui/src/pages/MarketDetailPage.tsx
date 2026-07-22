@@ -1,6 +1,7 @@
 import { PageHeader } from '../components/PageHeader'
 import { SearchBox } from '../components/market/SearchBox'
 import { EquityDetail } from './market/EquityDetail'
+import { CurrencyDetail } from './market/CurrencyDetail'
 import { GenericDetail } from './market/GenericDetail'
 import { useWatchlist } from '../tabs/watchlist-store'
 import type { ViewSpec } from '../tabs/types'
@@ -11,11 +12,10 @@ interface MarketDetailPageProps {
 
 export function MarketDetailPage({ spec }: MarketDetailPageProps) {
   const { assetClass, symbol, source } = spec.params
-  // A selected brapi result carries `brapi|TICKER`. Propagate that identity to
-  // the quote header rather than falling back to yfinance (which needs `.SA`).
-  // Other source ids may be broker accounts, so they intentionally retain the
-  // generic default-provider path.
-  const quoteProvider = source?.startsWith('brapi|') ? 'brapi' : undefined
+  // A selected regional-vendor result carries `{vendor}|TICKER`. Propagate its
+  // identity to the quote header rather than falling back to yfinance.
+  const quoteProvider = source?.startsWith('brapi|') ? 'brapi'
+    : source?.startsWith('hgbrasil|') ? 'hgbrasil' : undefined
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -27,9 +27,11 @@ export function MarketDetailPage({ spec }: MarketDetailPageProps) {
       <div className="flex-1 flex flex-col gap-3 px-4 md:px-8 py-4 min-h-0 overflow-y-auto">
         <SearchBox />
         {assetClass === 'equity' ? (
-          <EquityDetail symbol={symbol} provider={quoteProvider} />
+          <EquityDetail symbol={symbol} source={source} provider={quoteProvider} />
+        ) : assetClass === 'currency' ? (
+          <CurrencyDetail symbol={symbol} source={source} />
         ) : (
-          <GenericDetail symbol={symbol} assetClass={assetClass} />
+          <GenericDetail symbol={symbol} assetClass={assetClass} source={source} />
         )}
       </div>
     </div>
@@ -53,8 +55,8 @@ function PinButton({ assetClass, symbol }: PinButtonProps) {
       title={pinned ? 'Remove from watchlist' : 'Add to watchlist'}
       className={`flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
         pinned
-          ? 'border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/15'
-          : 'border-border text-text-muted hover:text-text hover:bg-bg-tertiary'
+          ? 'border-warning-border/40 text-warning bg-warning-background/60 hover:bg-warning-background'
+          : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
       }`}
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

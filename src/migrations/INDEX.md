@@ -23,7 +23,11 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0021_workspace_departure_catalog` | 0.80.0-beta | 2026-07-12 | workspaces/workspaces.json, workspaces/workspaces/*, workspaces/departed-workspaces/*, workspaces/state/workspace-catalog.json | Move unregistered Workspace directories into a durable departed catalog without deleting them. |
 | `0022_connector_service_config` | 0.81.0-beta | 2026-07-13 | connectors.json, connector-service.json, ports.json | Move external notifications into sealed Connector Service config and retire legacy Web/MCP-Ask connector meanings. |
 | `0023_google_native_credentials` | 0.81.0-beta | 2026-07-16 | ai-provider-manager.json | Route saved Google Gemini credentials through the native API so current AQ authorization keys work. |
-| `0024_alice_invest_config` | 0.81.0-beta | 2026-07-16 | alice-invest.json | Seed the fail-closed Alice Invest configuration. |
-| `0025_connector_inbound_journal` | 0.81.0-beta | 2026-07-16 | connector-inbound-journal.json | Seed the private Connector inbound journal used for durable deduplication. |
-| `0026_external_conversation_bindings` | 0.81.0-beta | 2026-07-16 | external-conversation-bindings.json | Seed private external conversation to resumeId bindings. |
-| `0027_alice_invest_readiness_evidence` | 0.81.0-beta | 2026-07-17 | alice-invest-readiness-evidence.json | Seed the append-only Alice Invest readiness evidence journal. |
+| `0024_pi_native_workspace_config` | 0.82.0-beta | 2026-07-18 | workspaces/workspaces/*/.pi-agent, workspaces/departed-workspaces/*/.pi-agent, Pi user agent directory | Move redirected Pi Workspace homes into Pi's native global-provider and project-settings layers. |
+| `0025_retire_global_compaction_config` | 0.83.0-beta | 2026-07-19 | compaction.json, ai-provider-manager.json | Remove retired global context and compaction limits so model and native Agent runtime semantics remain authoritative. |
+| `0026_alice_invest_config` | 0.81.0-beta | 2026-07-16 | alice-invest.json | Seed the fail-closed Alice Invest configuration. |
+| `0027_connector_inbound_journal` | 0.81.0-beta | 2026-07-16 | connector-inbound-journal.json | Seed the private Connector inbound journal used for durable deduplication. |
+| `0028_external_conversation_bindings` | 0.81.0-beta | 2026-07-16 | external-conversation-bindings.json | Seed private external conversation to resumeId bindings. |
+| `0029_alice_invest_readiness_evidence` | 0.81.0-beta | 2026-07-17 | alice-invest-readiness-evidence.json | Seed the append-only Alice Invest readiness evidence journal. |
+| `0030_alice_invest_signal_ledger` | 0.81.0-beta | 2026-07-16 | alice-invest-signals.json | Seed append-only Alice Invest signal ledger. |
+| `0031_open_finance_config` | 0.81.0-beta | 2026-07-22 | open-finance.json | Seed the Open Finance custody configuration in a disabled state. |

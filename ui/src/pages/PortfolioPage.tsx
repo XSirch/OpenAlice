@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { api, type Position, type WalletCommitLog, type EquityCurvePoint, type UTASnapshotSummary } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
@@ -17,6 +17,8 @@ import { displayProviderForUTA, filterAccountTierUTAs } from '../lib/uta-account
 import { TradingModeGate } from '../components/TradingModeGate'
 import { ensureTradingModePolling, useTradingMode } from '../live/trading-mode'
 import { computeTodayDelta, type CurvePointSummary } from './portfolio-metrics'
+import { OpenFinanceCustody } from '../components/OpenFinanceCustody'
+import type { CustodySnapshot } from '../api/open-finance'
 
 // ==================== Types ====================
 
@@ -126,6 +128,7 @@ export function PortfolioPage() {
   // hero today-PnL delta and per-account sparklines. Distinct from
   // curvePoints which follows the user's chart-account selection.
   const [aggregateCurve, setAggregateCurve] = useState<CurveSummary | null>(null)
+  const [openFinanceCustody, setOpenFinanceCustody] = useState<CustodySnapshot | null>(null)
 
   const snapshotConfig = useMemo(() => ({ enabled: snapshotEnabled, every: snapshotEvery }), [snapshotEnabled, snapshotEvery])
   const saveSnapshotConfig = useCallback(async (d: Record<string, unknown>) => {
@@ -259,12 +262,12 @@ export function PortfolioPage() {
           <div className="flex-1 min-w-0 space-y-5">
             {!lastRefresh ? <PortfolioSkeleton /> : <>
             {!tradingModeLoading && tradingMode === 'lite' ? (
-              <TradingModeGate
-                title="Portfolio is unavailable in Lite mode."
-                description="Lite mode keeps UTA disconnected, so there are no broker accounts, positions, or equity snapshots to show. Change the trading mode in Agent Permissions to connect UTA."
-              />
+              <><PortfolioOverview equity={null} curve={null} custody={openFinanceCustody} fxRates={[]} accounts={[]} /><OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} /><TradingModeGate
+                title="Broker portfolio is unavailable in Lite mode."
+                description="Lite mode keeps UTA disconnected. Your MeuPluggy account remains available in read-only mode."
+              /></>
             ) : <>
-            <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />
+            <PortfolioOverview equity={data.equity} curve={aggregateCurve?.total ?? null} custody={openFinanceCustody} fxRates={data.fxRates} accounts={accountSources} />
 
             {curvePoints.length > 0 && (
               <EquityCurve
@@ -298,6 +301,8 @@ export function PortfolioPage() {
                 perAccountCurve={aggregateCurve?.perAccount ?? {}}
               />
             )}
+
+            <OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} />
 
             {allPositions.length > 0 && (
               <PositionsTable positions={allPositions} fxRates={data.fxRates} />
@@ -337,7 +342,7 @@ async function fetchPortfolioData(): Promise<PortfolioData> {
     const [equityResult, utasResult, fxResult] = await Promise.allSettled([
       api.trading.equity(),
       api.trading.listUTASummaries(),
-      api.trading.fxRates(),
+      api.trading.fxRates(['BRL']),
     ])
 
     const equity = equityResult.status === 'fulfilled' ? equityResult.value : null
@@ -375,8 +380,8 @@ function NoAccountsEmpty() {
   }
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <p className="text-sm font-medium text-text-muted">No trading accounts connected.</p>
-      <p className="mt-1.5 max-w-[320px] text-[12px] text-text-muted">
+      <p className="text-sm font-medium text-muted-foreground">No trading accounts connected.</p>
+      <p className="mt-1.5 max-w-[320px] text-[12px] text-muted-foreground">
         Portfolio shows live equity, positions and PnL across all your brokers. Add a connection to get started.
       </p>
       <button
@@ -389,29 +394,66 @@ function NoAccountsEmpty() {
   )
 }
 
-// ==================== Hero Metrics ====================
+// ==================== Portfolio overview ====================
 
-function HeroMetrics({ equity, curve }: {
+type PortfolioAccountSource = {
+  id: string
+  label: string
+  provider: string
+  equity: string
+  unrealizedPnL: number
+  error?: string
+  health?: string
+  disabled?: boolean
+  connecting?: boolean
+}
+
+function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
   equity: AggregatedEquity | null
   curve: CurvePointSummary | null
+  custody: CustodySnapshot | null
+  fxRates: FxRateInfo[]
+  accounts: PortfolioAccountSource[]
 }) {
-  if (!equity) {
+  if (!equity && !custody) {
     return (
-      <div className="border border-border rounded-lg bg-bg-secondary p-5 text-center">
-        <p className="text-[13px] text-text-muted">Unable to load portfolio data.</p>
+      <div className="border border-border rounded-lg bg-secondary p-5 text-center">
+        <p className="text-[13px] text-muted-foreground">Unable to load portfolio data.</p>
       </div>
     )
   }
 
-  const total = Number(equity.totalEquity)
-  const cash = Number(equity.totalCash)
-  const unrealized = Number(equity.totalUnrealizedPnL)
-  const realized = Number(equity.totalRealizedPnL)
+  const total = Number(equity?.totalEquity ?? 0)
+  const cash = Number(equity?.totalCash ?? 0)
+  const unrealized = Number(equity?.totalUnrealizedPnL ?? 0)
+  const realized = Number(equity?.totalRealizedPnL ?? 0)
+  const custodyTotals = custody?.positions.reduce<Record<string, number>>((totals, position) => {
+    if (position.value != null) totals[position.currency] = (totals[position.currency] ?? 0) + position.value
+    return totals
+  }, {}) ?? {}
+  const fxByCurrency = new Map(fxRates.map((rate) => [rate.currency, rate.rate]))
+  const convertedCustodyUsd = Object.entries(custodyTotals).reduce((sum, [currency, value]) => {
+    if (currency === 'USD') return sum + value
+    const rate = fxByCurrency.get(currency)
+    return rate == null ? sum : sum + value * rate
+  }, 0)
+  const unconvertedCurrencies = Object.keys(custodyTotals).filter((currency) => currency !== 'USD' && !fxByCurrency.has(currency))
+  const combinedTotalUsd = total + convertedCustodyUsd
+  const custodyTotalBrl = custodyTotals.BRL ?? 0
+  const pluggyUta = accounts.some((account) => account.id === 'meu-pluggy')
+  const allocation = Object.entries(custody?.positions.reduce<Record<string, number>>((groups, position) => {
+    const label = position.type?.trim() || 'Other investments'
+    groups[label] = (groups[label] ?? 0) + (position.currency === 'BRL' ? position.value ?? 0 : 0)
+    return groups
+  }, {}) ?? {})
+    .filter(([, value]) => value > 0)
+    .sort(([, left], [, right]) => right - left)
+  const allocationTotal = allocation.reduce((sum, [, value]) => sum + value, 0)
 
   // Today PnL — same shape as TradingPage hero. Suppress when no baseline
   // is available yet (fresh portfolio with no 24h history).
   let todayDelta: { value: string; sign: 'up' | 'down' | 'flat' } | undefined
-  const computedTodayDelta = computeTodayDelta(curve)
+  const computedTodayDelta = equity ? computeTodayDelta(curve) : null
   if (computedTodayDelta) {
     todayDelta = {
       value: `${fmtPnl(computedTodayDelta.delta, 'USD')} (${fmtPctSigned(computedTodayDelta.pct)}) today`,
@@ -420,15 +462,28 @@ function HeroMetrics({ equity, curve }: {
   }
 
   return (
-    <div className="border border-border rounded-lg bg-bg-secondary px-5 py-5 space-y-4">
+    <section aria-label="Portfolio overview" className="space-y-3">
+      <div className="grid gap-3 xl:grid-cols-[1.1fr_0.9fr_1.15fr]">
+        <OverviewCard title="Connected accounts" eyebrow="Portfolio">
+          <div className="space-y-1.5">
+            {accounts.slice(0, 3).map((account) => (
+              <AccountSummaryRow key={account.id} label={account.label} detail={account.provider} value={fmt(Number(account.equity), 'USD')} status={account.health === 'offline' ? 'offline' : 'live'} />
+            ))}
+            {custody && !pluggyUta && <AccountSummaryRow label="MeuPluggy" detail={`${custody.positions.length} read-only positions`} value={fmt(custodyTotalBrl, 'BRL')} status="connected" />}
+            {accounts.length === 0 && !custody && <p className="py-3 text-[12px] text-muted-foreground">Connect a broker or MeuPluggy account to see your holdings here.</p>}
+          </div>
+        </OverviewCard>
+
+        <div className="min-h-[190px] rounded-lg border border-border bg-secondary px-5 py-5 space-y-4">
       <Metric
         size="lg"
-        label="Total Equity · USD"
-        value={fmt(total, 'USD')}
+        label={unconvertedCurrencies.length === 0 ? 'Total Equity (including Open Finance) · USD' : 'Broker equity · USD'}
+        value={fmt(pluggyUta || unconvertedCurrencies.length > 0 ? total : combinedTotalUsd, 'USD')}
         delta={todayDelta ?? { value: '— today', sign: 'flat' }}
       />
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-border">
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
         <Metric size="sm" label="Cash" value={fmt(cash, 'USD')} />
+        {!pluggyUta && Object.entries(custodyTotals).map(([currency, value]) => <Metric key={currency} size="sm" label={`Open Finance custody · ${currency}`} value={fmt(value, currency)} />)}
         <Metric
           size="sm"
           label="Unrealized PnL"
@@ -442,6 +497,52 @@ function HeroMetrics({ equity, curve }: {
           valueSign={signFromDelta(realized)}
         />
       </div>
+        </div>
+
+        <OverviewCard title="Investments" eyebrow={custody ? `${custody.positions.length} positions · MeuPluggy` : 'MeuPluggy read-only account'}>
+          {allocation.length > 0 ? (
+            <div className="space-y-3">
+              {allocation.slice(0, 4).map(([type, value], index) => {
+                const percent = allocationTotal > 0 ? (value / allocationTotal) * 100 : 0
+                const colors = ['bg-primary', 'bg-success', 'bg-ai-action', 'bg-warning-400']
+                return <div key={type}>
+                  <div className="mb-1 flex items-baseline justify-between gap-3 text-[11px]">
+                    <span className="truncate text-foreground">{type}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">{percent.toFixed(1)}% · {fmt(value, 'BRL')}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${colors[index]}`} style={{ width: `${percent}%` }} /></div>
+                </div>
+              })}
+            </div>
+          ) : (
+            <p className="py-3 text-[12px] text-muted-foreground">MeuPluggy investments will be grouped here after the first sync.</p>
+          )}
+        </OverviewCard>
+      </div>
+      {unconvertedCurrencies.length > 0 && <p className="text-[11px] text-warning-500">Open Finance balances in {unconvertedCurrencies.join(', ')} are shown in their native currency and are not included in the USD total.</p>}
+    </section>
+  )
+}
+
+function OverviewCard({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
+  return (
+    <div className="min-h-[190px] rounded-lg border border-border bg-secondary p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <h2 className="text-[13px] font-semibold text-foreground">{title}</h2>
+        <span className="text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{eyebrow}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function AccountSummaryRow({ label, detail, value, status }: { label: string; detail: string; value: string; status: 'live' | 'offline' | 'connected' }) {
+  const dot = status === 'offline' ? 'bg-destructive' : status === 'connected' ? 'bg-primary' : 'bg-success'
+  return (
+    <div className="flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-overlay">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+      <div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-foreground">{label}</p><p className="truncate text-[10px] text-muted-foreground">{detail}</p></div>
+      <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{value}</span>
     </div>
   )
 }
@@ -456,7 +557,7 @@ function PortfolioSkeleton() {
   return (
     <div className="space-y-5" aria-hidden="true">
       {/* Hero metrics */}
-      <div className="rounded-lg border border-border bg-bg-secondary p-5">
+      <div className="rounded-lg border border-border bg-secondary p-5">
         <Skeleton className="h-3 w-24" />
         <Skeleton className="h-9 w-48 mt-3" />
         <div className="flex flex-wrap gap-5 sm:gap-8 mt-5">
@@ -473,7 +574,7 @@ function PortfolioSkeleton() {
       {/* Account strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-3.5 py-3 rounded-lg border border-border bg-bg-secondary">
+          <div key={i} className="flex items-center gap-3 px-3.5 py-3 rounded-lg border border-border bg-secondary">
             <Skeleton className="h-1.5 w-1.5 rounded-full" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-3 w-24" />
@@ -485,7 +586,7 @@ function PortfolioSkeleton() {
       </div>
       {/* Positions table */}
       <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border bg-bg-secondary">
+        <div className="px-4 py-2.5 border-b border-border bg-secondary">
           <Skeleton className="h-3 w-32" />
         </div>
         <div className="divide-y divide-border">
@@ -506,9 +607,9 @@ function PortfolioSkeleton() {
 // ==================== Account Strip ====================
 
 const HEALTH_DOT: Record<string, string> = {
-  healthy: 'bg-green',
-  degraded: 'bg-yellow-400',
-  offline: 'bg-red',
+  healthy: 'bg-success',
+  degraded: 'bg-warning-400',
+  offline: 'bg-destructive',
 }
 
 function AccountStrip({ sources, perAccountCurve }: {
@@ -526,7 +627,7 @@ function AccountStrip({ sources, perAccountCurve }: {
         const dotColor = isDisabled
           ? 'bg-text-muted/40'
           : isConnecting
-            ? 'bg-accent'
+            ? 'bg-primary'
             : (HEALTH_DOT[s.health ?? 'healthy'] ?? 'bg-text-muted')
 
         const curve = perAccountCurve[s.id]
@@ -534,39 +635,39 @@ function AccountStrip({ sources, perAccountCurve }: {
         const showSpark = !isDisabled && !isOffline && !isConnecting && curve && curve.values.length >= 2
 
         return (
-          <div key={s.id} className={`flex items-center gap-3 px-3.5 py-3 rounded-lg border border-border bg-bg-secondary ${isOffline || isDisabled ? 'opacity-60' : ''}`}>
+          <div key={s.id} className={`flex items-center gap-3 px-3.5 py-3 rounded-lg border border-border bg-secondary ${isOffline || isDisabled ? 'opacity-60' : ''}`}>
             <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor} ${isConnecting ? 'animate-pulse' : ''}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-text font-medium text-[13px] truncate">{s.label}</span>
+                <span className="text-foreground font-medium text-[13px] truncate">{s.label}</span>
                 {!isDisabled && !isOffline && !isConnecting && (
-                  <span className="text-text-muted tabular-nums text-[13px]">{fmt(Number(s.equity))}</span>
+                  <span className="text-muted-foreground tabular-nums text-[13px]">{fmt(Number(s.equity))}</span>
                 )}
               </div>
               <div className="flex items-baseline justify-between gap-2 mt-0.5">
                 {isDisabled
-                  ? <span className="text-text-muted text-[11px]">Disabled</span>
+                  ? <span className="text-muted-foreground text-[11px]">Disabled</span>
                   : isConnecting
-                    ? <span className="text-accent text-[11px]">Connecting...</span>
+                    ? <span className="text-primary text-[11px]">Connecting...</span>
                   : isOffline
-                    ? <span className="text-red text-[11px]">Reconnecting…</span>
+                    ? <span className="text-destructive text-[11px]">Reconnecting…</span>
                     : (
                       <span className="text-[11px] tabular-nums">
                         {todayDelta ? (
-                          <span className={todayDelta.delta >= 0 ? 'text-green' : 'text-red'}>
+                          <span className={todayDelta.delta >= 0 ? 'text-success' : 'text-destructive'}>
                             {todayDelta.delta >= 0 ? '▲' : '▼'} {fmtPnl(todayDelta.delta)} today
                           </span>
                         ) : s.unrealizedPnL !== 0 ? (
-                          <span className={s.unrealizedPnL >= 0 ? 'text-green' : 'text-red'}>
+                          <span className={s.unrealizedPnL >= 0 ? 'text-success' : 'text-destructive'}>
                             {fmtPnl(s.unrealizedPnL)} unrealized
                           </span>
                         ) : (
-                          <span className="text-text-muted">—</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </span>
                     )
                 }
-                {s.error && !isOffline && !isDisabled && <span className="text-[11px] text-text-muted">{s.error}</span>}
+                {s.error && !isOffline && !isDisabled && <span className="text-[11px] text-muted-foreground">{s.error}</span>}
               </div>
             </div>
             {showSpark && (
@@ -610,13 +711,13 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
 
   return (
     <div>
-      <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-wide mb-3">
+      <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
         Positions
       </h3>
       <div className="border border-border rounded-lg overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="bg-bg-secondary text-text-muted text-left">
+            <tr className="bg-secondary text-muted-foreground text-left">
               <th className="px-3 py-2 font-medium">Symbol</th>
               <th className="px-3 py-2 font-medium text-center">Ccy</th>
               <th className="px-3 py-2 font-medium text-right">Qty</th>
@@ -637,31 +738,31 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
               const isShort = p.side === 'short'
 
               return (
-                <tr key={i} className="border-t border-border hover:bg-bg-tertiary/30 transition-colors">
+                <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-medium text-text">{display.name}</span>
-                      <span className="text-[10px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted font-mono tracking-tight">{display.tag}</span>
+                      <span className="font-medium text-foreground">{display.name}</span>
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground font-mono tracking-tight">{display.tag}</span>
                       {isShort && (
-                        <span className="text-[10px] px-1 py-0.5 rounded font-medium bg-red/15 text-red">SHORT</span>
+                        <span className="text-[10px] px-1 py-0.5 rounded font-medium bg-destructive/15 text-destructive">SHORT</span>
                       )}
-                      <span className="text-[10px] text-text-muted">{p.accountLabel}</span>
+                      <span className="text-[10px] text-muted-foreground">{p.accountLabel}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-center text-text-muted text-[11px]">{ccy}</td>
-                  <td className="px-3 py-2 text-right text-text">{fmtNum(Number(p.quantity))}</td>
-                  <td className="px-3 py-2 text-right text-text-muted">{fmt(Number(p.avgCost), p.currency)}</td>
-                  <td className="px-3 py-2 text-right text-text">{fmt(Number(p.marketPrice), p.currency)}</td>
-                  <td className="px-3 py-2 text-right text-text">{fmt(Number(p.marketValue), p.currency)}</td>
+                  <td className="px-3 py-2 text-center text-muted-foreground text-[11px]">{ccy}</td>
+                  <td className="px-3 py-2 text-right text-foreground">{fmtNum(Number(p.quantity))}</td>
+                  <td className="px-3 py-2 text-right text-muted-foreground">{fmt(Number(p.avgCost), p.currency)}</td>
+                  <td className="px-3 py-2 text-right text-foreground">{fmt(Number(p.marketPrice), p.currency)}</td>
+                  <td className="px-3 py-2 text-right text-foreground">{fmt(Number(p.marketValue), p.currency)}</td>
                   {hasNonUsd && (
-                    <td className="px-3 py-2 text-right text-text-muted">
+                    <td className="px-3 py-2 text-right text-muted-foreground">
                       {ccy === 'USD' ? '—' : fmt(usdValue)}
                     </td>
                   )}
-                  <td className={`px-3 py-2 text-right font-medium ${Number(p.unrealizedPnL) >= 0 ? 'text-green' : 'text-red'}`}>
+                  <td className={`px-3 py-2 text-right font-medium ${Number(p.unrealizedPnL) >= 0 ? 'text-success' : 'text-destructive'}`}>
                     {fmtPnl(Number(p.unrealizedPnL), p.currency)}
                   </td>
-                  <td className={`px-3 py-2 text-right ${Number(p.unrealizedPnL) >= 0 ? 'text-green' : 'text-red'}`}>
+                  <td className={`px-3 py-2 text-right ${Number(p.unrealizedPnL) >= 0 ? 'text-success' : 'text-destructive'}`}>
                     {(() => {
                       const cost = Number(p.avgCost) * Number(p.quantity)
                       const pct = cost > 0 ? (Number(p.unrealizedPnL) / cost) * 100 : 0
@@ -683,7 +784,7 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
 function FxRatesPanel({ rates }: { rates: FxRateInfo[] }) {
   return (
     <div>
-      <h3 className="text-[11px] font-semibold text-text-muted uppercase tracking-wide mb-2">
+      <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
         FX Rates
       </h3>
       <div className="border border-border rounded-lg overflow-hidden">
@@ -693,17 +794,17 @@ function FxRatesPanel({ rates }: { rates: FxRateInfo[] }) {
               <tr key={r.currency} className="border-t border-border first:border-t-0">
                 <td className="px-2.5 py-1.5">
                   <div className="flex items-center gap-1.5">
-                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.source === 'live' ? 'bg-green' : r.source === 'cached' ? 'bg-yellow-400' : 'bg-text-muted/40'}`} />
-                    <span className="font-medium text-text">{r.currency}</span>
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.source === 'live' ? 'bg-success' : r.source === 'cached' ? 'bg-warning-400' : 'bg-text-muted/40'}`} />
+                    <span className="font-medium text-foreground">{r.currency}</span>
                   </div>
                 </td>
-                <td className="px-2.5 py-1.5 text-right text-text tabular-nums">{r.rate.toFixed(4)}</td>
+                <td className="px-2.5 py-1.5 text-right text-foreground tabular-nums">{r.rate.toFixed(4)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="mt-1.5 text-right text-[10px] text-text-muted">per 1 unit → USD</p>
+      <p className="mt-1.5 text-right text-[10px] text-muted-foreground">per 1 unit → USD</p>
     </div>
   )
 }
@@ -724,36 +825,36 @@ function TradeLog({ commits }: { commits: CommitWithAccount[] }) {
 
   return (
     <div>
-      <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-wide mb-3">
+      <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
         Recent Trades
       </h3>
       <div className="space-y-2">
         {sorted.map((commit) => {
           const badgeColor = commit.accountProvider === 'ccxt'
-            ? 'bg-accent/15 text-accent'
+            ? 'bg-primary/15 text-primary'
             : commit.accountProvider === 'alpaca'
-              ? 'bg-green/15 text-green'
-              : 'bg-bg-tertiary text-text-muted'
+              ? 'bg-success/15 text-success'
+              : 'bg-muted text-muted-foreground'
           return (
-            <div key={commit.hash} className="border border-border rounded-lg bg-bg-secondary px-3 py-2.5">
+            <div key={commit.hash} className="border border-border rounded-lg bg-secondary px-3 py-2.5">
               <div className="flex items-start gap-2">
                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${badgeColor}`}>
                   {commit.accountLabel}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-text truncate">{commit.message}</p>
+                  <p className="text-[13px] text-foreground truncate">{commit.message}</p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-[11px] text-text-muted font-mono">{commit.hash}</span>
-                    <span className="text-[11px] text-text-muted">
+                    <span className="text-[11px] text-muted-foreground font-mono">{commit.hash}</span>
+                    <span className="text-[11px] text-muted-foreground">
                       {new Date(commit.timestamp).toLocaleString()}
                     </span>
                   </div>
                   {commit.operations.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {commit.operations.map((op, i) => (
-                        <span key={i} className="text-[11px] text-text-muted bg-bg px-1.5 py-0.5 rounded">
+                        <span key={i} className="text-[11px] text-muted-foreground bg-background px-1.5 py-0.5 rounded">
                           {op.symbol} {op.change}
-                          <span className={`ml-1 ${op.status === 'filled' ? 'text-green' : op.status === 'rejected' ? 'text-red' : op.status === 'submitted' ? 'text-accent' : 'text-text-muted'}`}>
+                          <span className={`ml-1 ${op.status === 'filled' ? 'text-success' : op.status === 'rejected' ? 'text-destructive' : op.status === 'submitted' ? 'text-primary' : 'text-muted-foreground'}`}>
                             {op.status}
                           </span>
                         </span>
@@ -791,15 +892,15 @@ function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, save
   const [showCustom, setShowCustom] = useState(!isPreset)
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-bg-secondary/45 px-3 py-2.5 text-[12px] text-text-muted sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-secondary/45 px-3 py-2.5 text-[12px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-2">
         <span className="font-semibold uppercase tracking-wide">Snapshots</span>
         <Toggle checked={enabled} onChange={onEnabledChange} size="sm" ariaLabel="Enable portfolio snapshots" />
-        {saveStatus === 'saving' && <span className="text-[10px] text-accent">saving...</span>}
-        {saveStatus === 'error' && <span className="text-[10px] text-red">save failed</span>}
+        {saveStatus === 'saving' && <span className="text-[10px] text-primary">saving...</span>}
+        {saveStatus === 'error' && <span className="text-[10px] text-destructive">save failed</span>}
       </div>
       <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Every</span>
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Every</span>
         <SegmentedControl
           value={showCustom ? 'custom' : every}
           options={[
@@ -820,7 +921,7 @@ function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, save
         {showCustom && (
           <input
             aria-label="Custom portfolio snapshot interval"
-            className="w-16 rounded-md border border-border bg-bg px-1.5 py-1 text-center text-[12px] text-text outline-none focus:border-accent"
+            className="w-16 rounded-md border border-border bg-background px-1.5 py-1 text-center text-[12px] text-foreground outline-none focus:border-accent"
             value={every}
             onChange={(e) => onEveryChange(e.target.value)}
             placeholder="e.g. 2h"

@@ -7,26 +7,33 @@ import { TradeableContractsPanel } from '../../components/market/TradeableContra
 
 interface Props {
   symbol: string
+  source?: string
   provider?: string
 }
 
-export function EquityDetail({ symbol, provider }: Props) {
+export function EquityDetail({ symbol, source, provider }: Props) {
+  const klineOnly = source?.startsWith('eastmoney|') === true
   return (
     <div className="flex flex-col gap-3">
-      <QuoteHeader symbol={symbol} provider={provider} />
+      {klineOnly ? (
+        <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+          Eastmoney provides Chinese A-share discovery and forward-adjusted price history for this source.
+          Quote and fundamental panels are not available in its native symbol namespace.
+        </div>
+      ) : <QuoteHeader symbol={symbol} provider={provider} />}
 
       <div className="h-[360px] shrink-0">
-        <KlinePanel selection={{ symbol, assetClass: 'equity' }} />
+        <KlinePanel selection={{ symbol, assetClass: 'equity' }} source={source} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {!klineOnly && <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <ProfilePanel symbol={symbol} provider={provider} />
         <KeyMetricsPanel symbol={symbol} provider={provider} />
-      </div>
+      </div>}
 
       <TradeableContractsPanel symbol={symbol} assetClass="equity" />
 
-      <FinancialStatementsPanel symbol={symbol} provider={provider} />
+      {!klineOnly && <FinancialStatementsPanel symbol={symbol} provider={provider} />}
     </div>
   )
 }

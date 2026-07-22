@@ -6,6 +6,7 @@ import { i18n } from '../../i18n'
 import {
   MANAGER_WORKSPACE_ID,
   type ManagerWorkspaceSnapshot,
+  type SessionRecord,
   type TemplateInfo,
   type Workspace,
 } from './api'
@@ -44,6 +45,23 @@ const chatWorkspace: Workspace = {
   template: 'chat',
   agents: ['pi'],
   sessions: [],
+}
+
+function chatSession(index: number): SessionRecord {
+  return {
+    id: `chat-session-${index}`,
+    resumeId: `chat-resume-${index}`,
+    wsId: chatWorkspace.id,
+    agent: 'pi',
+    name: `p${index}`,
+    createdAt: `2026-07-${String(index).padStart(2, '0')}T00:00:00.000Z`,
+    lastActiveAt: `2026-07-${String(index).padStart(2, '0')}T12:00:00.000Z`,
+    state: 'paused',
+    surface: 'terminal',
+    pid: null,
+    startedAt: null,
+    title: `Conversation ${index}`,
+  }
 }
 
 function workspaceContext(
@@ -140,6 +158,20 @@ describe('ChatWorkspaceSection actions', () => {
     expect(screen.getAllByRole('button', { name: 'New workspace' })).toHaveLength(2)
   })
 
+  it('bounds expanded Workspace history and routes the full catalog to the Session library', () => {
+    const sessions = Array.from({ length: 9 }, (_, index) => chatSession(index + 1))
+    renderSection([{ ...chatWorkspace, sessions }])
+
+    expect(screen.getAllByRole('button', { name: /^Conversation/ })).toHaveLength(6)
+    expect(screen.queryByRole('button', { name: 'Conversation 3' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'View all 9 sessions' }))
+    expect(openOrFocus).toHaveBeenCalledWith({
+      kind: 'workspace',
+      params: { wsId: chatWorkspace.id, source: 'chat' },
+    })
+  })
+
   it('owns Manager Session navigation and lifecycle actions under the Manager entry', () => {
     const manager: ManagerWorkspaceSnapshot = {
       id: MANAGER_WORKSPACE_ID,
@@ -183,6 +215,10 @@ describe('ChatWorkspaceSection actions', () => {
     const managerSection = managerButton.parentElement?.parentElement
     expect(managerSection).toBeTruthy()
     const managerUi = within(managerSection as HTMLElement)
+
+    expect(managerUi.queryByRole('button', { name: 'Inspect the floor' })).toBeNull()
+    fireEvent.click(managerUi.getByRole('button', { name: 'Expand sessions' }))
+
     const runningSession = managerUi.getByRole('button', { name: 'Inspect the floor' })
     const pausedSession = managerUi.getByRole('button', { name: 'Coordinate owners' })
 
