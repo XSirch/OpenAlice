@@ -162,6 +162,10 @@ export function createTradingRoutes(ctx: UTAEngineContext) {
   app.get('/fx-rates', async (c) => {
     // Collect all unique currencies from positions across all accounts
     const currencies = new Set<string>()
+    for (const currency of (c.req.query('currencies') ?? '').split(',')) {
+      const normalized = currency.trim().toUpperCase()
+      if (/^[A-Z]{3,5}$/.test(normalized) && normalized !== 'USD') currencies.add(normalized)
+    }
     for (const uta of ctx.utaManager.resolve()) {
       if (uta.health === 'offline') continue
       try {

@@ -18,6 +18,7 @@ import { TradingModeGate } from '../components/TradingModeGate'
 import { ensureTradingModePolling, useTradingMode } from '../live/trading-mode'
 import { computeTodayDelta, type CurvePointSummary } from './portfolio-metrics'
 import { OpenFinanceCustody } from '../components/OpenFinanceCustody'
+import type { CustodySnapshot } from '../api/open-finance'
 
 // ==================== Types ====================
 
@@ -127,6 +128,7 @@ export function PortfolioPage() {
   // hero today-PnL delta and per-account sparklines. Distinct from
   // curvePoints which follows the user's chart-account selection.
   const [aggregateCurve, setAggregateCurve] = useState<CurveSummary | null>(null)
+  const [openFinanceCustody, setOpenFinanceCustody] = useState<CustodySnapshot | null>(null)
 
   const snapshotConfig = useMemo(() => ({ enabled: snapshotEnabled, every: snapshotEvery }), [snapshotEnabled, snapshotEvery])
   const saveSnapshotConfig = useCallback(async (d: Record<string, unknown>) => {
@@ -260,13 +262,13 @@ export function PortfolioPage() {
           <div className="flex-1 min-w-0 space-y-5">
             {!lastRefresh ? <PortfolioSkeleton /> : <>
             {!tradingModeLoading && tradingMode === 'lite' ? (
-              <><OpenFinanceCustody /><TradingModeGate
+              <><OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} /><HeroMetrics equity={null} curve={null} custody={openFinanceCustody} fxRates={[]} /><TradingModeGate
                 title="Broker portfolio is unavailable in Lite mode."
                 description="Lite mode keeps UTA disconnected. Open Finance custody remains available above in read-only mode."
               /></>
             ) : <>
-            <OpenFinanceCustody />
-            <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />
+            <OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} />
+            <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} custody={openFinanceCustody} fxRates={data.fxRates} />
 
             {curvePoints.length > 0 && (
               <EquityCurve
@@ -339,7 +341,7 @@ async function fetchPortfolioData(): Promise<PortfolioData> {
     const [equityResult, utasResult, fxResult] = await Promise.allSettled([
       api.trading.equity(),
       api.trading.listUTASummaries(),
-      api.trading.fxRates(),
+      api.trading.fxRates(['BRL']),
     ])
 
     const equity = equityResult.status === 'fulfilled' ? equityResult.value : null
@@ -393,11 +395,13 @@ function NoAccountsEmpty() {
 
 // ==================== Hero Metrics ====================
 
-function HeroMetrics({ equity, curve }: {
+function HeroMetrics({ equity, curve, custody, fxRates }: {
   equity: AggregatedEquity | null
   curve: CurvePointSummary | null
+  custody: CustodySnapshot | null
+  fxRates: FxRateInfo[]
 }) {
-  if (!equity) {
+  if (!equity && !custody) {
     return (
       <div className="border border-border rounded-lg bg-bg-secondary p-5 text-center">
         <p className="text-[13px] text-text-muted">Unable to load portfolio data.</p>
@@ -405,15 +409,27 @@ function HeroMetrics({ equity, curve }: {
     )
   }
 
-  const total = Number(equity.totalEquity)
-  const cash = Number(equity.totalCash)
-  const unrealized = Number(equity.totalUnrealizedPnL)
-  const realized = Number(equity.totalRealizedPnL)
+  const total = Number(equity?.totalEquity ?? 0)
+  const cash = Number(equity?.totalCash ?? 0)
+  const unrealized = Number(equity?.totalUnrealizedPnL ?? 0)
+  const realized = Number(equity?.totalRealizedPnL ?? 0)
+  const custodyTotals = custody?.positions.reduce<Record<string, number>>((totals, position) => {
+    if (position.value != null) totals[position.currency] = (totals[position.currency] ?? 0) + position.value
+    return totals
+  }, {}) ?? {}
+  const fxByCurrency = new Map(fxRates.map((rate) => [rate.currency, rate.rate]))
+  const convertedCustodyUsd = Object.entries(custodyTotals).reduce((sum, [currency, value]) => {
+    if (currency === 'USD') return sum + value
+    const rate = fxByCurrency.get(currency)
+    return rate == null ? sum : sum + value * rate
+  }, 0)
+  const unconvertedCurrencies = Object.keys(custodyTotals).filter((currency) => currency !== 'USD' && !fxByCurrency.has(currency))
+  const combinedTotalUsd = total + convertedCustodyUsd
 
   // Today PnL — same shape as TradingPage hero. Suppress when no baseline
   // is available yet (fresh portfolio with no 24h history).
   let todayDelta: { value: string; sign: 'up' | 'down' | 'flat' } | undefined
-  const computedTodayDelta = computeTodayDelta(curve)
+  const computedTodayDelta = equity ? computeTodayDelta(curve) : null
   if (computedTodayDelta) {
     todayDelta = {
       value: `${fmtPnl(computedTodayDelta.delta, 'USD')} (${fmtPctSigned(computedTodayDelta.pct)}) today`,
@@ -425,12 +441,13 @@ function HeroMetrics({ equity, curve }: {
     <div className="border border-border rounded-lg bg-bg-secondary px-5 py-5 space-y-4">
       <Metric
         size="lg"
-        label="Total Equity · USD"
-        value={fmt(total, 'USD')}
+        label={unconvertedCurrencies.length === 0 ? 'Total Equity (including Open Finance) · USD' : 'Broker equity · USD'}
+        value={fmt(unconvertedCurrencies.length === 0 ? combinedTotalUsd : total, 'USD')}
         delta={todayDelta ?? { value: '— today', sign: 'flat' }}
       />
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-border">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-border">
         <Metric size="sm" label="Cash" value={fmt(cash, 'USD')} />
+        {Object.entries(custodyTotals).map(([currency, value]) => <Metric key={currency} size="sm" label={`Open Finance custody · ${currency}`} value={fmt(value, currency)} />)}
         <Metric
           size="sm"
           label="Unrealized PnL"
