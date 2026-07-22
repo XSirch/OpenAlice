@@ -28,4 +28,13 @@ describe('HG Brasil provider', () => {
     await expect(createExecutor().execute('hgbrasil', 'EquityQuote', { symbol: 'PETR4' }, { hgbrasil_api_key: 'secret-value' }))
       .rejects.toThrow('HG Brasil returned no results (key status: invalid): Chave inválida')
   })
+
+  it('reports a successful-but-empty HG response as an authorization error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      metadata: { key_status: 'invalid' }, results: [], errors: [{ code: 'UNAUTHORIZED_KEY', message: 'Chave não possui acesso para este recurso.' }],
+    }), { status: 200 })))
+
+    await expect(createExecutor().execute('hgbrasil', 'EquityQuote', { symbol: 'PETR4' }, { hgbrasil_api_key: 'secret-value' }))
+      .rejects.toThrow('HG Brasil returned no results (key status: invalid): UNAUTHORIZED_KEY: Chave não possui acesso para este recurso.')
+  })
 })
