@@ -19,4 +19,13 @@ describe('HG Brasil provider', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain('tickers=B3%3APETR4')
     expect(fetchMock.mock.calls[0]?.[0]).toContain('key=test-key')
   })
+
+  it('reports HG key and plan diagnostics without including the secret', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      metadata: { key_status: 'invalid' }, message: 'Chave inválida',
+    }), { status: 200 })))
+
+    await expect(createExecutor().execute('hgbrasil', 'EquityQuote', { symbol: 'PETR4' }, { hgbrasil_api_key: 'secret-value' }))
+      .rejects.toThrow('HG Brasil returned no results (key status: invalid): Chave inválida')
+  })
 })
