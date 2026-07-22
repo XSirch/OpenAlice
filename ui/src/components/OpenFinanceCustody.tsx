@@ -3,7 +3,7 @@ import { api } from '../api'
 import type { CustodySnapshot } from '../api/open-finance'
 import { fmt, fmtNum } from '../lib/format'
 
-export function OpenFinanceCustody() {
+export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (snapshot: CustodySnapshot | null) => void }) {
   const [configured, setConfigured] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const [clientId, setClientId] = useState('')
@@ -20,7 +20,10 @@ export function OpenFinanceCustody() {
       setConfigured(config.pluggy.configured)
       setEnabled(config.pluggy.enabled)
       setItemIds(config.pluggy.itemIds)
-      if (config.pluggy.enabled && config.pluggy.configured) setSnapshot(await api.openFinance.custody())
+      if (config.pluggy.enabled && config.pluggy.configured) {
+        const next = await api.openFinance.custody()
+        setSnapshot(next); onSnapshotChange?.(next)
+      } else onSnapshotChange?.(null)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load Open Finance custody.') }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -32,11 +35,14 @@ export function OpenFinanceCustody() {
       const config = await api.openFinance.save({ enabled, clientId, clientSecret, itemIds: parsedItemIds })
       setConfigured(config.pluggy.configured)
       setClientId(''); setClientSecret('')
-      if (config.pluggy.enabled && config.pluggy.configured) setSnapshot(await api.openFinance.custody())
+      if (config.pluggy.enabled && config.pluggy.configured) {
+        const next = await api.openFinance.custody()
+        setSnapshot(next); onSnapshotChange?.(next)
+      } else { setSnapshot(null); onSnapshotChange?.(null) }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save Pluggy settings.') }
     finally { setBusy(false) }
   }
-  const refresh = async () => { setBusy(true); setError(null); try { setSnapshot(await api.openFinance.custody()) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
+  const refresh = async () => { setBusy(true); setError(null); try { const next = await api.openFinance.custody(); setSnapshot(next); onSnapshotChange?.(next) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
 
   return (
     <section className="border border-border rounded-lg bg-bg-secondary p-5" aria-label="Open Finance custody">
