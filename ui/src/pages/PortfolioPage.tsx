@@ -17,6 +17,7 @@ import { displayProviderForUTA, filterAccountTierUTAs } from '../lib/uta-account
 import { TradingModeGate } from '../components/TradingModeGate'
 import { ensureTradingModePolling, useTradingMode } from '../live/trading-mode'
 import { computeTodayDelta, type CurvePointSummary } from './portfolio-metrics'
+import { OpenFinanceCustody } from '../components/OpenFinanceCustody'
 
 // ==================== Types ====================
 
@@ -259,11 +260,12 @@ export function PortfolioPage() {
           <div className="flex-1 min-w-0 space-y-5">
             {!lastRefresh ? <PortfolioSkeleton /> : <>
             {!tradingModeLoading && tradingMode === 'lite' ? (
-              <TradingModeGate
-                title="Portfolio is unavailable in Lite mode."
-                description="Lite mode keeps UTA disconnected, so there are no broker accounts, positions, or equity snapshots to show. Change the trading mode in Agent Permissions to connect UTA."
-              />
+              <><OpenFinanceCustody /><TradingModeGate
+                title="Broker portfolio is unavailable in Lite mode."
+                description="Lite mode keeps UTA disconnected. Open Finance custody remains available above in read-only mode."
+              /></>
             ) : <>
+            <OpenFinanceCustody />
             <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />
 
             {curvePoints.length > 0 && (
