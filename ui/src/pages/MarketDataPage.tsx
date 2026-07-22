@@ -47,6 +47,11 @@ const CHART_VENDORS: ChartVendor[] = [
     name: 'brapi.dev (Brasil)',
     desc: 'Brazilian equities, FIIs, BDRs and ETFs. Requires a brapi token for production coverage; daily/research data only, never a realtime B3 signal source.',
   },
+  {
+    id: 'hgbrasil',
+    name: 'HG Brasil Finance',
+    desc: 'Brazilian B3 shares, FIIs, BDRs, ETFs and fundamentals. Delayed research data only; it cannot enable realtime B3 signals.',
+  },
 ]
 
 // Data-provider keys — LOW-frequency data (boards, economy, fundamentals). The
@@ -65,6 +70,7 @@ const KEY_GROUPS: { label: string | null; providers: ProviderEntry[] }[] = [
     label: null,
     providers: [
       { key: 'brapi', name: 'brapi.dev', desc: 'Brazilian shares, FIIs, BDRs and ETFs. This source is delayed and restricted to research; it cannot enable B3 realtime alerts.', hint: 'brapi.dev → Dashboard → API Keys' },
+      { key: 'hgbrasil', name: 'HG Brasil Finance', desc: 'B3 shares, FIIs, dividends and fundamentals. Quotes are delayed and restricted to research; it cannot enable B3 realtime alerts.', hint: 'hgbrasil.com → Console → Chave de integração' },
       { key: 'fmp', name: 'FMP', desc: 'Unlocks per-symbol equity fundamentals, discovery, ETF detail — the one key that adds data the hub does not serve.', hint: 'financialmodelingprep.com' },
     ],
   },

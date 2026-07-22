@@ -390,6 +390,7 @@ export function createMarketDataRoutes(ctx: EngineContext) {
     fmp:              { credField: 'fmp_api_key',              provider: 'fmp',              model: 'EquityScreener',          params: { limit: 1 } },
     intrinio:         { credField: 'intrinio_api_key',         provider: 'intrinio',         model: 'EquitySearch',            params: { query: 'AAPL', limit: 1 } },
     brapi:            { credField: 'brapi_api_key',            provider: 'brapi',            model: 'EquityQuote',             params: { symbol: 'PETR4' } },
+    hgbrasil:         { credField: 'hgbrasil_api_key',         provider: 'hgbrasil',         model: 'EquityQuote',             params: { symbol: 'PETR4' } },
   }
 
   const app = new Hono()
