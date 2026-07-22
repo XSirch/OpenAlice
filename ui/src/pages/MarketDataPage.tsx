@@ -514,22 +514,30 @@ function KeyProvidersSection({
     return init
   })
   const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
+  const [testError, setTestError] = useState<Record<string, string>>({})
 
   const handleKeyChange = (keyName: string, value: string) => {
     setLocalKeys((prev) => ({ ...prev, [keyName]: value }))
     setTestStatus((prev) => ({ ...prev, [keyName]: 'idle' }))
+    setTestError((prev) => ({ ...prev, [keyName]: '' }))
     onKeyChange(keyName, value)
   }
 
   const testProvider = async (keyName: string) => {
     const key = localKeys[keyName]
-    if (!key) return
+    if (!key) {
+      setTestError((prev) => ({ ...prev, [keyName]: 'Enter an API key before testing.' }))
+      return
+    }
     setTestStatus((prev) => ({ ...prev, [keyName]: 'testing' }))
+    setTestError((prev) => ({ ...prev, [keyName]: '' }))
     try {
       const result = await api.marketData.testProvider(keyName, key)
       setTestStatus((prev) => ({ ...prev, [keyName]: result.ok ? 'ok' : 'error' }))
-    } catch {
+      if (!result.ok) setTestError((prev) => ({ ...prev, [keyName]: result.error ?? 'Connection test failed without a diagnostic.' }))
+    } catch (error) {
       setTestStatus((prev) => ({ ...prev, [keyName]: 'error' }))
+      setTestError((prev) => ({ ...prev, [keyName]: error instanceof Error ? error.message : 'Connection test failed before reaching the provider.' }))
     }
   }
 
@@ -549,6 +557,7 @@ function KeyProvidersSection({
             <div className="space-y-4">
               {group.providers.map(({ key, name, desc, hint }) => {
                 const status = testStatus[key] || 'idle'
+                const error = testError[key]
                 const isFmp = key === 'fmp'
                 return (
                   <div
@@ -572,6 +581,7 @@ function KeyProvidersSection({
                           onClick={() => testProvider(key)}
                         />
                       </div>
+                      {error && <p className="mt-1 text-[12px] text-red" role="alert">{error}</p>}
                     </Field>
                   </div>
                 )
