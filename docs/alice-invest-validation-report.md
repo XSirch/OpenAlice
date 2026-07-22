@@ -218,8 +218,9 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 - `.github/workflows/alice-invest-validation.yml` runs the requested matrix in
   separate checks/Docker jobs, enables Corepack, caches pnpm, and emits a
-  fail-closed readiness/financial-execution summary. It has parsed locally but
-  has no GitHub Actions run yet.
+  fail-closed readiness/financial-execution summary. It completed successfully
+  for PR #3 and merge commit `56a09d14` on 2026-07-17:
+  https://github.com/XSirch/OpenAlice/actions/runs/29610105448.
 - Final readiness remains `global=not_ready`,
   `fixed_income=research_only`, `b3_signals=research_only`, and
   `crypto_signals=research_only`; `execution_enabled=false`.
