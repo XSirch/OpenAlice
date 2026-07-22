@@ -11,6 +11,7 @@ vi.mock('@/domain/open-finance/pluggy.js', () => ({
 }))
 
 import { PluggyBroker } from './PluggyBroker.js'
+import { fetchPluggyCustody } from '@/domain/open-finance/pluggy.js'
 
 describe('PluggyBroker', () => {
   it('normalizes custody into one funded read-only UTA account and positions', async () => {
@@ -27,5 +28,24 @@ describe('PluggyBroker', () => {
   it('never reports a successful order mutation', async () => {
     const broker = new PluggyBroker({ id: 'meu-pluggy' })
     await expect(broker.cancelOrder('anything')).resolves.toMatchObject({ success: false })
+  })
+
+  it('coalesces concurrent account and position reads into one Pluggy refresh', async () => {
+    const deferred = Promise.withResolvers<Awaited<ReturnType<typeof fetchPluggyCustody>>>()
+    vi.mocked(fetchPluggyCustody).mockClear()
+    vi.mocked(fetchPluggyCustody).mockReturnValueOnce(deferred.promise)
+    const broker = new PluggyBroker({ id: 'meu-pluggy' })
+
+    const account = broker.getAccount()
+    const positions = broker.getPositions()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(fetchPluggyCustody).toHaveBeenCalledTimes(1)
+
+    deferred.resolve({
+      provider: 'pluggy', fetchedAt: '2026-07-22T00:00:00.000Z',
+      positions: [{ id: 'PETR4', name: 'Petrobras', quantity: 10, value: 411.5, unitValue: 41.15, currency: 'BRL' }],
+    })
+    await expect(Promise.all([account, positions])).resolves.toHaveLength(2)
   })
 })
