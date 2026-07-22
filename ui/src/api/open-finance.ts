@@ -1,7 +1,7 @@
 import { fetchJson, headers } from './client'
 
 export interface OpenFinanceConfig {
-  pluggy: { enabled: boolean; configured: boolean }
+  pluggy: { enabled: boolean; configured: boolean; itemIds: string[] }
 }
 
 export interface CustodyPosition {
@@ -24,7 +24,7 @@ export interface CustodySnapshot {
 
 export const openFinanceApi = {
   load: (): Promise<OpenFinanceConfig> => fetchJson('/api/open-finance'),
-  save: (input: { enabled: boolean; clientId?: string; clientSecret?: string }): Promise<OpenFinanceConfig> =>
+  save: (input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<OpenFinanceConfig> =>
     fetchJson('/api/open-finance', { method: 'PUT', headers, body: JSON.stringify(input) }),
   custody: (): Promise<CustodySnapshot> => fetchJson('/api/open-finance/custody'),
   test: (): Promise<{ ok: boolean; positions: number }> => fetchJson('/api/open-finance/test', { method: 'POST' }),

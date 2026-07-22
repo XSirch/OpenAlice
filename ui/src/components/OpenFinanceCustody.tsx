@@ -8,6 +8,7 @@ export function OpenFinanceCustody() {
   const [enabled, setEnabled] = useState(false)
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  const [itemIds, setItemIds] = useState<string[]>([])
   const [snapshot, setSnapshot] = useState<CustodySnapshot | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -18,6 +19,7 @@ export function OpenFinanceCustody() {
       const config = await api.openFinance.load()
       setConfigured(config.pluggy.configured)
       setEnabled(config.pluggy.enabled)
+      setItemIds(config.pluggy.itemIds)
       if (config.pluggy.enabled && config.pluggy.configured) setSnapshot(await api.openFinance.custody())
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load Open Finance custody.') }
   }, [])
@@ -26,7 +28,8 @@ export function OpenFinanceCustody() {
   const save = async () => {
     setBusy(true); setError(null)
     try {
-      const config = await api.openFinance.save({ enabled, clientId, clientSecret })
+      const parsedItemIds = itemIds.map((id) => id.trim()).filter(Boolean)
+      const config = await api.openFinance.save({ enabled, clientId, clientSecret, itemIds: parsedItemIds })
       setConfigured(config.pluggy.configured)
       setClientId(''); setClientSecret('')
       if (config.pluggy.enabled && config.pluggy.configured) setSnapshot(await api.openFinance.custody())
@@ -47,8 +50,9 @@ export function OpenFinanceCustody() {
           <input className="input" type="password" value={clientSecret} onChange={event => setClientSecret(event.target.value)} placeholder="Pluggy client secret" autoComplete="new-password" />
         </div>
       )}
+      <div className="mt-4"><label className="text-[12px] text-text-muted" htmlFor="pluggy-item-ids">MeuPluggy item IDs (one per line)</label><textarea id="pluggy-item-ids" className="input mt-1 min-h-20 w-full font-mono text-[12px]" value={itemIds.join('\n')} onChange={event => setItemIds(event.target.value.split(/\r?\n/))} placeholder="Item UUID from the Pluggy Dashboard" /><p className="mt-1 text-[11px] text-text-muted">MeuPluggy does not allow applications to list proxy items. Copy each linked item ID from the Dashboard.</p></div>
       <label className="mt-4 flex items-center gap-2 text-[12px] text-text-muted"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} /> Enable read-only custody sync</label>
-      <div className="mt-4 flex items-center gap-2"><button className="btn-primary text-[12px]" disabled={busy || (!configured && (!clientId || !clientSecret))} onClick={() => void save()}>{busy ? 'Saving...' : configured ? 'Update' : 'Save and connect'}</button>{configured && enabled && <button className="btn-secondary-sm" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing...' : 'Refresh custody'}</button>}</div>
+      <div className="mt-4 flex items-center gap-2"><button className="btn-primary text-[12px]" disabled={busy || (!configured && (!clientId || !clientSecret)) || (enabled && itemIds.every((id) => !id.trim()))} onClick={() => void save()}>{busy ? 'Saving...' : configured ? 'Update' : 'Save and connect'}</button>{configured && enabled && <button className="btn-secondary-sm" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing...' : 'Refresh custody'}</button>}</div>
       {error && <p role="alert" className="mt-3 text-[12px] text-red-400">{error}</p>}
       {snapshot && <div className="mt-5 border-t border-border pt-4"><div className="mb-3 flex items-center justify-between"><span className="text-[12px] text-text-muted">{snapshot.positions.length} positions · updated {new Date(snapshot.fetchedAt).toLocaleString()}</span><span className="text-sm font-semibold">{fmt(total, 'BRL')}</span></div><div className="space-y-2">{snapshot.positions.map(position => <div key={position.id} className="grid grid-cols-[1fr_auto_auto] gap-4 text-[12px]"><span><span className="font-medium text-text">{position.code ?? position.name}</span>{position.code && <span className="ml-2 text-text-muted">{position.name}</span>}<span className="ml-2 text-text-muted">{position.institution ?? ''}</span></span><span className="text-text-muted">{position.quantity == null ? '—' : fmtNum(position.quantity)}</span><span className="min-w-20 text-right text-text">{position.value == null ? '—' : fmt(position.value, position.currency)}</span></div>)}</div></div>}
     </section>

@@ -12,11 +12,12 @@ const schema = z.object({
     enabled: z.boolean().default(false),
     clientId: z.string().min(1).optional(),
     clientSecret: z.string().min(1).optional(),
-  }).default({ enabled: false }),
+    itemIds: z.array(z.string().uuid()).default([]),
+  }).default({ enabled: false, itemIds: [] }),
 })
 
 export type OpenFinanceConfig = z.infer<typeof schema>
-export type PublicOpenFinanceConfig = { pluggy: { enabled: boolean; configured: boolean } }
+export type PublicOpenFinanceConfig = { pluggy: { enabled: boolean; configured: boolean; itemIds: string[] } }
 
 export async function readOpenFinanceConfig(): Promise<OpenFinanceConfig> {
   try {
@@ -30,10 +31,10 @@ export async function readOpenFinanceConfig(): Promise<OpenFinanceConfig> {
 
 export async function readPublicOpenFinanceConfig(): Promise<PublicOpenFinanceConfig> {
   const config = await readOpenFinanceConfig()
-  return { pluggy: { enabled: config.pluggy.enabled, configured: Boolean(config.pluggy.clientId && config.pluggy.clientSecret) } }
+  return { pluggy: { enabled: config.pluggy.enabled, configured: Boolean(config.pluggy.clientId && config.pluggy.clientSecret), itemIds: config.pluggy.itemIds } }
 }
 
-export async function writeOpenFinanceConfig(input: { enabled: boolean; clientId?: string; clientSecret?: string }): Promise<PublicOpenFinanceConfig> {
+export async function writeOpenFinanceConfig(input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<PublicOpenFinanceConfig> {
   const current = await readOpenFinanceConfig()
   const next = schema.parse({
     version: 1,
@@ -41,6 +42,7 @@ export async function writeOpenFinanceConfig(input: { enabled: boolean; clientId
       enabled: input.enabled,
       clientId: input.clientId?.trim() || current.pluggy.clientId,
       clientSecret: input.clientSecret?.trim() || current.pluggy.clientSecret,
+      itemIds: input.itemIds ?? current.pluggy.itemIds,
     },
   })
   const temp = `${FILE}.tmp-${process.pid}`
