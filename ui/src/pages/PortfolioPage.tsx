@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { api, type Position, type WalletCommitLog, type EquityCurvePoint, type UTASnapshotSummary } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
@@ -262,13 +262,12 @@ export function PortfolioPage() {
           <div className="flex-1 min-w-0 space-y-5">
             {!lastRefresh ? <PortfolioSkeleton /> : <>
             {!tradingModeLoading && tradingMode === 'lite' ? (
-              <><OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} /><HeroMetrics equity={null} curve={null} custody={openFinanceCustody} fxRates={[]} /><TradingModeGate
+              <><PortfolioOverview equity={null} curve={null} custody={openFinanceCustody} fxRates={[]} accounts={[]} /><OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} /><TradingModeGate
                 title="Broker portfolio is unavailable in Lite mode."
-                description="Lite mode keeps UTA disconnected. Open Finance custody remains available above in read-only mode."
+                description="Lite mode keeps UTA disconnected. Your MeuPluggy account remains available in read-only mode."
               /></>
             ) : <>
-            <OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} />
-            <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} custody={openFinanceCustody} fxRates={data.fxRates} />
+            <PortfolioOverview equity={data.equity} curve={aggregateCurve?.total ?? null} custody={openFinanceCustody} fxRates={data.fxRates} accounts={accountSources} />
 
             {curvePoints.length > 0 && (
               <EquityCurve
@@ -302,6 +301,8 @@ export function PortfolioPage() {
                 perAccountCurve={aggregateCurve?.perAccount ?? {}}
               />
             )}
+
+            <OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} />
 
             {allPositions.length > 0 && (
               <PositionsTable positions={allPositions} fxRates={data.fxRates} />
@@ -393,13 +394,26 @@ function NoAccountsEmpty() {
   )
 }
 
-// ==================== Hero Metrics ====================
+// ==================== Portfolio overview ====================
 
-function HeroMetrics({ equity, curve, custody, fxRates }: {
+type PortfolioAccountSource = {
+  id: string
+  label: string
+  provider: string
+  equity: string
+  unrealizedPnL: number
+  error?: string
+  health?: string
+  disabled?: boolean
+  connecting?: boolean
+}
+
+function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
   equity: AggregatedEquity | null
   curve: CurvePointSummary | null
   custody: CustodySnapshot | null
   fxRates: FxRateInfo[]
+  accounts: PortfolioAccountSource[]
 }) {
   if (!equity && !custody) {
     return (
@@ -425,6 +439,15 @@ function HeroMetrics({ equity, curve, custody, fxRates }: {
   }, 0)
   const unconvertedCurrencies = Object.keys(custodyTotals).filter((currency) => currency !== 'USD' && !fxByCurrency.has(currency))
   const combinedTotalUsd = total + convertedCustodyUsd
+  const custodyTotalBrl = custodyTotals.BRL ?? 0
+  const allocation = Object.entries(custody?.positions.reduce<Record<string, number>>((groups, position) => {
+    const label = position.type?.trim() || 'Other investments'
+    groups[label] = (groups[label] ?? 0) + (position.currency === 'BRL' ? position.value ?? 0 : 0)
+    return groups
+  }, {}) ?? {})
+    .filter(([, value]) => value > 0)
+    .sort(([, left], [, right]) => right - left)
+  const allocationTotal = allocation.reduce((sum, [, value]) => sum + value, 0)
 
   // Today PnL — same shape as TradingPage hero. Suppress when no baseline
   // is available yet (fresh portfolio with no 24h history).
@@ -438,14 +461,26 @@ function HeroMetrics({ equity, curve, custody, fxRates }: {
   }
 
   return (
-    <div className="border border-border rounded-lg bg-bg-secondary px-5 py-5 space-y-4">
+    <section aria-label="Portfolio overview" className="space-y-3">
+      <div className="grid gap-3 xl:grid-cols-[1.1fr_0.9fr_1.15fr]">
+        <OverviewCard title="Connected accounts" eyebrow="Portfolio">
+          <div className="space-y-1.5">
+            {accounts.slice(0, 3).map((account) => (
+              <AccountSummaryRow key={account.id} label={account.label} detail={account.provider} value={fmt(Number(account.equity), 'USD')} status={account.health === 'offline' ? 'offline' : 'live'} />
+            ))}
+            {custody && <AccountSummaryRow label="MeuPluggy" detail={`${custody.positions.length} read-only positions`} value={fmt(custodyTotalBrl, 'BRL')} status="connected" />}
+            {accounts.length === 0 && !custody && <p className="py-3 text-[12px] text-text-muted">Connect a broker or MeuPluggy account to see your holdings here.</p>}
+          </div>
+        </OverviewCard>
+
+        <div className="min-h-[190px] rounded-lg border border-border bg-bg-secondary px-5 py-5 space-y-4">
       <Metric
         size="lg"
         label={unconvertedCurrencies.length === 0 ? 'Total Equity (including Open Finance) · USD' : 'Broker equity · USD'}
         value={fmt(unconvertedCurrencies.length === 0 ? combinedTotalUsd : total, 'USD')}
         delta={todayDelta ?? { value: '— today', sign: 'flat' }}
       />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-border">
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
         <Metric size="sm" label="Cash" value={fmt(cash, 'USD')} />
         {Object.entries(custodyTotals).map(([currency, value]) => <Metric key={currency} size="sm" label={`Open Finance custody · ${currency}`} value={fmt(value, currency)} />)}
         <Metric
@@ -461,6 +496,52 @@ function HeroMetrics({ equity, curve, custody, fxRates }: {
           valueSign={signFromDelta(realized)}
         />
       </div>
+        </div>
+
+        <OverviewCard title="Investments" eyebrow={custody ? `${custody.positions.length} positions · MeuPluggy` : 'MeuPluggy read-only account'}>
+          {allocation.length > 0 ? (
+            <div className="space-y-3">
+              {allocation.slice(0, 4).map(([type, value], index) => {
+                const percent = allocationTotal > 0 ? (value / allocationTotal) * 100 : 0
+                const colors = ['bg-accent', 'bg-green', 'bg-purple', 'bg-yellow-400']
+                return <div key={type}>
+                  <div className="mb-1 flex items-baseline justify-between gap-3 text-[11px]">
+                    <span className="truncate text-text">{type}</span>
+                    <span className="shrink-0 tabular-nums text-text-muted">{percent.toFixed(1)}% · {fmt(value, 'BRL')}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-bg-tertiary"><div className={`h-full rounded-full ${colors[index]}`} style={{ width: `${percent}%` }} /></div>
+                </div>
+              })}
+            </div>
+          ) : (
+            <p className="py-3 text-[12px] text-text-muted">MeuPluggy investments will be grouped here after the first sync.</p>
+          )}
+        </OverviewCard>
+      </div>
+      {unconvertedCurrencies.length > 0 && <p className="text-[11px] text-yellow-500">Open Finance balances in {unconvertedCurrencies.join(', ')} are shown in their native currency and are not included in the USD total.</p>}
+    </section>
+  )
+}
+
+function OverviewCard({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
+  return (
+    <div className="min-h-[190px] rounded-lg border border-border bg-bg-secondary p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <h2 className="text-[13px] font-semibold text-text">{title}</h2>
+        <span className="text-right text-[10px] font-medium uppercase tracking-wide text-text-muted">{eyebrow}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function AccountSummaryRow({ label, detail, value, status }: { label: string; detail: string; value: string; status: 'live' | 'offline' | 'connected' }) {
+  const dot = status === 'offline' ? 'bg-red' : status === 'connected' ? 'bg-accent' : 'bg-green'
+  return (
+    <div className="flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-overlay">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+      <div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-text">{label}</p><p className="truncate text-[10px] text-text-muted">{detail}</p></div>
+      <span className="shrink-0 text-[12px] font-medium tabular-nums text-text">{value}</span>
     </div>
   )
 }
