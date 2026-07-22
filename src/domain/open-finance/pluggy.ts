@@ -44,6 +44,12 @@ interface PluggyInvestment {
 interface PluggyListResponse { results?: PluggyInvestment[]; data?: PluggyInvestment[] }
 interface PluggyItem { connector?: { name?: string } }
 
+// Pluggy can retain closed investment records with a zero quantity and a
+// display-only cent-level quote. They are not custody positions and clutter
+// the Portfolio table, so treat values that round to R$0.00 as zero.
+const ZERO_VALUE_EPSILON = 0.005
+const ZERO_QUANTITY_EPSILON = 1e-8
+
 async function pluggyFetch(path: string, init: RequestInit): Promise<Response> {
   const response = await fetch(`${PLUGGY_API_URL}${path}`, { ...init, signal: AbortSignal.timeout(15_000) })
   if (!response.ok) {
@@ -95,7 +101,10 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
       currency: investment.currencyCode ?? 'BRL',
       institution: typeof investment.institution === 'string' ? investment.institution : investment.institution?.name ?? institution,
       asOf: investment.date,
-    })),
+    })).filter((position) =>
+      Math.abs(position.value ?? 0) >= ZERO_VALUE_EPSILON ||
+      Math.abs(position.quantity ?? 0) > ZERO_QUANTITY_EPSILON,
+    ),
   }
 }
 
