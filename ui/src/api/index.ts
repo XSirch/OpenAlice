@@ -19,6 +19,7 @@ import { headlessApi } from './headless'
 import { preferencesApi } from './preferences'
 import { inquiriesApi } from './inquiries'
 import { connectorsApi } from './connectors'
+import { openFinanceApi } from './open-finance'
 export const api = {
   config: configApi,
   schedule: scheduleApi,
@@ -37,6 +38,7 @@ export const api = {
   preferences: preferencesApi,
   inquiries: inquiriesApi,
   connectors: connectorsApi,
+  openFinance: openFinanceApi,
 }
 
 // Re-export all types for convenience
