@@ -132,6 +132,9 @@ jobs:
         run: pnpm electron:smoke:workspace --skip-build --skip-pack
         timeout-minutes: 5
         env:
+          # The reused Linux package also launches Electron. GitHub-hosted
+          # runners cannot configure its setuid sandbox helper.
+          ELECTRON_DISABLE_SANDBOX: "1"
           OPENALICE_SMOKE_RECEIPT_PATH: ${{ runner.temp }}/openalice-workspace-acceptance.json
 
       - name: Upload Workspace acceptance receipt
