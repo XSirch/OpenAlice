@@ -105,20 +105,21 @@ function InvestmentReturnsTable({ positions, fxRates }: { positions: ReturnPosit
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-[13px]">
         <thead><tr className="bg-secondary text-left text-muted-foreground">
-          <th className="px-3 py-2 font-medium">Asset</th><th className="px-3 py-2 text-center font-medium">Ccy</th><th className="px-3 py-2 text-right font-medium">Qty</th><th className="px-3 py-2 text-right font-medium">Avg Cost</th><th className="px-3 py-2 text-right font-medium">Current</th><th className="px-3 py-2 text-right font-medium">Mkt Value</th>{hasNonUsd && <th className="px-3 py-2 text-right font-medium">USD Value</th>}<th className="px-3 py-2 text-right font-medium">Return</th><th className="px-3 py-2 text-right font-medium">Return %</th>
+          <th className="px-3 py-2 font-medium">Asset</th><th className="px-3 py-2 text-center font-medium">Ccy</th><th className="px-3 py-2 text-right font-medium">Qty</th><th className="px-3 py-2 text-right font-medium">Avg Cost</th><th className="px-3 py-2 text-right font-medium">Acquired</th><th className="px-3 py-2 text-right font-medium">Current</th><th className="px-3 py-2 text-right font-medium">Mkt Value</th>{hasNonUsd && <th className="px-3 py-2 text-right font-medium">USD Value</th>}<th className="px-3 py-2 text-right font-medium">Return</th><th className="px-3 py-2 text-right font-medium">Return %</th>
         </tr></thead>
         <tbody>{positions.map((position, index) => {
           const currency = position.currency || 'USD'
           const multiplier = Number(position.contract.multiplier ?? 1)
           const cost = Number(position.avgCost) * Number(position.quantity) * (Number.isFinite(multiplier) ? multiplier : 1)
           const pnl = Number(position.unrealizedPnL)
+          const hasCostBasis = position.accountProvider !== 'pluggy' || position.costBasisSource != null
           const display = contractPrimary(position.contract)
           const usdValue = Number(position.marketValue) * (currency === 'USD' ? 1 : (rateMap[currency] ?? 1))
           const positive = pnl >= 0
           return <tr key={`${position.accountLabel}-${position.contract.aliceId ?? index}`} className="border-t border-border transition-colors hover:bg-muted/30">
             <td className="px-3 py-2"><div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-foreground">{display}</span><span className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] tracking-tight text-muted-foreground">{position.contract.secType || 'UNK'}</span><span className="text-[10px] text-muted-foreground">{position.accountLabel}</span></div></td>
-            <td className="px-3 py-2 text-center text-[11px] text-muted-foreground">{currency}</td><td className="px-3 py-2 text-right text-foreground">{fmtNum(position.quantity)}</td><td className="px-3 py-2 text-right text-muted-foreground">{fmt(position.avgCost, currency)}</td><td className="px-3 py-2 text-right text-foreground">{fmt(position.marketPrice, currency)}</td><td className="px-3 py-2 text-right text-foreground">{fmt(position.marketValue, currency)}</td>
-            {hasNonUsd && <td className="px-3 py-2 text-right text-muted-foreground">{currency === 'USD' ? '—' : fmt(usdValue)}</td>}<td className={`px-3 py-2 text-right font-medium ${positive ? 'text-success' : 'text-destructive'}`}>{fmtPnl(position.unrealizedPnL, currency)}</td><td className={`px-3 py-2 text-right ${positive ? 'text-success' : 'text-destructive'}`}>{fmtPctSigned(cost > 0 ? pnl / cost * 100 : null)}</td>
+            <td className="px-3 py-2 text-center text-[11px] text-muted-foreground">{currency}</td><td className="px-3 py-2 text-right text-foreground">{fmtNum(position.quantity)}</td><td className="px-3 py-2 text-right text-muted-foreground">{hasCostBasis ? fmt(position.avgCost, currency) : '—'}</td><td className="px-3 py-2 text-right text-[11px] text-muted-foreground">{position.acquiredAt ? new Date(position.acquiredAt).toLocaleDateString() : '—'}</td><td className="px-3 py-2 text-right text-foreground">{fmt(position.marketPrice, currency)}</td><td className="px-3 py-2 text-right text-foreground">{fmt(position.marketValue, currency)}</td>
+            {hasNonUsd && <td className="px-3 py-2 text-right text-muted-foreground">{currency === 'USD' ? '—' : fmt(usdValue)}</td>}<td className={`px-3 py-2 text-right font-medium ${positive ? 'text-success' : 'text-destructive'}`}>{hasCostBasis ? fmtPnl(position.unrealizedPnL, currency) : '—'}</td><td className={`px-3 py-2 text-right ${positive ? 'text-success' : 'text-destructive'}`}>{hasCostBasis ? fmtPctSigned(cost > 0 ? pnl / cost * 100 : null) : '—'}</td>
           </tr>
         })}</tbody>
       </table>

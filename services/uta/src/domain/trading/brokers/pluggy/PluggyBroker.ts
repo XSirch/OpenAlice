@@ -110,6 +110,8 @@ export class PluggyBroker implements IBroker {
         unrealizedPnL: this.positionProfit(position).toString(),
         realizedPnL: '0',
         multiplier: '1',
+        costBasisSource: position.costBasisSource,
+        acquiredAt: position.acquiredAt,
       }
     })
   }
