@@ -48,6 +48,7 @@ export function UrlAdopter() {
         <Route path="/portfolio/returns" element={<AdoptStatic spec={{ kind: 'portfolio-returns', params: {} }} />} />
         <Route path="/portfolio/forecast" element={<Navigate to="/beta/wealth-forecast" replace />} />
         <Route path="/beta/wealth-forecast" element={<AdoptStatic spec={{ kind: 'wealth-forecast', params: {} }} />} />
+        <Route path="/beta/model-portfolio" element={<AdoptStatic spec={{ kind: 'model-portfolio', params: {} }} />} />
         <Route path="/issues" element={<AdoptStatic spec={{ kind: 'issue', params: {} }} />} />
         <Route path="/issues/:wsId/:id" element={<AdoptIssueDetail />} />
         <Route path="/automation" element={<Navigate to="/automation/runs" replace />} />
@@ -326,6 +327,7 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'portfolio-returns':
     case 'uta-detail':         return 'portfolio'
     case 'wealth-forecast':    return 'wealth-forecast'
+    case 'model-portfolio':    return 'model-portfolio'
     case 'issue':
     case 'issue-detail':       return 'issue'
     case 'automation':         return 'automation'

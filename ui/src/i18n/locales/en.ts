@@ -24,6 +24,7 @@ export const en = {
       tradingAsGit: 'Trading as Git',
       portfolio: 'Portfolio',
       wealthForecast: 'Wealth forecast',
+      modelPortfolio: 'Model portfolio',
       connectors: 'Connectors',
       issue: 'Issues',
       automation: 'Automation',

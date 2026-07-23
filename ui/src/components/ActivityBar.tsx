@@ -27,6 +27,7 @@ function activitySectionFor(page: Page): ActivitySection {
     case 'market':               return 'market'
     case 'portfolio':            return 'portfolio'
     case 'wealth-forecast':      return 'wealth-forecast'
+    case 'model-portfolio':      return 'model-portfolio'
     case 'issue':                return 'issue'
     case 'automation':           return 'automation'
     case 'news':                 return 'news'
