@@ -129,7 +129,7 @@ jobs:
         run: pnpm electron:smoke-toolchain
 
       - name: Prove packaged Workspace CLI acceptance
-        run: pnpm electron:smoke:workspace --skip-build --skip-pack
+        run: xvfb-run --auto-servernum pnpm electron:smoke:workspace --skip-build --skip-pack
         timeout-minutes: 5
         env:
           # The reused Linux package also launches Electron. GitHub-hosted
