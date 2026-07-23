@@ -96,9 +96,28 @@ describe('prepareMirrorAssets', () => {
       })
 
       expect(manifest.feeds.macIntel).toBeNull()
+      expect(manifest.feeds.mac).toBe('https://download.openalice.ai/latest-mac.yml')
       expect(manifest.installer).toBeNull()
       expect(manifest.macX64Dmg).toBeNull()
       expect(manifest.macArm64Dmg).toBe('https://download.openalice.ai/mac-arm64.dmg')
+    })
+  })
+
+  it('does not advertise a macOS feed when a Windows-only release is mirrored', () => {
+    withTempDir((dir) => {
+      writeFileSync(join(dir, 'OpenAlice.Setup.1.2.4.exe'), 'windows exe')
+      writeFileSync(join(dir, 'latest.yml'), 'version: 1.2.4\npath: OpenAlice.Setup.1.2.4.exe\n')
+
+      const manifest = prepareMirrorAssets({
+        outDir: dir,
+        tag: 'v1.2.4',
+        baseUrl: 'https://download.openalice.ai',
+        repository: 'TraderAlice/OpenAlice',
+      })
+
+      expect(manifest.feeds.mac).toBeNull()
+      expect(manifest.feeds.macArm64).toBeNull()
+      expect(manifest.feeds.windows).toBe('https://download.openalice.ai/latest.yml')
     })
   })
 })
