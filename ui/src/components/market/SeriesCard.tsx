@@ -42,6 +42,7 @@ export function fmtSeriesValue(card: MacroSeriesCard, v: number | null): string 
   switch (card.unit) {
     case 'percent': return `${v.toFixed(2)}%`
     case 'usd': return `$${v.toFixed(2)}`
+    case 'brl': return `R$ ${v.toFixed(4)}`
     case 'count': return fmtCompactNum(v)
     case 'index': return v.toFixed(1)
   }

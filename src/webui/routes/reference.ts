@@ -88,5 +88,14 @@ export function createReferenceRoutes(ctx: EngineContext): Hono {
     }
   })
 
+  // GET /api/reference/brazil â†’ BCB rates/inflation/FX + B3 index context
+  app.get('/brazil', async (c) => {
+    try {
+      return c.json(await ctx.reference.brazil())
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
+    }
+  })
+
   return app
 }

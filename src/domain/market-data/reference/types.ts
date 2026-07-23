@@ -74,7 +74,7 @@ export interface CalendarBoard {
 
 // ==================== Macro board ====================
 
-export type MacroUnit = 'percent' | 'usd' | 'index' | 'count'
+export type MacroUnit = 'percent' | 'usd' | 'brl' | 'index' | 'count'
 
 export interface MacroPoint {
   date: string
@@ -102,6 +102,15 @@ export interface MacroBoard {
   meta: ReferenceMeta
 }
 
+/** Brazil-focused market context. Official BCB reference rates are combined
+ * with delayed Yahoo index closes; every card retains its own data date. */
+export interface BrazilMarketBoard {
+  cards: MacroSeriesCard[]
+  /** A source may be unavailable without hiding the rest of the board. */
+  errors?: Record<string, string>
+  meta: ReferenceMeta
+}
+
 // ==================== Service ====================
 
 /** Board-shaped reference-data access. The webui routes are thin adapters
@@ -116,6 +125,8 @@ export interface ReferenceDataService {
    *  FRED-only by design — one key, one multi-series call. Fails loud when
    *  the FRED key is missing. */
   macro(): Promise<MacroBoard>
+  /** Brazil market context: BCB rates/inflation/FX plus B3 index closes. */
+  brazil(): Promise<BrazilMarketBoard>
   /** BTC/ETH futures term structure from Deribit (keyless), with
    *  annualized basis vs the perpetual. */
   termStructure(): Promise<TermStructureBoard>

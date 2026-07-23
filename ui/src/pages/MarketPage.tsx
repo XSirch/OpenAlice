@@ -135,6 +135,12 @@ export function MarketPage() {
                 onClick={() => openOrFocus({ kind: 'market-board', params: { board: 'macro' } })}
               />
               <MarketLaunchCard
+                icon={<Landmark size={17} strokeWidth={1.75} />}
+                title="Brasil"
+                description="Índices B3, Selic, CDI, IPCA e dólar comercial com data-base explícita."
+                onClick={() => openOrFocus({ kind: 'market-board', params: { board: 'brazil' } })}
+              />
+              <MarketLaunchCard
                 icon={<ArrowUpRight size={17} strokeWidth={1.75} />}
                 title={t('market.sectorRotation')}
                 description={t('market.rotationSubtitle')}

@@ -7,6 +7,7 @@ export const MARKET_BOARD_TITLES: Record<BoardKind, string> = {
   movers: 'Movers',
   calendar: 'Calendar',
   macro: 'Macro',
+  brazil: 'Brasil',
   'term-structure': 'Term Structure',
   'global-macro': 'Global Macro',
   shipping: 'Shipping',

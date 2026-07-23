@@ -82,7 +82,7 @@ export interface CalendarBoard {
   meta: ReferenceMeta
 }
 
-export type MacroUnit = 'percent' | 'usd' | 'index' | 'count'
+export type MacroUnit = 'percent' | 'usd' | 'brl' | 'index' | 'count'
 
 export interface MacroPoint {
   date: string
@@ -101,6 +101,12 @@ export interface MacroSeriesCard {
 
 export interface MacroBoard {
   cards: MacroSeriesCard[]
+  meta: ReferenceMeta
+}
+
+export interface BrazilMarketBoard {
+  cards: MacroSeriesCard[]
+  errors?: Record<string, string>
   meta: ReferenceMeta
 }
 
@@ -189,6 +195,7 @@ export const referenceApi = {
   movers: () => fetchJson<MoversBoard>('/api/reference/movers'),
   calendar: () => fetchJson<CalendarBoard>('/api/reference/calendar'),
   macro: () => fetchJson<MacroBoard>('/api/reference/macro'),
+  brazil: () => fetchJson<BrazilMarketBoard>('/api/reference/brazil'),
   termStructure: () => fetchJson<TermStructureBoard>('/api/reference/term-structure'),
   valuation: () => fetchJson<ValuationStrip>('/api/reference/valuation'),
   globalMacro: () => fetchJson<GlobalMacroBoard>('/api/reference/global-macro'),
