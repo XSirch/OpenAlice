@@ -6,6 +6,7 @@ import { BoardMeta } from '../components/market/BoardMeta'
 import { PageHeader } from '../components/PageHeader'
 import { CenteredLoading } from '../components/StateViews'
 import { SeriesCard } from '../components/market/SeriesCard'
+import { PortfolioEquityQuotes } from '../components/market/PortfolioEquityQuotes'
 import { MeasuredChartFrame } from '../components/MeasuredChartFrame'
 import {
   referenceApi,
@@ -92,6 +93,7 @@ function BrazilBoardView() {
                 ))}
               </div>
             </section>
+            <PortfolioEquityQuotes />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               Selic, CDI, IPCA e dólar vêm do Banco Central do Brasil. Ibovespa e IFIX são fechamentos atrasados via Yahoo Finance; cada cartão mostra sua própria data-base.
             </p>
