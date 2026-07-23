@@ -194,7 +194,10 @@ export const useWorkspace = create<WorkspaceStore>()(
       // that tab open on every reload. Bump clears the loop.
       // v6: introduced the `chat-landing` ViewKind; clear stale persisted
       // tab state so no rehydrate references an unknown kind.
-      version: 6,
+      // v7: renamed `portfolio-forecast` to `wealth-forecast` and moved it
+      // under Beta. Clear stale tabs so TabHost never looks up the removed
+      // registry entry during rehydration.
+      version: 7,
       // Persist only the data shape — actions are recreated by the store factory.
       partialize: (state) => ({
         tabs: state.tabs,
