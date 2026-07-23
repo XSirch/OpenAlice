@@ -107,7 +107,11 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
     return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: item.connector?.name }))
   }))).flat()
   const resolvedRecords = await mapWithConcurrency(records, 5, async ({ investment, institution }) => {
-    const reportedOriginal = finiteNumber(investment.amountOriginal)
+    const candidateOriginal = finiteNumber(investment.amountOriginal)
+    // Some connectors use zero as a placeholder for an unavailable cost
+    // basis. An active, positive-value investment cannot have a meaningful
+    // zero acquisition amount, so resolve it from transactions instead.
+    const reportedOriginal = candidateOriginal != null && candidateOriginal > 0 ? candidateOriginal : undefined
     const embeddedBasis = deriveCostBasis(investment.transactions ?? [])
     // Keep the provider's original amount authoritative, but still obtain the
     // first application date from the transaction history when it is absent

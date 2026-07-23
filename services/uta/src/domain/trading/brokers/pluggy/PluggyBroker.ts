@@ -175,8 +175,15 @@ export class PluggyBroker implements IBroker {
   }
 
   private positionProfit(position: CustodySnapshot['positions'][number]): Decimal {
-    if (position.profit != null) return new Decimal(position.profit)
-    if (position.originalAmount != null) return new Decimal(position.value ?? 0).minus(position.originalAmount)
+    const value = new Decimal(position.value ?? 0)
+    if (position.profit != null) {
+      const reported = new Decimal(position.profit)
+      // Some Pluggy connectors emit a placeholder zero profit even while the
+      // current balance differs from the reported invested amount. Preserve a
+      // genuine zero, but otherwise derive the observable return.
+      if (!reported.isZero() || position.originalAmount == null || value.equals(position.originalAmount)) return reported
+    }
+    if (position.originalAmount != null) return value.minus(position.originalAmount)
     return new Decimal(0)
   }
 }

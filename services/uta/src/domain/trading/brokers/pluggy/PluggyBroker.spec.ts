@@ -6,7 +6,7 @@ vi.mock('@/core/open-finance-config.js', () => ({
 vi.mock('@/domain/open-finance/pluggy.js', () => ({
   fetchPluggyCustody: vi.fn().mockResolvedValue({
     provider: 'pluggy', fetchedAt: '2026-07-22T00:00:00.000Z',
-    positions: [{ id: 'PETR4', name: 'Petrobras', code: 'PETR4', type: 'EQUITY', quantity: 10, value: 411.5, originalAmount: 400, profit: 11.5, acquiredAt: '2024-01-10T00:00:00.000Z', costBasisSource: 'reported', unitValue: 41.15, currency: 'BRL' }],
+    positions: [{ id: 'PETR4', name: 'Petrobras', code: 'PETR4', type: 'EQUITY', quantity: 10, value: 411.5, originalAmount: 400, profit: 0, acquiredAt: '2024-01-10T00:00:00.000Z', costBasisSource: 'reported', unitValue: 41.15, currency: 'BRL' }],
   }),
 }))
 
