@@ -45,6 +45,7 @@ export function UrlAdopter() {
         <Route path="/chat/workspaces/:wsId/s/:sessionId" element={<AdoptChatWorkspace />} />
         <Route path="/chat/:channelId" element={<Navigate to="/inbox" replace />} />
         <Route path="/portfolio" element={<AdoptStatic spec={{ kind: 'portfolio', params: {} }} />} />
+        <Route path="/portfolio/returns" element={<AdoptStatic spec={{ kind: 'portfolio-returns', params: {} }} />} />
         <Route path="/issues" element={<AdoptStatic spec={{ kind: 'issue', params: {} }} />} />
         <Route path="/issues/:wsId/:id" element={<AdoptIssueDetail />} />
         <Route path="/automation" element={<Navigate to="/automation/runs" replace />} />
@@ -320,6 +321,7 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'connectors':         return 'connectors'
     case 'alice-invest':       return 'settings'
     case 'portfolio':
+    case 'portfolio-returns':
     case 'uta-detail':         return 'portfolio'
     case 'issue':
     case 'issue-detail':       return 'issue'

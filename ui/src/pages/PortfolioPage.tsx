@@ -4,7 +4,7 @@ import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
 import { useWorkspace } from '../tabs/store'
 import { PageHeader } from '../components/PageHeader'
-import { EmptyState, Skeleton } from '../components/StateViews'
+import { Skeleton } from '../components/StateViews'
 import { EquityCurve } from '../components/EquityCurve'
 import { SnapshotDetail } from '../components/SnapshotDetail'
 import { Toggle } from '../components/Toggle'
@@ -259,9 +259,6 @@ export function PortfolioPage() {
     return () => clearInterval(interval)
   }, [refresh])
 
-  const allPositions = data.accounts.flatMap(a =>
-    a.positions.map(p => ({ ...p, accountLabel: a.label, accountProvider: a.provider })),
-  )
   const allWalletLogs = data.accounts.flatMap(a =>
     a.walletLog.map(c => ({ ...c, accountLabel: a.label, accountProvider: a.provider })),
   )
@@ -363,18 +360,10 @@ export function PortfolioPage() {
 
             <OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} />
 
-            {allPositions.length > 0 && (
-              <PositionsTable positions={allPositions} fxRates={data.fxRates} />
-            )}
-
             {/* Empty states */}
             {data.accounts.length === 0 && !loading && (
               <NoAccountsEmpty />
             )}
-            {data.accounts.length > 0 && allPositions.length === 0 && !loading && (
-              <EmptyState title="No open positions." />
-            )}
-
             {allWalletLogs.length > 0 && (
               <TradeLog commits={allWalletLogs} />
             )}

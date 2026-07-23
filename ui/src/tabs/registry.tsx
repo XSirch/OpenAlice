@@ -3,6 +3,7 @@ import type { Workspace } from '../components/workspace/api'
 import type { ViewKind, ViewSpec } from './types'
 
 import { PortfolioPage } from '../pages/PortfolioPage'
+import { InvestmentReturnsPage } from '../pages/InvestmentReturnsPage'
 import { TradingAsGitPage } from '../pages/TradingAsGitPage'
 import { IssuePage } from '../pages/IssuePage'
 import { IssueSettingsPage } from '../pages/IssueSettingsPage'
@@ -112,6 +113,22 @@ const portfolioModule: ViewModule<'portfolio'> = {
       sidebar={<PortfolioSidebar />}
     >
       <PortfolioPage />
+    </PageSidebarShell>
+  ),
+}
+
+const portfolioReturnsModule: ViewModule<'portfolio-returns'> = {
+  kind: 'portfolio-returns',
+  title: () => 'Investment returns',
+  toUrl: () => '/portfolio/returns',
+  Component: () => (
+    <PageSidebarShell
+      storageKey="portfolio"
+      titleKey="nav.item.portfolio"
+      defaultWidth={220}
+      sidebar={<PortfolioSidebar />}
+    >
+      <InvestmentReturnsPage />
     </PageSidebarShell>
   ),
 }
@@ -527,6 +544,7 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
 
 const VIEWS = {
   portfolio: portfolioModule,
+  'portfolio-returns': portfolioReturnsModule,
   'trading-as-git': tradingAsGitModule,
   connectors: connectorsModule,
   'alice-invest': aliceInvestModule,
