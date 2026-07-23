@@ -7,6 +7,7 @@ describe('balanced model portfolio', () => {
     expect(bucketForSecType('STK')).toBe('equities')
     expect(bucketForSecType('FUND')).toBe('funds-etfs')
     expect(bucketForSecType('CRYPTO')).toBe('crypto')
+    expect(bucketForSecType('CASH')).toBe('cash')
   })
 
   it('calculates the informational rebalance gap without selecting securities', () => {

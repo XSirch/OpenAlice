@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type Position } from '../api'
+import { api, type AccountInfo, type Position } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { Skeleton } from '../components/StateViews'
 import { fmt } from '../lib/format'
@@ -7,6 +7,7 @@ import { filterAccountTierUTAs } from '../lib/uta-account-filter'
 import { compareToBalancedModel } from './model-portfolio'
 
 interface ValuedPosition { secType?: string; valueBRL: number }
+interface AccountRead { positions: Position[]; account: AccountInfo | null }
 
 function numberOrNull(value: string): number | null {
   const parsed = Number(value)
@@ -16,16 +17,46 @@ function numberOrNull(value: string): number | null {
 /** UTA FX rates express one unit of each currency in USD. Normalize every
  * position through USD, then to BRL, preserving the same convention as the
  * consolidated Portfolio and wealth forecast views. */
+const USD_EQUIVALENTS = new Set(['USD', 'USDT', 'USDC', 'BUSD', 'FDUSD', 'TUSD', 'DAI'])
+
+function usdRate(currency: string, fx: Map<string, number>): number | null {
+  const normalized = currency.toUpperCase()
+  if (USD_EQUIVALENTS.has(normalized)) return 1
+  const rate = fx.get(normalized)
+  return rate != null && Number.isFinite(rate) && rate > 0 ? rate : null
+}
+
+function valueInBRL(value: number, currency: string, fx: Map<string, number>, brlRate: number): number | null {
+  const rate = usdRate(currency, fx)
+  return rate == null ? null : value * rate / brlRate
+}
+
 function positionsInBRL(positions: Position[], rates: Array<{ currency: string; rate: number }>): ValuedPosition[] {
   const fx = new Map(rates.map((rate) => [rate.currency.toUpperCase(), rate.rate]))
   const brlRate = fx.get('BRL')
   if (!brlRate || brlRate <= 0) return []
   return positions.flatMap((position) => {
     const value = numberOrNull(position.marketValue)
-    const currencyRate = fx.get(position.currency.toUpperCase())
-    if (position.side !== 'long' || value == null || value <= 0 || !currencyRate || currencyRate <= 0) return []
-    return [{ secType: position.contract.secType, valueBRL: value * currencyRate / brlRate }]
+    const valueBRL = value == null ? null : valueInBRL(value, position.currency, fx, brlRate)
+    if (position.side !== 'long' || valueBRL == null || valueBRL <= 0) return []
+    return [{ secType: position.contract.secType, valueBRL }]
   })
+}
+
+/** CCXT exchanges such as Binance expose stablecoins as account cash instead
+ * of positions. Add only the account value not already represented by marked
+ * positions, preventing the cash balance from being omitted or double-counted. */
+function accountCashResidual(read: AccountRead, rates: Array<{ currency: string; rate: number }>): ValuedPosition[] {
+  if (!read.account) return []
+  const fx = new Map(rates.map((rate) => [rate.currency.toUpperCase(), rate.rate]))
+  const brlRate = fx.get('BRL')
+  const equity = numberOrNull(read.account.netLiquidation)
+  if (!brlRate || brlRate <= 0 || equity == null || equity <= 0) return []
+  const accountBRL = valueInBRL(equity, read.account.baseCurrency, fx, brlRate)
+  if (accountBRL == null) return []
+  const positionsBRL = positionsInBRL(read.positions, rates).reduce((sum, position) => sum + position.valueBRL, 0)
+  const residual = Math.max(0, accountBRL - positionsBRL)
+  return residual > 0.01 ? [{ secType: 'CASH', valueBRL: residual }] : []
 }
 
 export function ModelPortfolioPage() {
@@ -40,8 +71,17 @@ export function ModelPortfolioPage() {
     try {
       const [{ utas }, { rates }] = await Promise.all([api.trading.listUTASummaries(), api.trading.fxRates()])
       const accounts = filterAccountTierUTAs(utas)
-      const responses = await Promise.all(accounts.map((account) => api.trading.utaPositions(account.id).catch(() => ({ positions: [] as Position[] }))))
-      setPositions(positionsInBRL(responses.flatMap((response) => response.positions), rates))
+      const responses = await Promise.all(accounts.map(async (account): Promise<AccountRead> => {
+        const [positionResponse, accountResponse] = await Promise.all([
+          api.trading.utaPositions(account.id).catch(() => ({ positions: [] as Position[] })),
+          api.trading.utaAccount(account.id).catch(() => null),
+        ])
+        return { positions: positionResponse.positions, account: accountResponse }
+      }))
+      setPositions(responses.flatMap((response) => [
+        ...positionsInBRL(response.positions, rates),
+        ...accountCashResidual(response, rates),
+      ]))
       setUpdatedAt(new Date())
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as posições para comparação.')
