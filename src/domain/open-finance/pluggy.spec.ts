@@ -46,7 +46,7 @@ describe('Pluggy custody client', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ connector: { name: 'Corretora' } }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ id: 'transaction-basis', name: 'CDB', quantity: 100, balance: 1100, value: 11, currencyCode: 'BRL' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ id: 'transaction-basis', name: 'CDB', quantity: 100, balance: 1100, value: 11, amountOriginal: 0, currencyCode: 'BRL' }] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ results: [
         { type: 'BUY', amount: 800, tradeDate: '2024-03-10T00:00:00.000Z' },
         { type: 'BUY', amount: 200, tradeDate: '2024-01-10T00:00:00.000Z' },
