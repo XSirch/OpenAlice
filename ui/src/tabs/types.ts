@@ -29,6 +29,7 @@ export type ViewSpec =
   | { kind: 'template-catalog'; params: Record<string, never> }
   | { kind: 'template-detail';  params: { name: string } }
   | { kind: 'portfolio';      params: Record<string, never> }
+  | { kind: 'portfolio-returns'; params: Record<string, never> }
   | { kind: 'trading-as-git'; params: Record<string, never> }
   | { kind: 'connectors';     params: Record<string, never> }
   | { kind: 'alice-invest';  params: Record<string, never> }

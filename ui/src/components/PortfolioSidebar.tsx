@@ -28,6 +28,7 @@ export function PortfolioSidebar() {
   useEffect(() => { ensureTradingModePolling() }, [])
 
   const overviewActive = focused?.kind === 'portfolio'
+  const returnsActive = focused?.kind === 'portfolio-returns'
   const focusedUtaId =
     focused?.kind === 'uta-detail' ? focused.params.id : null
   const lite = !tradingModeLoading && tradingMode === 'lite'
@@ -40,6 +41,13 @@ export function PortfolioSidebar() {
           label={t('portfolio.allAccounts')}
           active={overviewActive}
           onClick={() => openOrFocus({ kind: 'portfolio', params: {} })}
+        />
+
+        <SidebarSectionHeader>Analysis</SidebarSectionHeader>
+        <SidebarRow
+          label="Investment returns"
+          active={returnsActive}
+          onClick={() => openOrFocus({ kind: 'portfolio-returns', params: {} })}
         />
 
         <SidebarSectionHeader>
