@@ -102,7 +102,7 @@ jobs:
         run: pnpm electron:build
 
       - name: Smoke Guardian takeover through Electron
-        run: pnpm electron:smoke:guardian-recovery --skip-build
+        run: xvfb-run --auto-servernum pnpm electron:smoke:guardian-recovery --skip-build
         timeout-minutes: 5
         # GitHub's Ubuntu runners cannot configure Electron's setuid sandbox.
         # This smoke runs in an isolated disposable worker and does not alter
@@ -129,9 +129,12 @@ jobs:
         run: pnpm electron:smoke-toolchain
 
       - name: Prove packaged Workspace CLI acceptance
-        run: pnpm electron:smoke:workspace --skip-build --skip-pack
+        run: xvfb-run --auto-servernum pnpm electron:smoke:workspace --skip-build --skip-pack
         timeout-minutes: 5
         env:
+          # The reused Linux package also launches Electron. GitHub-hosted
+          # runners cannot configure its setuid sandbox helper.
+          ELECTRON_DISABLE_SANDBOX: "1"
           OPENALICE_SMOKE_RECEIPT_PATH: ${{ runner.temp }}/openalice-workspace-acceptance.json
 
       - name: Upload Workspace acceptance receipt

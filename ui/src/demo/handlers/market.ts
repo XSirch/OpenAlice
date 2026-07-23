@@ -6,7 +6,7 @@ import {
   demoSectorRotation,
 } from '../fixtures/market'
 import type { BarSourceCandidate, BarMeta } from '../../api/market'
-import type { MoversBoard, MoverRow, CalendarBoard, MacroBoard, MacroSeriesCard, TermStructureBoard, ValuationStrip, GlobalMacroBoard, ShippingBoard, FedBoard } from '../../api/reference'
+import type { MoversBoard, MoverRow, CalendarBoard, MacroBoard, MacroSeriesCard, TermStructureBoard, ValuationStrip, GlobalMacroBoard, ShippingBoard, FedBoard, BrazilMarketBoard } from '../../api/reference'
 
 const AAPL = 'AAPL'
 const DEMO_FX: Record<string, { name: string; spot: number; aliases: string[] }> = {
@@ -44,6 +44,7 @@ export const marketHandlers = [
   http.get('/api/reference/movers', () => HttpResponse.json(demoMovers)),
   http.get('/api/reference/calendar', () => HttpResponse.json(demoCalendar)),
   http.get('/api/reference/macro', () => HttpResponse.json(demoMacro)),
+  http.get('/api/reference/brazil', () => HttpResponse.json(demoBrazil)),
   http.get('/api/reference/term-structure', () => HttpResponse.json(demoTermStructure)),
   http.get('/api/reference/valuation', () => HttpResponse.json(demoValuation)),
   http.get('/api/reference/global-macro', () => HttpResponse.json(demoGlobalMacro)),
@@ -247,6 +248,18 @@ const demoMacro: MacroBoard = {
     macroCard('DTWEXBGS', 'Dollar Index (Broad)', 'index', 121, -0.05),
   ],
   meta: { provider: 'federal_reserve', asOf: '2026-06-10T13:30:00.000Z' },
+}
+
+const demoBrazil: BrazilMarketBoard = {
+  cards: [
+    macroCard('IBOV', 'Ibovespa', 'index', 138_200, 120),
+    macroCard('IFIX', 'IFIX', 'index', 3_480, 4),
+    macroCard('USDBRL', 'Dólar comercial (venda)', 'brl', 5.48, -0.003),
+    macroCard('SELIC', 'Selic meta', 'percent', 14.75, 0),
+    macroCard('CDI', 'CDI anualizado', 'percent', 14.65, 0.004),
+    macroCard('IPCA_12M', 'IPCA acumulado 12 meses', 'percent', 5.1, -0.02),
+  ],
+  meta: { provider: 'Banco Central do Brasil + Yahoo Finance', asOf: '2026-06-10T13:30:00.000Z' },
 }
 
 function termCurve(symbol: string, spot: number): TermStructureBoard['curves'][number] {

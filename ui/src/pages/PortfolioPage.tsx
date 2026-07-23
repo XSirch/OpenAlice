@@ -4,7 +4,7 @@ import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
 import { useWorkspace } from '../tabs/store'
 import { PageHeader } from '../components/PageHeader'
-import { EmptyState, Skeleton } from '../components/StateViews'
+import { Skeleton } from '../components/StateViews'
 import { EquityCurve } from '../components/EquityCurve'
 import { SnapshotDetail } from '../components/SnapshotDetail'
 import { Toggle } from '../components/Toggle'
@@ -54,12 +54,60 @@ interface PortfolioData {
 }
 
 const EMPTY: PortfolioData = { equity: null, accounts: [], fxRates: [] }
+const PORTFOLIO_CACHE_KEY = 'openalice.portfolio-cache.v1'
 
 const CUTOFF_24H_MS = 24 * 60 * 60 * 1000
 
 interface CurveSummary {
   total: CurvePointSummary
   perAccount: Record<string, CurvePointSummary>
+}
+
+interface PersistedPortfolio {
+  data: PortfolioData
+  aggregateCurve: CurveSummary | null
+  curvePoints: EquityCurvePoint[]
+  curveAccountId: string | 'all'
+  refreshedAt: string
+}
+
+/** Portfolio reads can involve several broker and Open Finance calls. Keep the
+ * last successful, credential-free result locally so the page opens instantly
+ * and refreshes it in the background. The header continues to show its exact
+ * refresh time, making stale data explicit rather than silently presenting it
+ * as live. */
+function readPortfolioCache(): PersistedPortfolio | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(PORTFOLIO_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw) as Partial<PersistedPortfolio>
+    if (!cached.data || !Array.isArray(cached.data.accounts) || !Array.isArray(cached.data.fxRates) || typeof cached.refreshedAt !== 'string') return null
+    return {
+      data: cached.data,
+      aggregateCurve: cached.aggregateCurve ?? null,
+      curvePoints: Array.isArray(cached.curvePoints) ? cached.curvePoints : [],
+      curveAccountId: cached.curveAccountId === 'all' || typeof cached.curveAccountId === 'string' ? cached.curveAccountId : 'all',
+      refreshedAt: cached.refreshedAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+function writePortfolioCache(cache: PersistedPortfolio): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PORTFOLIO_CACHE_KEY, JSON.stringify(cache))
+  } catch {
+    // Storage is best-effort. A full or disabled browser store must never
+    // block a fresh broker read.
+  }
+}
+
+function clearPortfolioCache(): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.removeItem(PORTFOLIO_CACHE_KEY) } catch { /* best-effort */ }
 }
 
 /** Trailing-24h baseline + sparkline values, both at the aggregate level
@@ -112,14 +160,15 @@ function summarizeAggregateCurve(points: EquityCurvePoint[]): CurveSummary {
 // ==================== Page ====================
 
 export function PortfolioPage() {
+  const [cached] = useState(readPortfolioCache)
   const tradingMode = useTradingMode((s) => s.status.mode)
   const tradingModeLoading = useTradingMode((s) => s.loading)
   const healthMap = useAccountHealth()
-  const [data, setData] = useState<PortfolioData>(EMPTY)
-  const [loading, setLoading] = useState(true)
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
-  const [curvePoints, setCurvePoints] = useState<EquityCurvePoint[]>([])
-  const [curveAccountId, setCurveAccountId] = useState<string | 'all'>('') // '' = not yet initialized
+  const [data, setData] = useState<PortfolioData>(() => cached?.data ?? EMPTY)
+  const [loading, setLoading] = useState(() => cached == null)
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(() => cached ? new Date(cached.refreshedAt) : null)
+  const [curvePoints, setCurvePoints] = useState<EquityCurvePoint[]>(() => cached?.curvePoints ?? [])
+  const [curveAccountId, setCurveAccountId] = useState<string | 'all'>(() => cached?.curveAccountId ?? '') // '' = not yet initialized
   const [selectedTimestamp, setSelectedTimestamp] = useState<string | null>(null)
   const [selectedSnapshot, setSelectedSnapshot] = useState<UTASnapshotSummary | null>(null)
   const [snapshotEnabled, setSnapshotEnabled] = useState(true)
@@ -127,7 +176,7 @@ export function PortfolioPage() {
   // Aggregate curve (all UTAs, full per-account breakdown) — shared between
   // hero today-PnL delta and per-account sparklines. Distinct from
   // curvePoints which follows the user's chart-account selection.
-  const [aggregateCurve, setAggregateCurve] = useState<CurveSummary | null>(null)
+  const [aggregateCurve, setAggregateCurve] = useState<CurveSummary | null>(() => cached?.aggregateCurve ?? null)
   const [openFinanceCustody, setOpenFinanceCustody] = useState<CustodySnapshot | null>(null)
 
   const snapshotConfig = useMemo(() => ({ enabled: snapshotEnabled, every: snapshotEvery }), [snapshotEnabled, snapshotEvery])
@@ -159,6 +208,7 @@ export function PortfolioPage() {
   const refresh = useCallback(async () => {
     if (tradingModeLoading) return
     if (tradingMode === 'lite') {
+      clearPortfolioCache()
       setData(EMPTY)
       setAggregateCurve(null)
       setCurvePoints([])
@@ -174,8 +224,9 @@ export function PortfolioPage() {
       api.config.load().catch(() => null),
       api.trading.equityCurve({ limit: 1500 }).catch(() => ({ points: [] as EquityCurvePoint[] })),
     ])
+    const nextAggregateCurve = summarizeAggregateCurve(aggregateResult.points)
     setData(result)
-    setAggregateCurve(summarizeAggregateCurve(aggregateResult.points))
+    setAggregateCurve(nextAggregateCurve)
     if (configResult?.snapshot) {
       setSnapshotEnabled(configResult.snapshot.enabled)
       setSnapshotEvery(configResult.snapshot.every)
@@ -187,7 +238,15 @@ export function PortfolioPage() {
     const points = await fetchCurveData(effectiveId)
     setCurvePoints(points)
 
-    setLastRefresh(new Date())
+    const refreshedAt = new Date()
+    setLastRefresh(refreshedAt)
+    writePortfolioCache({
+      data: result,
+      aggregateCurve: nextAggregateCurve,
+      curvePoints: points,
+      curveAccountId: effectiveId,
+      refreshedAt: refreshedAt.toISOString(),
+    })
     setLoading(false)
   }, [curveAccountId, fetchCurveData, tradingMode, tradingModeLoading])
 
@@ -200,9 +259,6 @@ export function PortfolioPage() {
     return () => clearInterval(interval)
   }, [refresh])
 
-  const allPositions = data.accounts.flatMap(a =>
-    a.positions.map(p => ({ ...p, accountLabel: a.label, accountProvider: a.provider })),
-  )
   const allWalletLogs = data.accounts.flatMap(a =>
     a.walletLog.map(c => ({ ...c, accountLabel: a.label, accountProvider: a.provider })),
   )
@@ -304,18 +360,10 @@ export function PortfolioPage() {
 
             <OpenFinanceCustody onSnapshotChange={setOpenFinanceCustody} />
 
-            {allPositions.length > 0 && (
-              <PositionsTable positions={allPositions} fxRates={data.fxRates} />
-            )}
-
             {/* Empty states */}
             {data.accounts.length === 0 && !loading && (
               <NoAccountsEmpty />
             )}
-            {data.accounts.length > 0 && allPositions.length === 0 && !loading && (
-              <EmptyState title="No open positions." />
-            )}
-
             {allWalletLogs.length > 0 && (
               <TradeLog commits={allWalletLogs} />
             )}
@@ -504,7 +552,7 @@ function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
             <div className="space-y-3">
               {allocation.slice(0, 4).map(([type, value], index) => {
                 const percent = allocationTotal > 0 ? (value / allocationTotal) * 100 : 0
-                const colors = ['bg-primary', 'bg-success', 'bg-ai-action', 'bg-warning-400']
+                const colors = ['bg-primary', 'bg-success', 'bg-ai-action', 'bg-warning']
                 return <div key={type}>
                   <div className="mb-1 flex items-baseline justify-between gap-3 text-[11px]">
                     <span className="truncate text-foreground">{type}</span>
@@ -519,7 +567,7 @@ function PortfolioOverview({ equity, curve, custody, fxRates, accounts }: {
           )}
         </OverviewCard>
       </div>
-      {unconvertedCurrencies.length > 0 && <p className="text-[11px] text-warning-500">Open Finance balances in {unconvertedCurrencies.join(', ')} are shown in their native currency and are not included in the USD total.</p>}
+      {unconvertedCurrencies.length > 0 && <p className="text-[11px] text-warning">Open Finance balances in {unconvertedCurrencies.join(', ')} are shown in their native currency and are not included in the USD total.</p>}
     </section>
   )
 }

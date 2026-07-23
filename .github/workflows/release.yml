@@ -83,12 +83,9 @@ jobs:
           path: notes.md
           if-no-files-found: error
 
-  # Per-platform desktop installers are built and acceptance-tested before any
-  # tag or GitHub Release exists. Each runner builds only its own platform/arch.
-  # Optional broker SDKs are emitted as separate version/platform-specific
-  # Broker Packs and are rejected if they leak back into the desktop app. macOS
-  # builds are signed and notarized through Developer ID secrets; Windows remains
-  # unsigned until a Windows code-signing certificate exists.
+  # Windows installers are built and acceptance-tested before any tag or GitHub
+  # Release exists. macOS distribution is intentionally retired; optional broker
+  # SDKs remain separate version/platform-specific Broker Packs.
   build-desktop:
     needs: release
     if: needs.release.outputs.created == 'true' && !github.event.inputs.mirror_tag
@@ -96,10 +93,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-15-intel
-            arch: x64
           - os: windows-latest
             arch: x64
     runs-on: ${{ matrix.os }}
@@ -121,43 +114,11 @@ jobs:
       - name: Build optional Broker Packs
         run: pnpm broker-packs:build
 
-      # macOS still uses dugite's embedded Git. Windows keeps only dugite's JS
-      # wrapper and routes it to managed PortableGit in the packaged smoke.
-      - name: Verify bundled git (dugite) was fetched
-        if: runner.os == 'macOS'
-        run: |
-          node -e "const{existsSync}=require('fs');const{dirname,join}=require('path');const g=join(dirname(require.resolve('dugite/package.json')),'git');if(!existsSync(g)){console.error('dugite embedded git MISSING at '+g);process.exit(1)}console.log('dugite embedded git OK '+g)"
-
       - name: Build Alice + UTA + desktop shell
         run: pnpm electron:build
 
       - name: Vendor managed workspace runtime
         run: pnpm vendor:runtime
-
-      - name: Write Apple notarization API key
-        if: runner.os == 'macOS'
-        run: |
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          printf '%s' "$APPLE_API_KEY_P8" > "$KEY_PATH"
-          chmod 600 "$KEY_PATH"
-          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
-        env:
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-
-      - name: Package macOS installer
-        if: runner.os == 'macOS'
-        # Build on the matching native host so pnpm and electron-builder both
-        # select the correct native dependencies for arm64 or Intel.
-        run: |
-          ulimit -n 65536 || ulimit -n 32768 || ulimit -n 16384 || ulimit -n 10240
-          echo "open files limit: $(ulimit -n)"
-          pnpm -F @traderalice/desktop exec electron-builder --projectDir ../.. --publish never --${{ matrix.arch }}
-        env:
-          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Package Windows installer
         if: runner.os == 'Windows'
@@ -199,8 +160,6 @@ jobs:
         with:
           name: release-assets-${{ runner.os }}-${{ matrix.arch }}
           path: |
-            dist/electron-app/*.dmg
-            dist/electron-app/*.zip
             dist/electron-app/*.yml
             dist/electron-app/*.blockmap
             dist/electron-app/*.exe
@@ -313,8 +272,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           files: |
-            dist/release-assets/*.dmg
-            dist/release-assets/*.zip
             dist/release-assets/*.yml
             dist/release-assets/*.blockmap
             dist/release-assets/*.exe
@@ -375,7 +332,7 @@ jobs:
           TAG: ${{ github.event.inputs.mirror_tag || needs.release.outputs.tag }}
         run: |
           shopt -s nullglob
-          files=(dist/r2-upload/*-mac-intel.yml dist/r2-upload/*-intel-mac.yml dist/r2-upload/latest-mac-arm64.yml)
+          files=()
           installer="dist/r2-upload/OpenAlice-${TAG#v}-install"
           if [ -f "$installer" ]; then
             files+=("$installer")
@@ -404,10 +361,6 @@ jobs:
             --recursive \
             --exclude "*.yml" \
             --exclude "manifest.json" \
-            --exclude "mac-arm64.dmg" \
-            --exclude "mac-arm64.zip" \
-            --exclude "mac-x64.dmg" \
-            --exclude "mac-x64.zip" \
             --exclude "windows-x64.exe" \
             --exclude "install" \
             --exclude "OpenAlice-*-install" \
@@ -439,34 +392,6 @@ jobs:
             --content-type "text/plain" \
             --endpoint-url "$ENDPOINT"
 
-          if [ -f dist/r2-upload/mac-arm64.dmg ]; then
-            aws s3 cp dist/r2-upload/mac-arm64.dmg "s3://${R2_BUCKET}/mac-arm64.dmg" \
-              --cache-control "no-cache" \
-              --content-type "application/x-apple-diskimage" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/mac-arm64.zip ]; then
-            aws s3 cp dist/r2-upload/mac-arm64.zip "s3://${R2_BUCKET}/mac-arm64.zip" \
-              --cache-control "no-cache" \
-              --content-type "application/zip" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/mac-x64.dmg ]; then
-            aws s3 cp dist/r2-upload/mac-x64.dmg "s3://${R2_BUCKET}/mac-x64.dmg" \
-              --cache-control "no-cache" \
-              --content-type "application/x-apple-diskimage" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/mac-x64.zip ]; then
-            aws s3 cp dist/r2-upload/mac-x64.zip "s3://${R2_BUCKET}/mac-x64.zip" \
-              --cache-control "no-cache" \
-              --content-type "application/zip" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
           if [ -f dist/r2-upload/windows-x64.exe ]; then
             aws s3 cp dist/r2-upload/windows-x64.exe "s3://${R2_BUCKET}/windows-x64.exe" \
               --cache-control "no-cache" \
@@ -491,26 +416,12 @@ jobs:
           fi
 
           if [ "$CHANNEL" = "latest" ]; then
-            MAC_METADATA="latest-mac.yml"
             WINDOWS_METADATA="latest.yml"
           else
-            MAC_METADATA="${CHANNEL}-mac.yml"
             WINDOWS_METADATA="${CHANNEL}.yml"
           fi
 
-          curl -fsSI "${BASE_URL}/${MAC_METADATA}"
           curl -fsSI "${BASE_URL}/${WINDOWS_METADATA}"
-          curl -fsSI "${BASE_URL}/OpenAlice-${VERSION}-arm64.dmg"
-          curl -fsSI "${BASE_URL}/mac-arm64.dmg"
-          if [ -f dist/r2-upload/mac-x64.dmg ]; then
-            curl -fsSI "${BASE_URL}/mac-x64.dmg"
-          fi
-          if [ -f dist/r2-upload/mac-x64.zip ]; then
-            curl -fsSI "${BASE_URL}/mac-x64.zip"
-          fi
-          if [ -f "dist/r2-upload/${CHANNEL}-mac-intel.yml" ]; then
-            curl -fsSI "${BASE_URL}/${CHANNEL}-mac-intel.yml"
-          fi
           curl -fsSI "${BASE_URL}/windows-x64.exe"
           curl -fsSI "${BASE_URL}/manifest.json"
           curl -fsSI "${BASE_URL}/OpenAlice-${VERSION}-install"

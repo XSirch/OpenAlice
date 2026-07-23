@@ -29,6 +29,9 @@ export type ViewSpec =
   | { kind: 'template-catalog'; params: Record<string, never> }
   | { kind: 'template-detail';  params: { name: string } }
   | { kind: 'portfolio';      params: Record<string, never> }
+  | { kind: 'portfolio-returns'; params: Record<string, never> }
+  | { kind: 'wealth-forecast'; params: Record<string, never> }
+  | { kind: 'model-portfolio'; params: Record<string, never> }
   | { kind: 'trading-as-git'; params: Record<string, never> }
   | { kind: 'connectors';     params: Record<string, never> }
   | { kind: 'alice-invest';  params: Record<string, never> }
@@ -39,7 +42,7 @@ export type ViewSpec =
   | { kind: 'news';           params: Record<string, never> }
   | { kind: 'market-list';    params: Record<string, never> }
   | { kind: 'market-rotation'; params: Record<string, never> }
-  | { kind: 'market-board';   params: { board: 'movers' | 'calendar' | 'macro' | 'term-structure' | 'global-macro' | 'shipping' | 'fed' } }
+  | { kind: 'market-board';   params: { board: 'movers' | 'calendar' | 'macro' | 'brazil' | 'term-structure' | 'global-macro' | 'shipping' | 'fed' } }
   | { kind: 'market-detail';  params: { assetClass: 'equity' | 'crypto' | 'currency' | 'commodity'; symbol: string; source?: string } }
   | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'agent-permissions' | 'trading' | 'issues' | 'connectors' | 'mcp' | 'market-data' | 'news-collector' } }
   | { kind: 'uta-detail';     params: { id: string } }
@@ -80,6 +83,8 @@ export type ActivitySection =
   | 'dev'
   | 'market'
   | 'portfolio'
+  | 'wealth-forecast'
+  | 'model-portfolio'
   | 'issue'
   | 'automation'
   | 'news'

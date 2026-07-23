@@ -118,14 +118,15 @@ export function prepareMirrorAssets({ outDir, tag, baseUrl, repository }) {
 
   const urlFor = (name) => name ? `${normalizedBaseUrl}/${name}` : null
   const releaseNotesUrl = `https://github.com/${repository}/releases/tag/${tag}`
+  const macFeed = findFirst(names, [`${channel}-mac.yml`, 'latest-mac.yml'])
   const intelFeed = `${channel}-mac-intel.yml`
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
     releaseNotesUrl,
     feeds: {
-      mac: `${normalizedBaseUrl}/${channel}-mac.yml`,
-      macArm64: `${normalizedBaseUrl}/${channel}-mac.yml`,
+      mac: macFeed ? `${normalizedBaseUrl}/${macFeed}` : null,
+      macArm64: macFeed ? `${normalizedBaseUrl}/${macFeed}` : null,
       macIntel: existsSync(join(outDir, intelFeed)) ? `${normalizedBaseUrl}/${intelFeed}` : null,
       windows: `${normalizedBaseUrl}/${channel}.yml`,
     },

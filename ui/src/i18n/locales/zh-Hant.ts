@@ -20,6 +20,8 @@ export const zhHant: Resources = {
       news: '新聞',
       tradingAsGit: '交易即 Git',
       portfolio: '投資組合',
+      wealthForecast: '財富預測',
+      modelPortfolio: '模型投資組合',
       connectors: '連接器',
       issue: '議題',
       automation: '自動化',

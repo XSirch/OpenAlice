@@ -5,13 +5,14 @@
  */
 
 import type { DerivativesClientLike, EconomyClientLike, EquityClientLike, IndexClientLike } from '../client/types.js'
-import type { CalendarBoard, MacroBoard, MoversBoard, ReferenceDataService } from './types.js'
+import type { BrazilMarketBoard, CalendarBoard, MacroBoard, MoversBoard, ReferenceDataService } from './types.js'
 import { fetchMacroBoard } from './macro.js'
 import { fetchTermStructure, type TermStructureBoard } from './term-structure.js'
 import { fetchValuationStrip, type ValuationStrip } from './valuation.js'
 import { fetchGlobalMacro, type GlobalMacroBoard } from './global-macro.js'
 import { fetchShipping, type ShippingBoard } from './shipping.js'
 import { fetchFedBoard, type FedBoard } from './fed.js'
+import { fetchBrazilMarketBoard } from './brazil.js'
 import { cachedBoard } from './cache.js'
 import { createHubFetcher, markLocal, type HubConfig } from './hub.js'
 
@@ -46,6 +47,7 @@ const TTL = {
   termStructure: 120_000,    // live-ish crypto curve
   calendar: 30 * 60_000,
   macro: 30 * 60_000,
+  brazil: 5 * 60_000,
   fed: 60 * 60_000,
   valuation: 6 * 60 * 60_000,   // multpl updates ~daily
   globalMacro: 6 * 60 * 60_000, // OECD updates monthly/quarterly + tiny quota
@@ -129,6 +131,8 @@ export function createReferenceData(deps: ReferenceDataDeps): ReferenceDataServi
 
   const macro = cachedBoard(TTL.macro, async () =>
     (await viaHub<MacroBoard>('macro')) ?? markLocal(await fetchMacroBoard(deps.economyClient)))
+  const brazil = cachedBoard(TTL.brazil, async (): Promise<BrazilMarketBoard> =>
+    fetchBrazilMarketBoard(deps.indexClient))
   const globalMacro = cachedBoard(TTL.globalMacro, async () =>
     (await viaHub<GlobalMacroBoard>('global-macro')) ?? markLocal(await fetchGlobalMacro(deps.economyClient)))
   const shipping = cachedBoard(TTL.shipping, async () =>
@@ -155,6 +159,7 @@ export function createReferenceData(deps: ReferenceDataDeps): ReferenceDataServi
       return calendarCached()
     },
     macro,
+    brazil,
     termStructure,
     valuation,
     globalMacro,

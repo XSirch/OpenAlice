@@ -35,6 +35,9 @@ export class PluggyBroker implements IBroker {
 
   private snapshot: CustodySnapshot | null = null
   private loadedAt = 0
+  /** A portfolio render asks for equity and positions concurrently. Reuse the
+   * same Pluggy round trip instead of authenticating and reading custody twice. */
+  private loadInFlight: Promise<CustodySnapshot> | null = null
 
   constructor(config: { id: string; label?: string }) {
     this.id = config.id
@@ -66,6 +69,7 @@ export class PluggyBroker implements IBroker {
   async getAccount(): Promise<AccountInfo> {
     const snapshot = await this.load()
     const value = snapshot.positions.reduce((total, position) => total.plus(position.value ?? 0), new Decimal(0))
+    const profit = snapshot.positions.reduce((total, position) => total.plus(this.positionProfit(position)), new Decimal(0))
     const currencies = new Set(snapshot.positions.map((position) => position.currency))
     if (currencies.size > 1) {
       throw new BrokerError('CONFIG', 'MeuPluggy returned multiple currencies. Split custody by currency before using it as one UTA account.')
@@ -74,7 +78,7 @@ export class PluggyBroker implements IBroker {
       baseCurrency: snapshot.positions[0]?.currency ?? 'BRL',
       netLiquidation: value.toString(),
       totalCashValue: '0',
-      unrealizedPnL: '0',
+      unrealizedPnL: profit.toString(),
       realizedPnL: '0',
     }
   }
@@ -87,20 +91,27 @@ export class PluggyBroker implements IBroker {
       const unitValue = position.unitValue == null
         ? (quantity.isZero() ? new Decimal(0) : value.div(quantity))
         : new Decimal(position.unitValue)
+      const originalAmount = position.originalAmount == null ? null : new Decimal(position.originalAmount)
+      // `amountOriginal` is a total, while UTA's avgCost is per unit. When
+      // Pluggy does not provide it, retain the current mark rather than invent
+      // a purchase price or a return.
+      const avgCost = originalAmount && !quantity.isZero() ? originalAmount.div(quantity) : unitValue
       const contract = this.contractFor(position.id, position.code ?? position.name, position.name, position.currency, position.type)
       return {
         contract,
         currency: position.currency,
         side: 'long',
         quantity,
-        // Pluggy does not expose acquisition cost. Using the current mark keeps
-        // the UTA truthful: no synthetic PnL is shown as broker-provided data.
-        avgCost: unitValue.toString(),
+        avgCost: avgCost.toString(),
         marketPrice: unitValue.toString(),
         marketValue: value.toString(),
-        unrealizedPnL: '0',
+        // Prefer Pluggy's post-fee/tax return. Fall back to the difference
+        // only when it supplied a cost basis but no aggregate return.
+        unrealizedPnL: this.positionProfit(position).toString(),
         realizedPnL: '0',
         multiplier: '1',
+        costBasisSource: position.costBasisSource,
+        acquiredAt: position.acquiredAt,
       }
     })
   }
@@ -128,6 +139,16 @@ export class PluggyBroker implements IBroker {
 
   private async load(force = false): Promise<CustodySnapshot> {
     if (!force && this.snapshot && Date.now() - this.loadedAt < REFRESH_MS) return this.snapshot
+    if (this.loadInFlight) return this.loadInFlight
+    this.loadInFlight = this.refreshSnapshot()
+    try {
+      return await this.loadInFlight
+    } finally {
+      this.loadInFlight = null
+    }
+  }
+
+  private async refreshSnapshot(): Promise<CustodySnapshot> {
     const config = await readOpenFinanceConfig()
     const pluggy = config.pluggy
     if (!pluggy.enabled || !pluggy.clientId || !pluggy.clientSecret) {
@@ -151,6 +172,19 @@ export class PluggyBroker implements IBroker {
     contract.currency = currency
     contract.description = name
     return contract
+  }
+
+  private positionProfit(position: CustodySnapshot['positions'][number]): Decimal {
+    const value = new Decimal(position.value ?? 0)
+    if (position.profit != null) {
+      const reported = new Decimal(position.profit)
+      // Some Pluggy connectors emit a placeholder zero profit even while the
+      // current balance differs from the reported invested amount. Preserve a
+      // genuine zero, but otherwise derive the observable return.
+      if (!reported.isZero() || position.originalAmount == null || value.equals(position.originalAmount)) return reported
+    }
+    if (position.originalAmount != null) return value.minus(position.originalAmount)
+    return new Decimal(0)
   }
 }
 

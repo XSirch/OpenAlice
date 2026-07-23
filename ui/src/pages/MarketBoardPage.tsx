@@ -6,13 +6,14 @@ import { BoardMeta } from '../components/market/BoardMeta'
 import { PageHeader } from '../components/PageHeader'
 import { CenteredLoading } from '../components/StateViews'
 import { SeriesCard } from '../components/market/SeriesCard'
+import { PortfolioEquityQuotes } from '../components/market/PortfolioEquityQuotes'
 import { MeasuredChartFrame } from '../components/MeasuredChartFrame'
 import {
   referenceApi,
   type MoversBoard, type MoverRow, type ReferenceMeta, type CalendarBoard,
   type MacroBoard, type MacroSeriesCard, type TermStructureBoard, type TermCurve,
   type GlobalMacroBoard, type GlobalMacroCell, type ShippingBoard, type ShippingCurve,
-  type FedBoard,
+  type FedBoard, type BrazilMarketBoard,
 } from '../api/reference'
 import { useWorkspace } from '../tabs/store'
 import type { ViewSpec } from '../tabs/types'
@@ -32,6 +33,8 @@ export function MarketBoardPage({ spec }: PageProps) {
       return <CalendarBoardView />
     case 'macro':
       return <MacroBoardView />
+    case 'brazil':
+      return <BrazilBoardView />
     case 'term-structure':
       return <TermStructureBoardView />
     case 'global-macro':
@@ -41,6 +44,64 @@ export function MarketBoardPage({ spec }: PageProps) {
     case 'fed':
       return <FedBoardView />
   }
+}
+
+// ==================== Brazil ====================
+
+function BrazilBoardView() {
+  const { data, updatedAt, loading, error, retry } = useReferenceBoard<BrazilMarketBoard>(referenceApi.brazil, 5 * 60 * 1000)
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <PageHeader
+        title="Brasil"
+        description={
+          <>
+            Cenário brasileiro: índices B3, juros, inflação e câmbio. Dados de referência, não cotações executáveis.
+            {data && <BoardMeta meta={data.meta} />}
+          </>
+        }
+        live={{ lastUpdated: updatedAt }}
+      />
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-4 min-h-0">
+        {loading && !data && <CenteredLoading label="Carregando dados do Brasil…" />}
+        {error && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+            <span>{error}</span>
+            <button type="button" onClick={retry} className="shrink-0 font-medium hover:text-destructive/80">Tentar novamente</button>
+          </div>
+        )}
+        {data?.errors && Object.entries(data.errors).map(([source, message]) => (
+          <div key={source} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-[12px] text-warning">
+            {source}: {message}
+          </div>
+        ))}
+        {data && (
+          <>
+            <section>
+              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Mercado e câmbio</h2>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                {data.cards.filter((card) => ['IBOV', 'IFIX', 'USDBRL'].includes(card.id)).map((card) => (
+                  <SeriesCard key={card.id} card={card} label={card.label} emptyText="Sem dados disponíveis" />
+                ))}
+              </div>
+            </section>
+            <section>
+              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Juros e inflação</h2>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                {data.cards.filter((card) => ['SELIC', 'CDI', 'IPCA_12M'].includes(card.id)).map((card) => (
+                  <SeriesCard key={card.id} card={card} label={card.label} emptyText="Sem dados disponíveis" />
+                ))}
+              </div>
+            </section>
+            <PortfolioEquityQuotes />
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Selic, CDI, IPCA e dólar vêm do Banco Central do Brasil. Ibovespa e IFIX são fechamentos atrasados via Yahoo Finance; cada cartão mostra sua própria data-base.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ==================== Movers ====================

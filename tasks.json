@@ -1617,7 +1617,7 @@
             "Record gaps, crossings, stale input, and outages"
           ],
           "validation": [
-            "Focused tests and recorded evidence"
+            "Monitor telemetry store and service specs cover persisted idempotent gap facts and stale input; crossing/outage paths are covered by the deterministic service implementation"
           ]
         }
       ]
@@ -1803,7 +1803,7 @@
         {
           "id": "AINV-T1100",
           "title": "Add Alice Invest validation CI",
-          "status": "implemented",
+          "status": "done",
           "depends_on": [
             "AINV-T1007"
           ],
@@ -1815,13 +1815,13 @@
             "Run the defined Alice Invest matrix and publish results"
           ],
           "validation": [
-            "Workflow YAML parsed locally; GitHub Actions execution is still required"
+            "GitHub Actions Alice Invest Validation passed on PR #3 and merge commit 56a09d14"
           ]
         },
         {
           "id": "AINV-T1101",
           "title": "Fix full validation-suite failures",
-          "status": "validated",
+          "status": "done",
           "depends_on": [
             "AINV-T1100"
           ],
@@ -1835,13 +1835,13 @@
             "Resolve real failures without masking checks"
           ],
           "validation": [
-            "pnpm test passed: 354 files passed, 2 skipped; 3,195 tests passed, 22 skipped"
+            "pnpm test passed locally and in the successful Alice Invest Validation workflow on merge commit 56a09d14"
           ]
         },
         {
           "id": "AINV-T1102",
           "title": "Publish CI validation summary",
-          "status": "blocked",
+          "status": "done",
           "depends_on": [
             "AINV-T1101"
           ],
@@ -1853,10 +1853,9 @@
             "Green workflow on its corresponding commit and command/result summary"
           ],
           "validation": [
-            "Monitor telemetry store and service specs cover persisted idempotent gap facts and stale input; crossing/outage paths are covered by the deterministic service implementation"
+            "GitHub Actions summary published by successful Alice Invest Validation run 29610105448"
           ],
-          "blocked_reason": "Publication requires a green GitHub Actions workflow for the corresponding commit, which cannot be produced locally.",
-          "next_action": "Open the published branch as a master PR and wait for the Alice Invest validation workflow to complete green."
+          "workflow_url": "https://github.com/XSirch/OpenAlice/actions/runs/29610105448"
         },
         {
           "id": "AINV-T1103",
@@ -1897,13 +1896,12 @@
         {
           "id": "AINV-T1107",
           "title": "Obter CI verde no commit de correção",
-          "status": "blocked",
+          "status": "done",
           "depends_on": ["AINV-T1106"],
           "scope": [".github/workflows", "docs/alice-invest-validation-report.md"],
           "acceptance_criteria": ["CI correspondente ao commit de correção termina verde"],
-          "validation": ["PR #1 de dev para master foi mergeado; aguardando workflow de validação verde para o commit atual da master"],
-          "blocked_reason": "O PR de dev para master foi mergeado, mas ainda não existe workflow de validação configurado e executado com sucesso para o commit atual da master.",
-          "next_action": "Publish this branch, open the master PR, and obtain a green Alice Invest validation workflow for its merge commit."
+          "validation": ["Alice Invest Validation completed successfully for merge commit 56a09d14: https://github.com/XSirch/OpenAlice/actions/runs/29610105448"],
+          "workflow_url": "https://github.com/XSirch/OpenAlice/actions/runs/29610105448"
         }
       ]
     }
