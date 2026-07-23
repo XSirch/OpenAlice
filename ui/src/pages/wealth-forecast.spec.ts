@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { calculateWealthForecast, monthsUntil } from './wealth-forecast'
+import { calculateWealthForecast } from './wealth-forecast'
 
 describe('wealth forecast math', () => {
-  it('solves the month-end contribution needed to reach the target', () => {
-    const result = calculateWealthForecast({ currentWealth: 100_000, targetWealth: 200_000, months: 60, expectedAnnualRatePercent: 12 })
-    expect(result?.requiredMonthlyContribution).toBeCloseTo(295, -1)
-    expect(result?.projectedWithRequiredContributions).toBeCloseTo(200_000, 2)
+  it('projects month-end contributions separately from compound interest', () => {
+    const result = calculateWealthForecast({ currentWealth: 100_000, monthlyContribution: 1_000, months: 60, expectedAnnualRatePercent: 12 })
+    expect(result?.totalContributions).toBe(60_000)
+    expect(result?.totalInterest).toBeGreaterThan(0)
+    expect(result?.projectedWealth).toBeCloseTo(result!.points.at(-1)!.balance, 8)
   })
 
-  it('returns zero contribution when existing wealth reaches the target by itself', () => {
-    const result = calculateWealthForecast({ currentWealth: 100_000, targetWealth: 105_000, months: 12, expectedAnnualRatePercent: 12 })
-    expect(result?.requiredMonthlyContribution).toBe(0)
-  })
-
-  it('uses calendar months remaining, rejecting an expired target', () => {
-    expect(monthsUntil('2027-07-01', new Date('2026-07-23T12:00:00'))).toBe(12)
-    expect(monthsUntil('2026-07-01', new Date('2026-07-23T12:00:00'))).toBeNull()
+  it('keeps the series entirely principal when the expected rate is zero', () => {
+    const result = calculateWealthForecast({ currentWealth: 10_000, monthlyContribution: 500, months: 12, expectedAnnualRatePercent: 0 })
+    expect(result?.projectedWealth).toBe(16_000)
+    expect(result?.totalInterest).toBe(0)
   })
 })
