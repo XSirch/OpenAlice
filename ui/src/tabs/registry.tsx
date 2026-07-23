@@ -5,6 +5,7 @@ import type { ViewKind, ViewSpec } from './types'
 import { PortfolioPage } from '../pages/PortfolioPage'
 import { InvestmentReturnsPage } from '../pages/InvestmentReturnsPage'
 import { WealthForecastPage } from '../pages/WealthForecastPage'
+import { ModelPortfolioPage } from '../pages/ModelPortfolioPage'
 import { TradingAsGitPage } from '../pages/TradingAsGitPage'
 import { IssuePage } from '../pages/IssuePage'
 import { IssueSettingsPage } from '../pages/IssueSettingsPage'
@@ -139,6 +140,13 @@ const wealthForecastModule: ViewModule<'wealth-forecast'> = {
   title: () => 'Previsão de patrimônio',
   toUrl: () => '/beta/wealth-forecast',
   Component: () => <WealthForecastPage />,
+}
+
+const modelPortfolioModule: ViewModule<'model-portfolio'> = {
+  kind: 'model-portfolio',
+  title: () => 'Carteira-modelo',
+  toUrl: () => '/beta/model-portfolio',
+  Component: () => <ModelPortfolioPage />,
 }
 
 const tradingAsGitModule: ViewModule<'trading-as-git'> = {
@@ -554,6 +562,7 @@ const VIEWS = {
   portfolio: portfolioModule,
   'portfolio-returns': portfolioReturnsModule,
   'wealth-forecast': wealthForecastModule,
+  'model-portfolio': modelPortfolioModule,
   'trading-as-git': tradingAsGitModule,
   connectors: connectorsModule,
   'alice-invest': aliceInvestModule,

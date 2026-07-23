@@ -31,6 +31,7 @@ export type ViewSpec =
   | { kind: 'portfolio';      params: Record<string, never> }
   | { kind: 'portfolio-returns'; params: Record<string, never> }
   | { kind: 'wealth-forecast'; params: Record<string, never> }
+  | { kind: 'model-portfolio'; params: Record<string, never> }
   | { kind: 'trading-as-git'; params: Record<string, never> }
   | { kind: 'connectors';     params: Record<string, never> }
   | { kind: 'alice-invest';  params: Record<string, never> }
@@ -83,6 +84,7 @@ export type ActivitySection =
   | 'market'
   | 'portfolio'
   | 'wealth-forecast'
+  | 'model-portfolio'
   | 'issue'
   | 'automation'
   | 'news'
