@@ -15,10 +15,11 @@ const MAX_POINTS = 90
 interface SgsRow { data: string; valor: string }
 
 const BCB_SERIES = {
-  selic: { id: 432, label: 'Selic meta', unit: 'percent' as const, days: 180 },
-  cdi: { id: 12, label: 'CDI anualizado', unit: 'percent' as const, days: 90 },
-  ipca: { id: 433, label: 'IPCA acumulado 12 meses', unit: 'percent' as const, days: 30 },
-  usdBrl: { id: 1, label: 'Dólar comercial (venda)', unit: 'brl' as const, days: 90 },
+  selic: { id: 432, label: 'Selic meta', unit: 'percent' as const, lookbackDays: 180 },
+  cdi: { id: 12, label: 'CDI anualizado', unit: 'percent' as const, lookbackDays: 90 },
+  // 24 months lets the board derive a rolling 12-month inflation history.
+  ipca: { id: 433, label: 'IPCA acumulado 12 meses', unit: 'percent' as const, lookbackDays: 760 },
+  usdBrl: { id: 1, label: 'Dólar comercial (venda)', unit: 'brl' as const, lookbackDays: 90 },
 } as const
 
 function toIsoDate(value: string): string | null {
@@ -34,8 +35,22 @@ function toNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-async function sgsSeries(id: number, days: number): Promise<MacroPoint[]> {
-  const response = await fetch(`${BCB_SGS}.${id}/dados/ultimos/${days}?formato=json`)
+function bcbDate(date: Date): string {
+  return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`
+}
+
+async function sgsSeries(id: number, lookbackDays: number): Promise<MacroPoint[]> {
+  const end = new Date()
+  const start = new Date(end)
+  start.setUTCDate(start.getUTCDate() - lookbackDays)
+  // SGS limits `/ultimos/:n` to a small n. Its date-window endpoint supports
+  // the history needed for daily charts and the 12-month IPCA calculation.
+  const query = new URLSearchParams({
+    formato: 'json',
+    dataInicial: bcbDate(start),
+    dataFinal: bcbDate(end),
+  })
+  const response = await fetch(`${BCB_SGS}.${id}/dados?${query}`)
   if (!response.ok) throw new Error(`Banco Central returned HTTP ${response.status} for SGS ${id}`)
   const rows = await response.json() as SgsRow[]
   if (!Array.isArray(rows)) throw new Error(`Banco Central returned an invalid SGS ${id} payload`)
@@ -102,10 +117,10 @@ async function b3Indices(indexClient: IndexClientLike): Promise<MacroSeriesCard[
 
 export async function fetchBrazilMarketBoard(indexClient: IndexClientLike): Promise<BrazilMarketBoard> {
   const results = await Promise.allSettled([
-    sgsSeries(BCB_SERIES.selic.id, BCB_SERIES.selic.days),
-    sgsSeries(BCB_SERIES.cdi.id, BCB_SERIES.cdi.days),
-    sgsSeries(BCB_SERIES.ipca.id, BCB_SERIES.ipca.days),
-    sgsSeries(BCB_SERIES.usdBrl.id, BCB_SERIES.usdBrl.days),
+    sgsSeries(BCB_SERIES.selic.id, BCB_SERIES.selic.lookbackDays),
+    sgsSeries(BCB_SERIES.cdi.id, BCB_SERIES.cdi.lookbackDays),
+    sgsSeries(BCB_SERIES.ipca.id, BCB_SERIES.ipca.lookbackDays),
+    sgsSeries(BCB_SERIES.usdBrl.id, BCB_SERIES.usdBrl.lookbackDays),
     b3Indices(indexClient),
   ])
   const errors: Record<string, string> = {}
