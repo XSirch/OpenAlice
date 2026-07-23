@@ -4,6 +4,7 @@ import type { ViewKind, ViewSpec } from './types'
 
 import { PortfolioPage } from '../pages/PortfolioPage'
 import { InvestmentReturnsPage } from '../pages/InvestmentReturnsPage'
+import { WealthForecastPage } from '../pages/WealthForecastPage'
 import { TradingAsGitPage } from '../pages/TradingAsGitPage'
 import { IssuePage } from '../pages/IssuePage'
 import { IssueSettingsPage } from '../pages/IssueSettingsPage'
@@ -129,6 +130,17 @@ const portfolioReturnsModule: ViewModule<'portfolio-returns'> = {
       sidebar={<PortfolioSidebar />}
     >
       <InvestmentReturnsPage />
+    </PageSidebarShell>
+  ),
+}
+
+const portfolioForecastModule: ViewModule<'portfolio-forecast'> = {
+  kind: 'portfolio-forecast',
+  title: () => 'Previsão de patrimônio',
+  toUrl: () => '/portfolio/forecast',
+  Component: () => (
+    <PageSidebarShell storageKey="portfolio" titleKey="nav.item.portfolio" defaultWidth={220} sidebar={<PortfolioSidebar />}>
+      <WealthForecastPage />
     </PageSidebarShell>
   ),
 }
@@ -545,6 +557,7 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
 const VIEWS = {
   portfolio: portfolioModule,
   'portfolio-returns': portfolioReturnsModule,
+  'portfolio-forecast': portfolioForecastModule,
   'trading-as-git': tradingAsGitModule,
   connectors: connectorsModule,
   'alice-invest': aliceInvestModule,
