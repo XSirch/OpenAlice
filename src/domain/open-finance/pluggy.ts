@@ -17,6 +17,10 @@ export interface CustodyPosition {
   originalAmount?: number
   /** Accumulated return reported by the institution, including its fees/taxes when available. */
   profit?: number
+  /** Date of the earliest application transaction, when Pluggy provides it. */
+  acquiredAt?: string
+  /** Whether the invested amount was reported directly or reconstructed from transactions. */
+  costBasisSource?: 'reported' | 'transactions'
   grossAmount?: number
   unitValue?: number
   currency: string
@@ -41,6 +45,8 @@ interface PluggyInvestment {
   amount?: number
   amountOriginal?: number
   amountProfit?: number
+  issueDate?: string
+  transactions?: PluggyInvestmentTransaction[]
   value?: number
   currencyCode?: string
   institution?: { name?: string } | string
@@ -49,12 +55,22 @@ interface PluggyInvestment {
 
 interface PluggyListResponse { results?: PluggyInvestment[]; data?: PluggyInvestment[] }
 interface PluggyItem { connector?: { name?: string } }
+interface PluggyInvestmentTransaction {
+  amount?: number
+  netAmount?: number
+  tradeDate?: string
+  date?: string
+  type?: string
+}
+interface CostBasis { originalAmount?: number; acquiredAt?: string; source?: CustodyPosition['costBasisSource'] }
 
 // Pluggy can retain closed investment records with a zero quantity and a
 // display-only cent-level quote. They are not custody positions and clutter
 // the Portfolio table, so treat values that round to R$0.00 as zero.
 const ZERO_VALUE_EPSILON = 0.005
 const ZERO_QUANTITY_EPSILON = 1e-8
+const TRANSACTION_CACHE_MS = 30 * 60 * 1000
+const investmentTransactionCache = new Map<string, { expiresAt: number; transactions: PluggyInvestmentTransaction[] }>()
 
 async function pluggyFetch(path: string, init: RequestInit): Promise<Response> {
   const response = await fetch(`${PLUGGY_API_URL}${path}`, { ...init, signal: AbortSignal.timeout(15_000) })
@@ -90,10 +106,25 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
     const body = await investmentsResponse.json() as PluggyListResponse
     return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: item.connector?.name }))
   }))).flat()
+  const resolvedRecords = await mapWithConcurrency(records, 5, async ({ investment, institution }) => {
+    const reportedOriginal = finiteNumber(investment.amountOriginal)
+    const embeddedBasis = deriveCostBasis(investment.transactions ?? [])
+    // Keep the provider's original amount authoritative, but still obtain the
+    // first application date from the transaction history when it is absent
+    // from the (now-deprecated) embedded transaction list.
+    const transactions = embeddedBasis.acquiredAt || !investment.id
+      ? (investment.transactions ?? [])
+      : await fetchInvestmentTransactions(investment.id, headers)
+    const transactionBasis = embeddedBasis.acquiredAt ? embeddedBasis : deriveCostBasis(transactions)
+    const costBasis: CostBasis = reportedOriginal != null
+      ? { originalAmount: reportedOriginal, acquiredAt: transactionBasis.acquiredAt, source: 'reported' }
+      : transactionBasis
+    return { investment, institution, costBasis }
+  })
   return {
     provider: 'pluggy',
     fetchedAt: new Date().toISOString(),
-    positions: records.map(({ investment, institution }, index) => ({
+    positions: resolvedRecords.map(({ investment, institution, costBasis }, index) => ({
       id: investment.id ?? `${investment.code ?? investment.name ?? 'investment'}-${index}`,
       name: investment.name ?? investment.code ?? 'Unnamed investment',
       code: investment.code,
@@ -102,8 +133,10 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
       // Pluggy's `value` is the unit quota/asset price. The position total is
       // `balance` (net) and, when that is unavailable, `amount` (gross).
       value: finiteNumber(investment.balance ?? investment.amount),
-      originalAmount: finiteNumber(investment.amountOriginal),
+      originalAmount: costBasis.originalAmount,
       profit: finiteNumber(investment.amountProfit),
+      acquiredAt: costBasis.acquiredAt,
+      costBasisSource: costBasis.source,
       grossAmount: finiteNumber(investment.amount),
       unitValue: finiteNumber(investment.value),
       currency: investment.currencyCode ?? 'BRL',
@@ -114,6 +147,60 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
       Math.abs(position.quantity ?? 0) > ZERO_QUANTITY_EPSILON,
     ),
   }
+}
+
+async function fetchInvestmentTransactions(id: string, headers: Record<string, string>): Promise<PluggyInvestmentTransaction[]> {
+  const cached = investmentTransactionCache.get(id)
+  if (cached && cached.expiresAt > Date.now()) return cached.transactions
+  try {
+    const response = await pluggyFetch(`/investments/${encodeURIComponent(id)}/transactions?pageSize=500`, { headers })
+    const body = await response.json() as PluggyListResponse
+    const transactions = (body.results ?? body.data ?? []) as PluggyInvestmentTransaction[]
+    investmentTransactionCache.set(id, { transactions, expiresAt: Date.now() + TRANSACTION_CACHE_MS })
+    return transactions
+  } catch {
+    // Transaction history is connector-dependent. A missing or unsupported
+    // history must not make a read-only custody refresh fail.
+    investmentTransactionCache.set(id, { transactions: [], expiresAt: Date.now() + TRANSACTION_CACHE_MS })
+    return []
+  }
+}
+
+function deriveCostBasis(transactions: PluggyInvestmentTransaction[]): CostBasis {
+  let purchases = 0
+  let withdrawals = 0
+  let acquiredAt: string | undefined
+  for (const transaction of transactions) {
+    const type = transaction.type?.toUpperCase() ?? ''
+    const isPurchase = type === 'BUY' || type === 'APPLICATION' || type === 'DEPOSIT' || type === 'CONTRIBUTION'
+    const isWithdrawal = type === 'SELL' || type === 'WITHDRAWAL' || type === 'REDEMPTION'
+    if (isPurchase) {
+      const date = transaction.tradeDate ?? transaction.date
+      if (date && (!acquiredAt || date < acquiredAt)) acquiredAt = date
+    }
+    const amount = finiteNumber(transaction.netAmount ?? transaction.amount)
+    if (amount == null) continue
+    if (isPurchase) {
+      purchases += amount
+    } else if (isWithdrawal) {
+      withdrawals += amount
+    }
+  }
+  const originalAmount = purchases - withdrawals
+  return originalAmount > 0 ? { originalAmount, acquiredAt, source: 'transactions' } : {}
+}
+
+async function mapWithConcurrency<T, R>(values: T[], limit: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = []
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < values.length) {
+      const index = cursor++
+      results[index] = await mapper(values[index]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker))
+  return results
 }
 
 function finiteNumber(value: unknown): number | undefined {

@@ -145,6 +145,10 @@ export interface Position {
    * Undefined defaults to `'broker'` (current behavior, back-compat).
    */
   avgCostSource?: 'broker' | 'wallet'
+  /** Open Finance provenance for a cost basis reconstructed from custody data. */
+  costBasisSource?: 'reported' | 'transactions'
+  /** Earliest known application date supplied by the custody provider. */
+  acquiredAt?: string
   /**
    * Venue risk metadata for leveraged derivatives (see {@link PositionRisk}).
    * Undefined for spot and for brokers without per-position leverage — so
