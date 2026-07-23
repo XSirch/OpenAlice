@@ -46,7 +46,8 @@ export function UrlAdopter() {
         <Route path="/chat/:channelId" element={<Navigate to="/inbox" replace />} />
         <Route path="/portfolio" element={<AdoptStatic spec={{ kind: 'portfolio', params: {} }} />} />
         <Route path="/portfolio/returns" element={<AdoptStatic spec={{ kind: 'portfolio-returns', params: {} }} />} />
-        <Route path="/portfolio/forecast" element={<AdoptStatic spec={{ kind: 'portfolio-forecast', params: {} }} />} />
+        <Route path="/portfolio/forecast" element={<Navigate to="/beta/wealth-forecast" replace />} />
+        <Route path="/beta/wealth-forecast" element={<AdoptStatic spec={{ kind: 'wealth-forecast', params: {} }} />} />
         <Route path="/issues" element={<AdoptStatic spec={{ kind: 'issue', params: {} }} />} />
         <Route path="/issues/:wsId/:id" element={<AdoptIssueDetail />} />
         <Route path="/automation" element={<Navigate to="/automation/runs" replace />} />
@@ -323,8 +324,8 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'alice-invest':       return 'settings'
     case 'portfolio':
     case 'portfolio-returns':
-    case 'portfolio-forecast':
     case 'uta-detail':         return 'portfolio'
+    case 'wealth-forecast':    return 'wealth-forecast'
     case 'issue':
     case 'issue-detail':       return 'issue'
     case 'automation':         return 'automation'

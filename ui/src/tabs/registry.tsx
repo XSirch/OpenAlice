@@ -134,15 +134,11 @@ const portfolioReturnsModule: ViewModule<'portfolio-returns'> = {
   ),
 }
 
-const portfolioForecastModule: ViewModule<'portfolio-forecast'> = {
-  kind: 'portfolio-forecast',
+const wealthForecastModule: ViewModule<'wealth-forecast'> = {
+  kind: 'wealth-forecast',
   title: () => 'Previsão de patrimônio',
-  toUrl: () => '/portfolio/forecast',
-  Component: () => (
-    <PageSidebarShell storageKey="portfolio" titleKey="nav.item.portfolio" defaultWidth={220} sidebar={<PortfolioSidebar />}>
-      <WealthForecastPage />
-    </PageSidebarShell>
-  ),
+  toUrl: () => '/beta/wealth-forecast',
+  Component: () => <WealthForecastPage />,
 }
 
 const tradingAsGitModule: ViewModule<'trading-as-git'> = {
@@ -557,7 +553,7 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
 const VIEWS = {
   portfolio: portfolioModule,
   'portfolio-returns': portfolioReturnsModule,
-  'portfolio-forecast': portfolioForecastModule,
+  'wealth-forecast': wealthForecastModule,
   'trading-as-git': tradingAsGitModule,
   connectors: connectorsModule,
   'alice-invest': aliceInvestModule,

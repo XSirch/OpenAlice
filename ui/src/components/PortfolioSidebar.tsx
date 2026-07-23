@@ -29,7 +29,6 @@ export function PortfolioSidebar() {
 
   const overviewActive = focused?.kind === 'portfolio'
   const returnsActive = focused?.kind === 'portfolio-returns'
-  const forecastActive = focused?.kind === 'portfolio-forecast'
   const focusedUtaId =
     focused?.kind === 'uta-detail' ? focused.params.id : null
   const lite = !tradingModeLoading && tradingMode === 'lite'
@@ -49,11 +48,6 @@ export function PortfolioSidebar() {
           label="Investment returns"
           active={returnsActive}
           onClick={() => openOrFocus({ kind: 'portfolio-returns', params: {} })}
-        />
-        <SidebarRow
-          label="Previsão de patrimônio"
-          active={forecastActive}
-          onClick={() => openOrFocus({ kind: 'portfolio-forecast', params: {} })}
         />
 
         <SidebarSectionHeader>

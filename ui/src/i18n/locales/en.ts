@@ -23,6 +23,7 @@ export const en = {
       news: 'News',
       tradingAsGit: 'Trading as Git',
       portfolio: 'Portfolio',
+      wealthForecast: 'Wealth forecast',
       connectors: 'Connectors',
       issue: 'Issues',
       automation: 'Automation',
