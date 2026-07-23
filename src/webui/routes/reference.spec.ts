@@ -25,6 +25,10 @@ function mkCtx(overrides?: Partial<ReferenceDataService>): EngineContext {
       cards: [{ id: 'DFF', label: 'Fed Funds Rate', unit: 'percent' as const, points: [{ date: '2026-06-09', value: 5.25 }], latest: 5.25, latestDate: '2026-06-09', change: 0.01 }],
       meta: { provider: 'federal_reserve', asOf: '2026-06-10T00:00:00.000Z' },
     }),
+    brazil: async () => ({
+      cards: [{ id: 'SELIC', label: 'Selic meta', unit: 'percent' as const, points: [{ date: '2026-06-09', value: 14.25 }], latest: 14.25, latestDate: '2026-06-09', change: 0 }],
+      meta: { provider: 'Banco Central do Brasil + Yahoo Finance', asOf: '2026-06-10T00:00:00.000Z' },
+    }),
     termStructure: async () => ({
       curves: [{ symbol: 'BTC', spot: 100000, points: [{ expiration: '2026-09-25', price: 102500, daysToExpiry: 107, annualizedBasis: 8.5 }] }],
       meta: { provider: 'deribit', asOf: '2026-06-10T00:00:00.000Z' },
@@ -86,6 +90,13 @@ describe('reference routes', () => {
     const body = await res.json()
     expect(body.cards[0].id).toBe('DFF')
     expect(body.meta.provider).toBe('federal_reserve')
+  })
+
+  it('GET /brazil returns the official-reference market context', async () => {
+    const res = await createReferenceRoutes(mkCtx()).request('/brazil')
+    const body = await res.json()
+    expect(body.cards[0].id).toBe('SELIC')
+    expect(body.meta.provider).toMatch(/Banco Central/)
   })
 
   it('GET /term-structure returns the curves', async () => {
