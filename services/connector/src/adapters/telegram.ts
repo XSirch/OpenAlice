@@ -50,19 +50,37 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       })
     }
     this.registerCommands(context)
-    await bot.api.setMyCommands(TELEGRAM_CONNECTOR_DEFINITION.commands.map(({ name, description }) => ({
-      command: name,
-      description,
-    })))
-    await bot.init()
-    if (this.ownerUserId && this.chatId) this.tracker.healthy(this.ownerUserId)
-    else this.tracker.awaitingLink()
-    // Inbound envelopes are journaled/deduplicated before dispatch, so pending
-    // updates are safe to replay after a Connector restart.
-    void bot.start().catch((error) => {
+    // Do not hold the Connector HTTP server hostage to Telegram's network
+    // round trips. Guardian needs its loopback health endpoint immediately so
+    // the UI can distinguish a slow/unreachable Telegram API from a missing
+    // Connector process and surface the adapter error to the operator.
+    void this.initializeBot(bot)
+  }
+
+  private async initializeBot(bot: Bot): Promise<void> {
+    try {
+      await bot.api.setMyCommands(TELEGRAM_CONNECTOR_DEFINITION.commands.map(({ name, description }) => ({
+        command: name,
+        description,
+      })))
+      await bot.init()
+      // A stop/restart can happen while Telegram initialization is in flight.
+      // Never resume polling for an adapter that Guardian has already stopped.
+      if (this.bot !== bot) return
+      if (this.ownerUserId && this.chatId) this.tracker.healthy(this.ownerUserId)
+      else this.tracker.awaitingLink()
+      // Inbound envelopes are journaled/deduplicated before dispatch, so pending
+      // updates are safe to replay after a Connector restart.
+      void bot.start().catch((error) => {
+        if (this.bot !== bot) return
+        this.tracker.degraded(error)
+        console.warn('[connector] Telegram polling stopped:', error instanceof Error ? error.message : error)
+      })
+    } catch (error) {
+      if (this.bot !== bot) return
       this.tracker.degraded(error)
-      console.warn('[connector] Telegram polling stopped:', error instanceof Error ? error.message : error)
-    })
+      console.warn('[connector] Telegram initialization failed:', error instanceof Error ? error.message : error)
+    }
   }
 
   async stop(): Promise<void> {
