@@ -28,8 +28,8 @@
 
 import { spawn } from 'node:child_process'
 import { createDecipheriv, randomUUID } from 'node:crypto'
-import { mkdir, readFile, watch } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { mkdir, readFile, stat, watch } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import {
   acquireGuardianRuntime,
@@ -490,6 +490,19 @@ process.on('SIGHUP', () => shutdown())
 async function startFlagWatcher() {
   await mkdir(dirname(FLAG_PATH), { recursive: true })
   let pending
+  let checking = false
+  const fingerprint = async (path) => {
+    try {
+      const info = await stat(path)
+      return `${info.mtimeMs}:${info.size}`
+    } catch {
+      return null
+    }
+  }
+  const lastFingerprint = {
+    uta: await fingerprint(FLAG_PATH),
+    connector: await fingerprint(CONNECTOR_FLAG_PATH),
+  }
   const fire = (kind) => {
     if (pending) clearTimeout(pending)
     pending = setTimeout(() => {
@@ -500,19 +513,38 @@ async function startFlagWatcher() {
       })
     }, 100)
   }
+  const checkForChange = async (kind) => {
+    if (checking) return
+    checking = true
+    try {
+      const path = kind === 'connector' ? CONNECTOR_FLAG_PATH : FLAG_PATH
+      const next = await fingerprint(path)
+      if (next !== lastFingerprint[kind]) {
+        lastFingerprint[kind] = next
+        fire(kind)
+      }
+    } finally {
+      checking = false
+    }
+  }
   ;(async () => {
     try {
       const watcher = watch(dirname(FLAG_PATH))
-      const flagName = FLAG_PATH.slice(FLAG_PATH.lastIndexOf('/') + 1)
-      const connectorFlagName = CONNECTOR_FLAG_PATH.slice(CONNECTOR_FLAG_PATH.lastIndexOf('/') + 1)
+      const flagName = basename(FLAG_PATH)
+      const connectorFlagName = basename(CONNECTOR_FLAG_PATH)
       for await (const evt of watcher) {
-        if (evt.filename === flagName) fire('uta')
-        if (evt.filename === connectorFlagName) fire('connector')
+        if (evt.filename === flagName) await checkForChange('uta')
+        if (evt.filename === connectorFlagName) await checkForChange('connector')
       }
     } catch (err) {
       console.error('[guardian/prod] flag watcher errored:', err)
     }
   })().catch(() => { /* swallow — already logged */ })
+  const poll = setInterval(() => {
+    void checkForChange('uta')
+    void checkForChange('connector')
+  }, 1_000)
+  poll.unref()
 }
 
 async function main() {
