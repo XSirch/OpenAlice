@@ -17,6 +17,8 @@ import {
   formatPlainInboxNotification,
 } from './shared.js'
 
+const TELEGRAM_INITIALIZATION_TIMEOUT_MS = 15_000
+
 export class TelegramConnectorAdapter implements ConnectorAdapter {
   readonly id = 'telegram'
   private readonly tracker = new AdapterHealthTracker(this.id)
@@ -59,11 +61,11 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
 
   private async initializeBot(bot: Bot): Promise<void> {
     try {
-      await bot.api.setMyCommands(TELEGRAM_CONNECTOR_DEFINITION.commands.map(({ name, description }) => ({
+      await initializationDeadline(bot.api.setMyCommands(TELEGRAM_CONNECTOR_DEFINITION.commands.map(({ name, description }) => ({
         command: name,
         description,
-      })))
-      await bot.init()
+      }))))
+      await initializationDeadline(bot.init())
       // A stop/restart can happen while Telegram initialization is in flight.
       // Never resume polling for an adapter that Guardian has already stopped.
       if (this.bot !== bot) return
@@ -78,6 +80,7 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       })
     } catch (error) {
       if (this.bot !== bot) return
+      this.bot = undefined
       this.tracker.degraded(error)
       console.warn('[connector] Telegram initialization failed:', error instanceof Error ? error.message : error)
     }
@@ -160,4 +163,20 @@ function requiredString(config: ConnectorAdapterConfig, key: string): string {
 function optionalString(config: ConnectorAdapterConfig, key: string): string | undefined {
   const value = config.settings[key]
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+async function initializationDeadline<T>(operation: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Telegram initialization timed out after ${TELEGRAM_INITIALIZATION_TIMEOUT_MS / 1_000}s`))
+        }, TELEGRAM_INITIALIZATION_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
