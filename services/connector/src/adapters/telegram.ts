@@ -31,7 +31,6 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
     this.ownerUserId = optionalString(config, 'ownerUserId')
     this.chatId = optionalString(config, 'chatId')
     const bot = new Bot(token)
-    bot.api.config.use(autoRetry())
     this.bot = bot
 
     for (const command of TELEGRAM_CONNECTOR_DEFINITION.commands) {
@@ -68,6 +67,10 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       // A stop/restart can happen while Telegram initialization is in flight.
       // Never resume polling for an adapter that Guardian has already stopped.
       if (this.bot !== bot) return
+      // Do not use retry middleware for getMe above: authentication and rate
+      // failures must reach the operator immediately. Delivery and polling
+      // may retry transient Telegram failures after identity is verified.
+      bot.api.config.use(autoRetry())
       if (this.ownerUserId && this.chatId) this.tracker.healthy(this.ownerUserId)
       else this.tracker.awaitingLink()
       void this.syncCommands(bot)
@@ -82,7 +85,7 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       if (this.bot !== bot) return
       this.bot = undefined
       this.tracker.degraded(error)
-      console.warn('[connector] Telegram initialization failed:', error instanceof Error ? error.message : error)
+      console.warn('[connector] Telegram authentication failed:', error instanceof Error ? error.message : error)
     }
   }
 
