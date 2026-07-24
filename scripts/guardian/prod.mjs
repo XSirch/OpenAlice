@@ -511,7 +511,10 @@ async function startFlagWatcher() {
       action.catch((err) => {
         console.error(`[guardian/prod] restart ${kind} threw:`, err)
       })
-    }, 100)
+    // Docker volume notifications can arrive a few seconds apart for one
+    // atomic UI save. Give Connector changes a wider debounce so the bot has
+    // time to establish its long-poll session instead of being SIGTERM'd.
+    }, kind === 'connector' ? 2_000 : 100)
   }
   const checkForChange = async (kind) => {
     if (checking) return
