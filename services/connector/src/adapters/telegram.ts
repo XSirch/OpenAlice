@@ -61,16 +61,16 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
 
   private async initializeBot(bot: Bot): Promise<void> {
     try {
-      await initializationDeadline(bot.api.setMyCommands(TELEGRAM_CONNECTOR_DEFINITION.commands.map(({ name, description }) => ({
-        command: name,
-        description,
-      }))))
+      // `init()` performs the authenticated getMe request required before
+      // polling. Command-menu registration is cosmetic: a Telegram rate
+      // limit there must not prevent an operator from sending `/link`.
       await initializationDeadline(bot.init())
       // A stop/restart can happen while Telegram initialization is in flight.
       // Never resume polling for an adapter that Guardian has already stopped.
       if (this.bot !== bot) return
       if (this.ownerUserId && this.chatId) this.tracker.healthy(this.ownerUserId)
       else this.tracker.awaitingLink()
+      void this.syncCommands(bot)
       // Inbound envelopes are journaled/deduplicated before dispatch, so pending
       // updates are safe to replay after a Connector restart.
       void bot.start().catch((error) => {
@@ -83,6 +83,20 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       this.bot = undefined
       this.tracker.degraded(error)
       console.warn('[connector] Telegram initialization failed:', error instanceof Error ? error.message : error)
+    }
+  }
+
+  private async syncCommands(bot: Bot): Promise<void> {
+    try {
+      await initializationDeadline(bot.api.setMyCommands(TELEGRAM_CONNECTOR_DEFINITION.commands.map(({ name, description }) => ({
+        command: name,
+        description,
+      }))))
+    } catch (error) {
+      // Slash commands remain available to Telegram even when their suggested
+      // menu cannot be refreshed. Do not downgrade a live delivery adapter.
+      if (this.bot !== bot) return
+      console.warn('[connector] Telegram command registration deferred:', error instanceof Error ? error.message : error)
     }
   }
 
