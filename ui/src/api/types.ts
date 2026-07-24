@@ -537,7 +537,7 @@ export interface BrokerPreset {
   defaultName: string
   badge: string
   badgeColor: string
-  engine: 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'mock'
+  engine: 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'pluggy' | 'mock'
   guardCategory: 'crypto' | 'securities'
   modes?: ModeOption[]
   subtitleFields: SubtitleField[]
@@ -545,9 +545,10 @@ export interface BrokerPreset {
 }
 
 export type BrokerEngine = BrokerPreset['engine']
+export type InstallableBrokerEngine = Exclude<BrokerEngine, 'pluggy' | 'mock'>
 
 export interface BrokerPackStatus {
-  engine: BrokerEngine
+  engine: InstallableBrokerEngine | 'mock'
   installed: boolean
   source: 'builtin' | 'workspace' | 'downloaded' | 'missing' | 'broken'
   version?: string
