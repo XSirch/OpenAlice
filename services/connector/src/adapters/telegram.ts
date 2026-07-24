@@ -30,7 +30,10 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
     const token = requiredString(config, 'botToken')
     this.ownerUserId = optionalString(config, 'ownerUserId')
     this.chatId = optionalString(config, 'chatId')
-    const bot = new Bot(token)
+    // grammY defaults to node-fetch in Node. The production image can reach
+    // Telegram through Node's native fetch while node-fetch stalls, so use the
+    // runtime client that also powers the verified health diagnostics.
+    const bot = new Bot(token, { client: { fetch: globalThis.fetch as never } })
     this.bot = bot
 
     for (const command of TELEGRAM_CONNECTOR_DEFINITION.commands) {
