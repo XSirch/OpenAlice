@@ -10,7 +10,7 @@ import { useSchemaForm } from '../../hooks/useSchemaForm'
 import { Dialog } from './Dialog'
 import { SchemaFormFields } from './SchemaFormFields'
 
-type WizardStep = 'pick' | 'install' | 'config' | 'test'
+type WizardStep = 'pick' | 'install' | 'config' | 'open-finance' | 'test'
 
 interface BrokerConflict {
   existing: { id: string; label: string; presetId: string }
@@ -119,12 +119,18 @@ export function CreateUTADialog({
     setReadOnly(initialReadOnly)
     setAsVendor(initialAsVendor)
     setError('')
+    // Pluggy is included in UTA Core. Its credentials and linked items are
+    // managed from Portfolio's Open Finance settings, not as a Broker Pack.
+    if (selected?.engine === 'pluggy') {
+      setStep('open-finance')
+      return
+    }
     const status = selected ? packStatuses?.find((row) => row.engine === selected.engine) : undefined
     setStep(status?.installed ? 'config' : 'install')
   }
 
   const handleInstallPack = async () => {
-    if (!preset || preset.engine === 'mock') return
+    if (!preset || preset.engine === 'mock' || preset.engine === 'pluggy') return
     setInstallingPack(true)
     setError('')
     try {
@@ -187,6 +193,7 @@ export function CreateUTADialog({
   }
 
   const headerLabel =
+    step === 'open-finance' ? `Connect Broker · Configure ${preset?.label ?? ''}` :
     step === 'pick'   ? 'Connect Broker · Pick Platform' :
     step === 'install' ? `Connect Broker · Install ${preset?.label ?? ''}` :
     step === 'config' ? `Connect Broker · Configure ${preset?.label ?? ''}` :
@@ -287,6 +294,8 @@ export function CreateUTADialog({
           />
         )}
 
+        {step === 'open-finance' && preset && <OpenFinanceSetupPanel preset={preset} />}
+
         {step === 'test' && testResult && !conflict && (
           <TestResultPanel result={testResult} utaId={finalName} />
         )}
@@ -302,6 +311,7 @@ export function CreateUTADialog({
           {step === 'install' && <button onClick={() => setStep('pick')} className="btn-secondary">← Back</button>}
           {step === 'config' && <button onClick={() => setStep('pick')} className="btn-secondary">← Back</button>}
           {step === 'test' && <button onClick={() => setStep('config')} className="btn-secondary">← Back</button>}
+          {step === 'open-finance' && <button onClick={() => setStep('pick')} className="btn-secondary">Back</button>}
           {escapeButton}
         </div>
         <div className="flex shrink-0 items-center justify-end">
@@ -315,6 +325,7 @@ export function CreateUTADialog({
               </button>
             )
           )}
+          {step === 'open-finance' && <a href="/portfolio" onClick={onClose} className="btn-primary">Open Portfolio settings</a>}
           {step === 'config' && (
             <button onClick={handleTest} disabled={testing} className="btn-primary">
               {testing ? 'Testing...' : 'Test Connection →'}
@@ -359,6 +370,29 @@ function StepDots({ current }: { current: WizardStep }) {
           }`}
         />
       ))}
+    </div>
+  )
+}
+
+function OpenFinanceSetupPanel({ preset }: { preset: BrokerPreset }) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-secondary/40 px-4 py-4">
+        <div className="flex items-start gap-3">
+          <span className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-md text-[11px] font-semibold ${preset.badgeColor} ${preset.badgeColor.replace('text-', 'bg-')}/10`}>
+            {preset.badge}
+          </span>
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium text-foreground">{preset.label} is built in</div>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+              MeuPluggy is a read-only Open Finance custody source, not a downloadable broker integration.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="rounded-md border border-border px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
+        Open Portfolio settings to save your Pluggy client ID, client secret, and linked item IDs. Once enabled, MeuPluggy appears automatically as a read-only account in Portfolio.
+      </div>
     </div>
   )
 }

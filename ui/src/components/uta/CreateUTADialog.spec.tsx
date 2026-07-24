@@ -40,6 +40,20 @@ const brokerPreset: BrokerPreset = {
   },
 }
 
+const pluggyPreset: BrokerPreset = {
+  id: 'pluggy-readonly',
+  label: 'MeuPluggy (read-only)',
+  description: 'Open Finance investment custody.',
+  category: 'recommended',
+  defaultName: 'MeuPluggy',
+  badge: 'PG',
+  badgeColor: 'text-accent',
+  engine: 'pluggy',
+  guardCategory: 'securities',
+  subtitleFields: [],
+  schema: { type: 'object', properties: {} },
+}
+
 function setup(props: Partial<Parameters<typeof CreateUTADialog>[0]> = {}) {
   const onClose = vi.fn()
   const onSave = vi.fn()
@@ -117,6 +131,18 @@ describe('CreateUTADialog', () => {
 
     expect(screen.getByText('API key')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Install OKX support/i })).toBeNull()
+    expect(installBrokerPack).not.toHaveBeenCalled()
+  })
+
+  it('routes Pluggy to Portfolio Open Finance settings instead of trying to install a pack', async () => {
+    setup({ presets: [pluggyPreset] })
+
+    await waitFor(() => expect(getBrokerPacks).toHaveBeenCalled())
+    fireEvent.click(screen.getByText('MeuPluggy (read-only)'))
+
+    expect(screen.getByText('MeuPluggy (read-only) is built in')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Portfolio settings' }).getAttribute('href')).toBe('/portfolio')
+    expect(screen.queryByRole('button', { name: /Install MeuPluggy support/i })).toBeNull()
     expect(installBrokerPack).not.toHaveBeenCalled()
   })
 
