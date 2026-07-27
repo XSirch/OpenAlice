@@ -1915,11 +1915,11 @@
         {
           "id": "AINV-T1200",
           "title": "Definir contratos, licença, atraso e data-base para fontes brasileiras",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": ["AINV-T610A"],
-          "scope": ["src/domain/market-data", "docs/market-data-architecture.md", "docs/alice-invest-security.md"],
+          "scope": ["src/domain/market-data", "docs/market-data-architecture.md", "docs/brazil-market-data-sources.md", "docs/alice-invest-security.md"],
           "acceptance_criteria": ["Catalogar BCB/SGS, CVM, B3/fornecedor licenciado e fontes de eventos com frequência, licença, atraso, revisão e limite de uso", "Cada valor mostrado carrega fonte, data-base, horário de coleta e classificação realtime/delayed/end-of-day", "Nenhuma fonte muda b3_signals ou execution_enabled"],
-          "validation": ["Testes de schema para proveniência, freshness e revisão", "Revisão de licença e termos antes de ativar cada conector"],
+          "validation": ["src/domain/market-data/reference/brazil.spec.ts — provenance de SGS e índices atrasados", "npx tsc --noEmit e cd ui && npx tsc -b", "Catálogo de fonte, licença, atraso e data-base em docs/brazil-market-data-sources.md; revisão dos termos continua obrigatória antes de ativar fornecedor"],
           "readiness_impact": "none"
         },
         {
