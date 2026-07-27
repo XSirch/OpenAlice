@@ -47,6 +47,7 @@ import { migration as migration_0032_openrouter_analytics_config } from './0032_
 import { migration as migration_0033_portfolio_presentation_cache } from './0033_portfolio_presentation_cache/index.js'
 import { migration as migration_0034_brazil_macro_snapshots } from './0034_brazil_macro_snapshots/index.js'
 import { migration as migration_0035_fixed_income_custody } from './0035_fixed_income_custody/index.js'
+import { migration as migration_0036_fgc_coverage_policy } from './0036_fgc_coverage_policy/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -77,4 +78,5 @@ export const REGISTRY: Migration[] = [
   migration_0033_portfolio_presentation_cache,
   migration_0034_brazil_macro_snapshots,
   migration_0035_fixed_income_custody,
+  migration_0036_fgc_coverage_policy,
 ]

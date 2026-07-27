@@ -1969,7 +1969,7 @@
         {
           "id": "AINV-T1211",
           "title": "Calcular exposição e concentração FGC por conglomerado",
-          "status": "pending",
+          "status": "validated",
           "depends_on": ["AINV-T1210"],
           "scope": ["src/domain/alice-invest", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Somar somente instrumentos elegíveis por CPF/CNPJ e conglomerado", "Exibir cobertura estimada, parcela descoberta e aviso de que é apoio à decisão, não confirmação do FGC", "Aplicar os limites configuráveis vigentes e apresentar a referência normativa/data de vigência"],

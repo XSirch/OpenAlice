@@ -35,3 +35,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0033_portfolio_presentation_cache` | 0.84.0-beta | 2026-07-27 | cache/portfolio-presentation.json | Reserve durable storage for the cached Portfolio presentation. |
 | `0034_brazil_macro_snapshots` | 0.84.0-beta | 2026-07-27 | cache/brazil-macro-snapshots.json | Reserve durable provenance-aware Brazil macro snapshot history. |
 | `0035_fixed_income_custody` | 0.84.0-beta | 2026-07-27 | fixed-income-custody.json | Seed explicit fixed-income custody classifications without inferring issuer or FGC data. |
+| `0036_fgc_coverage_policy` | 0.84.0-beta | 2026-07-27 | fgc-coverage-policy.json | Seed dated, user-configurable FGC coverage policy defaults. |
