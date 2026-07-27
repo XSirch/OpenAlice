@@ -2,6 +2,7 @@ import type {
   ConnectorAdapterConfig,
   ConnectorAdapterHealth,
   ConnectorDefinition,
+  ConnectorInboundTextMessage,
   InboxNotification,
 } from '@traderalice/connector-protocol'
 import { randomUUID } from 'node:crypto'
@@ -27,6 +28,7 @@ export interface ConnectorAdapterContext {
   updateSettings(patch: Record<string, string | number | boolean>): Promise<void>
   getServiceStatus(): string
   sendTest(connectorId: string): Promise<string>
+  acceptInbound(message: ConnectorInboundTextMessage): Promise<void>
   rotateConversation(connectorId: string, ownerId: string, conversationId: string): Promise<void>
 }
 

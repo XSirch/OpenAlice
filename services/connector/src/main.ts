@@ -18,7 +18,8 @@ import { discordConnectorRegistration } from './adapters/discord.js'
 import { telegramConnectorRegistration } from './adapters/telegram.js'
 import { ConnectorIOJournal } from './core/io-journal.js'
 import { ConnectorInboundJournal } from './core/inbound-journal.js'
-import { rotateAliceConversation } from './core/alice-inbound-client.js'
+import { AliceInboundClient, rotateAliceConversation } from './core/alice-inbound-client.js'
+import { ConnectorInboundDispatcher } from './core/inbound-dispatcher.js'
 import { dataPath } from '@/core/paths.js'
 
 const CONNECTOR_PORT = Number(process.env['OPENALICE_CONNECTOR_PORT'] ?? 47334)
@@ -40,6 +41,11 @@ async function main(): Promise<void> {
   // Its constructor is side-effect free; the first inbound message creates the
   // private state file atomically.
   const inboundJournal = new ConnectorInboundJournal(dataPath('config', 'connector-inbound-journal.json'))
+  const aliceUrl = process.env['OPENALICE_URL'] ?? 'http://127.0.0.1:47331'
+  const inboundDispatcher = new ConnectorInboundDispatcher({
+    journal: inboundJournal,
+    target: new AliceInboundClient(aliceUrl),
+  })
 
   const manager = new DeliveryManager({
     registry,
@@ -47,8 +53,13 @@ async function main(): Promise<void> {
     startedAt,
     recorder: journal,
     updateAdapterSettings: (id, patch) => configStore.patchAdapter(id, patch),
+    acceptInbound: async (message) => {
+      const { entry, duplicate } = await inboundJournal.persist(message)
+      if (duplicate) return
+      await inboundDispatcher.dispatch(entry)
+    },
     rotateConversation: (connectorId, ownerId, conversationId) => rotateAliceConversation(
-      process.env['OPENALICE_URL'] ?? 'http://127.0.0.1:3002', connectorId, ownerId, conversationId,
+      aliceUrl, connectorId, ownerId, conversationId,
     ),
   })
   await manager.start()
@@ -72,6 +83,9 @@ async function main(): Promise<void> {
 
   const server = serve({ fetch: app.fetch, port: CONNECTOR_PORT, hostname: '127.0.0.1' })
   console.log(`[connector] listening on http://127.0.0.1:${CONNECTOR_PORT}`)
+  void inboundDispatcher.recover().catch((error) => {
+    console.warn('[connector] inbound recovery failed:', error instanceof Error ? error.message : error)
+  })
 
   let stopping = false
   const shutdown = async (signal: string): Promise<void> => {

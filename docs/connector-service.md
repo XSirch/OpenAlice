@@ -20,8 +20,9 @@ categories.
   Inbox item read.
 - The service is optional in every trading mode, including lite.
 - Guardian may start, stop, or restart it without restarting Alice or UTA.
-- Version 1 is outbound-only. `/link`, `/status`, and `/test` reserve a generic
-  slash-command control plane; ordinary DM text is not ingested.
+- The linked Telegram owner may send ordinary private text through the durable
+  inbound journal. Commands remain a separate local control plane; Discord is
+  still outbound-only.
 - Each adapter serves one owner account/private chat. Group and channel
   broadcasting are out of scope.
 - Inbox `docs` that are Markdown or static HTML reports are sent as file attachments, not flattened
