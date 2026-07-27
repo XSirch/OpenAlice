@@ -39,6 +39,10 @@ export function projectFixedIncome(input: FixedIncomeProjectionInput): FixedInco
 function rateFor(product: FixedIncomeProduct, cdi?: string, ipca?: string): Decimal {
   if (product.rate.kind === 'fixed') return new Decimal(product.rate.annualRatePct).div(100)
   if (product.rate.kind === 'cdi_percentage') { if (!cdi) throw new Error('annualCdiPct is required'); return new Decimal(cdi).mul(product.rate.cdiPct).div(10_000) }
+  if (product.rate.kind === 'other') {
+    if (!product.rate.annualRatePct) throw new Error('annualRatePct is required for other indexers')
+    return new Decimal(product.rate.annualRatePct).div(100)
+  }
   if (!ipca) throw new Error('annualIpcaPct is required')
   return new Decimal(1).plus(new Decimal(ipca).div(100)).mul(new Decimal(1).plus(new Decimal(product.rate.spreadPct).div(100))).minus(1)
 }
