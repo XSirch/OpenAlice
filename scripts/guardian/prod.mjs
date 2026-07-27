@@ -276,6 +276,7 @@ function spawnConnector() {
     env: {
       ...process.env,
       OPENALICE_CONNECTOR_PORT: String(CONNECTOR_PORT),
+      OPENALICE_URL: `http://127.0.0.1:${WEB_PORT}`,
       OPENALICE_HOME: DATA_HOME,
       AQ_LAUNCHER_ROOT: LAUNCHER_ROOT,
       OPENALICE_LAUNCHER: LAUNCHER,
