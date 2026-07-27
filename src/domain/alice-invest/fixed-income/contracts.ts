@@ -1,14 +1,18 @@
 import { z } from 'zod'
 
 const decimalString = z.string().regex(/^-?\d+(?:\.\d+)?$/, 'must be a decimal string')
+const nonnegativeDecimalString = decimalString.refine((value) => !value.startsWith('-'), 'must be a non-negative decimal string')
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO calendar date')
 
 /** CDI is an index/reference rate, deliberately absent from productType. */
-export const fixedIncomeProductTypeSchema = z.enum(['cdb', 'lci', 'lca', 'tesouro_direto', 'fixed_income_fund'])
+export const fixedIncomeProductTypeSchema = z.enum([
+  'cdb', 'lci', 'lca', 'tesouro_direto', 'fixed_income_fund', 'debenture', 'cri', 'cra',
+])
 export const fixedIncomeRateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('fixed'), annualRatePct: decimalString }).strict(),
   z.object({ kind: z.literal('cdi_percentage'), cdiPct: decimalString }).strict(),
   z.object({ kind: z.literal('ipca_plus'), spreadPct: decimalString }).strict(),
+  z.object({ kind: z.literal('other'), label: z.string().trim().min(1).max(96), annualRatePct: decimalString.optional() }).strict(),
 ])
 
 export const fixedIncomeLiquiditySchema = z.object({
@@ -26,17 +30,53 @@ export const fixedIncomeFeesSchema = z.object({
 
 export const fixedIncomeProductSchema = z.object({
   productType: fixedIncomeProductTypeSchema,
-  issuer: z.object({ legalName: z.string().trim().min(1).max(256), taxId: z.string().trim().min(1).max(32).optional() }).strict(),
+  issuer: z.object({
+    legalName: z.string().trim().min(1).max(256),
+    taxId: z.string().trim().min(1).max(32).optional(),
+    // This must come from a disclosed source; name matching must never assign
+    // a conglomerate for FGC concentration purposes.
+    conglomerate: z.string().trim().min(1).max(256).optional(),
+  }).strict(),
   rate: fixedIncomeRateSchema,
   issueDate: dateOnly,
   maturityDate: dateOnly,
   liquidity: fixedIncomeLiquiditySchema,
-  fgc: z.object({ eligible: z.boolean(), coverageLimitBRL: decimalString.optional(), issuerExposureBRL: decimalString.optional() }).strict(),
+  fgc: z.object({
+    status: z.enum(['eligible', 'ineligible', 'unknown']),
+    coverageLimitBRL: decimalString.optional(),
+    issuerExposureBRL: decimalString.optional(),
+  }).strict(),
   fees: fixedIncomeFeesSchema.default({ administrationAnnualPct: '0', performancePct: '0', entryPct: '0', exitPct: '0' }),
   assumptions: z.array(z.string().trim().min(1).max(512)).max(32).default([]),
 }).strict().superRefine((product, context) => {
   if (product.maturityDate <= product.issueDate) context.addIssue({ code: 'custom', path: ['maturityDate'], message: 'must be after issueDate' })
-  if (!product.fgc.eligible && (product.fgc.coverageLimitBRL || product.fgc.issuerExposureBRL)) context.addIssue({ code: 'custom', path: ['fgc'], message: 'ineligible products cannot claim FGC coverage' })
+  if (product.fgc.status !== 'eligible' && (product.fgc.coverageLimitBRL || product.fgc.issuerExposureBRL)) context.addIssue({ code: 'custom', path: ['fgc'], message: 'only eligible products can claim FGC coverage' })
 })
 
 export type FixedIncomeProduct = z.infer<typeof fixedIncomeProductSchema>
+
+/**
+ * A custody-normalized holding. Financial values are decimal strings so no
+ * floating-point value from an Open Finance provider leaks into calculations.
+ */
+export const fixedIncomePositionSchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  product: fixedIncomeProductSchema,
+  investedAmountBRL: nonnegativeDecimalString,
+  currentAmountBRL: nonnegativeDecimalString,
+  marketValueBRL: nonnegativeDecimalString.optional(),
+  redemptionAmountBRL: nonnegativeDecimalString.optional(),
+  custodyAsOf: dateOnly,
+  source: z.object({ provider: z.string().trim().min(1).max(64), positionId: z.string().trim().min(1).max(256) }).strict(),
+}).strict().superRefine((position, context) => {
+  if (position.marketValueBRL && position.redemptionAmountBRL && position.marketValueBRL === position.redemptionAmountBRL) {
+    context.addIssue({ code: 'custom', path: ['redemptionAmountBRL'], message: 'omit duplicate redemption amount; currentAmountBRL carries the custody value' })
+  }
+})
+
+export type FixedIncomePosition = z.infer<typeof fixedIncomePositionSchema>
+
+/** Parse an already classified custody record without making product/FGC guesses. */
+export function normalizeFixedIncomePosition(input: unknown): FixedIncomePosition {
+  return fixedIncomePositionSchema.parse(input)
+}
