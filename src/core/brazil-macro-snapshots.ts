@@ -18,16 +18,21 @@ export type BrazilMacroSnapshot = z.infer<typeof entrySchema>
 
 export async function recordBrazilMacroSnapshots(entries: BrazilMacroSnapshot[]): Promise<void> {
   const current = await readBrazilMacroSnapshots()
-  const all = [...current, ...entries]
-  const deduped = new Map<string, BrazilMacroSnapshot>()
-  for (const entry of all) deduped.set(`${entry.seriesId}:${entry.dataAsOf}:${entry.value}`, entry)
-  const next = [...deduped.values()].sort((a, b) => a.collectedAt.localeCompare(b.collectedAt)).slice(-MAX_ENTRIES)
+  const next = mergeBrazilMacroSnapshots(current, entries)
   await mkdir(dirname(FILE), { recursive: true })
   const temporary = `${FILE}.tmp-${process.pid}`
   await writeFile(temporary, `${JSON.stringify({ version: 1, entries: next })}\n`, { mode: 0o600 })
   await chmod(temporary, 0o600).catch(() => undefined)
   await rename(temporary, FILE)
   await chmod(FILE, 0o600).catch(() => undefined)
+}
+
+/** Keep distinct values for the same data-base as observable source revisions. */
+export function mergeBrazilMacroSnapshots(current: BrazilMacroSnapshot[], incoming: BrazilMacroSnapshot[]): BrazilMacroSnapshot[] {
+  const all = [...current, ...incoming]
+  const deduped = new Map<string, BrazilMacroSnapshot>()
+  for (const entry of all) deduped.set(`${entry.seriesId}:${entry.dataAsOf}:${entry.value}`, entry)
+  return [...deduped.values()].sort((a, b) => a.collectedAt.localeCompare(b.collectedAt)).slice(-MAX_ENTRIES)
 }
 
 export async function readBrazilMacroSnapshots(): Promise<BrazilMacroSnapshot[]> {
