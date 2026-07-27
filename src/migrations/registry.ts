@@ -45,6 +45,7 @@ import { migration as migration_0030_alice_invest_signal_ledger } from './0030_a
 import { migration as migration_0031_open_finance_config } from './0031_open_finance_config/index.js'
 import { migration as migration_0032_openrouter_analytics_config } from './0032_openrouter_analytics_config/index.js'
 import { migration as migration_0033_portfolio_presentation_cache } from './0033_portfolio_presentation_cache/index.js'
+import { migration as migration_0034_brazil_macro_snapshots } from './0034_brazil_macro_snapshots/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -73,4 +74,5 @@ export const REGISTRY: Migration[] = [
   migration_0031_open_finance_config,
   migration_0032_openrouter_analytics_config,
   migration_0033_portfolio_presentation_cache,
+  migration_0034_brazil_macro_snapshots,
 ]

@@ -33,3 +33,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0031_open_finance_config` | 0.81.0-beta | 2026-07-22 | open-finance.json | Seed the Open Finance custody configuration in a disabled state. |
 | `0032_openrouter_analytics_config` | 0.84.0-beta | 2026-07-27 | openrouter-analytics.json | Seed the private OpenRouter Analytics configuration. |
 | `0033_portfolio_presentation_cache` | 0.84.0-beta | 2026-07-27 | cache/portfolio-presentation.json | Reserve durable storage for the cached Portfolio presentation. |
+| `0034_brazil_macro_snapshots` | 0.84.0-beta | 2026-07-27 | cache/brazil-macro-snapshots.json | Reserve durable provenance-aware Brazil macro snapshot history. |
