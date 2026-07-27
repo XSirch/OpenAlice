@@ -15,6 +15,7 @@ import { fetchFedBoard, type FedBoard } from './fed.js'
 import { fetchBrazilMarketBoard } from './brazil.js'
 import { cachedBoard } from './cache.js'
 import { createHubFetcher, markLocal, type HubConfig } from './hub.js'
+import { recordBrazilMacroSnapshots } from '../../../core/brazil-macro-snapshots.js'
 
 export interface ReferenceDataDeps {
   equityClient: EquityClientLike
@@ -131,8 +132,16 @@ export function createReferenceData(deps: ReferenceDataDeps): ReferenceDataServi
 
   const macro = cachedBoard(TTL.macro, async () =>
     (await viaHub<MacroBoard>('macro')) ?? markLocal(await fetchMacroBoard(deps.economyClient)))
-  const brazil = cachedBoard(TTL.brazil, async (): Promise<BrazilMarketBoard> =>
-    fetchBrazilMarketBoard(deps.indexClient))
+  const brazil = cachedBoard(TTL.brazil, async (): Promise<BrazilMarketBoard> => {
+    const board = await fetchBrazilMarketBoard(deps.indexClient)
+    await recordBrazilMacroSnapshots(board.cards.flatMap((card) => {
+      const provenance = card.provenance
+      return card.latest != null && provenance?.dataAsOf
+        ? [{ seriesId: provenance.sourceId ?? card.id, dataAsOf: provenance.dataAsOf, value: card.latest, collectedAt: provenance.collectedAt, provider: provenance.provider }]
+        : []
+    })).catch(() => undefined)
+    return board
+  })
   const globalMacro = cachedBoard(TTL.globalMacro, async () =>
     (await viaHub<GlobalMacroBoard>('global-macro')) ?? markLocal(await fetchGlobalMacro(deps.economyClient)))
   const shipping = cachedBoard(TTL.shipping, async () =>
