@@ -1959,7 +1959,7 @@
         {
           "id": "AINV-T1210",
           "title": "Normalizar posições brasileiras de renda fixa por emissor e produto",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": ["AINV-T1200", "AINV-T500"],
           "scope": ["src/domain/alice-invest", "services/uta", "src/core"],
           "acceptance_criteria": ["Representar emissor, conglomerado, produto, indexador, taxa, vencimento, liquidez, valor aplicado e valor atual", "Distinguir produtos cobertos e não cobertos pelo FGC sem inferir elegibilidade ausente", "Usar Decimal para valores e preservar data-base da custódia"],
