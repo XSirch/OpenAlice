@@ -118,6 +118,13 @@ describe('reference routes', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ lines: [{ cvmCode: '9512', account: 'Lucro' }] })
   })
+  it('GET /cvm/issuer only returns an unambiguous FCA issuer mapping', async () => {
+    const app = createReferenceRoutes(mkCtx(), { fetchCvmIssuerMapping: async () => ({ ticker: 'PETR4', cvmCode: '9512', company: 'PETROBRAS', updatedAt: '2026-02-01' }) })
+    expect((await app.request('/cvm/issuer')).status).toBe(400)
+    const response = await app.request('/cvm/issuer?ticker=PETR4&year=2026')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ issuer: { cvmCode: '9512' } })
+  })
 
   it('GET /term-structure returns the curves', async () => {
     const res = await createReferenceRoutes(mkCtx()).request('/term-structure')
