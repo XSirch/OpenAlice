@@ -95,15 +95,29 @@ export function AIProviderPage() {
   const [credentials, setCredentials] = useState<CredentialSummary[] | null>(null)
   const [presets, setPresets] = useState<Preset[]>([])
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; cred: CredentialSummary } | null>(null)
+  const [analyticsConfigured, setAnalyticsConfigured] = useState(false)
+  const [managementKey, setManagementKey] = useState('')
+  const [analyticsSaving, setAnalyticsSaving] = useState(false)
+  const [usageRows, setUsageRows] = useState<Array<{ model: string; total_usage: number | string; tokens_total: number | string; request_count: number | string }> | null>(null)
+  const [usageError, setUsageError] = useState<string | null>(null)
 
   const reload = () => api.config.getCredentials().then(({ credentials: c }) => setCredentials(c)).catch(() => setCredentials([]))
 
   useEffect(() => {
     void reload()
     api.config.getPresets().then(({ presets: p }) => setPresets(p)).catch(() => {})
+    fetch('/api/openrouter-analytics').then((r) => r.json()).then((v) => setAnalyticsConfigured(v.configured === true)).catch(() => {})
   }, [])
 
   const apiKeyPresets = useMemo(() => presets.filter(isApiKeyPreset), [presets])
+  const loadUsage = async () => {
+    const end = new Date(); const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
+    try {
+      const res = await fetch(`/api/openrouter-analytics/usage?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`)
+      const body = await res.json(); if (!res.ok) throw new Error(body.error ?? 'Could not load OpenRouter usage')
+      setUsageRows(body.data?.data ?? []); setUsageError(null)
+    } catch (error) { setUsageError(error instanceof Error ? error.message : 'Could not load OpenRouter usage') }
+  }
 
   const handleDelete = async (slug: string) => {
     try {
@@ -112,6 +126,18 @@ export function AIProviderPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : t('aiProvider.deleteFailed'))
     }
+  }
+  const saveAnalyticsKey = async () => {
+    setAnalyticsSaving(true)
+    try {
+      const res = await fetch('/api/openrouter-analytics', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ managementKey }) })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? 'Could not save OpenRouter Management Key')
+      setAnalyticsConfigured(body.configured === true)
+      setManagementKey('')
+      await loadUsage()
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not save OpenRouter Management Key') }
+    finally { setAnalyticsSaving(false) }
   }
 
   if (!credentials) {
@@ -127,6 +153,17 @@ export function AIProviderPage() {
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader title={t('aiProvider.title')} description={t('aiProvider.description')} />
       <SettingsScrollArea className="px-4 py-6 md:px-8">
+        <section className="mx-auto mb-6 max-w-[1100px] rounded-lg border border-border bg-background p-4">
+          <h2 className="text-[13px] font-semibold text-foreground">OpenRouter cost analytics</h2>
+          <p className="mt-1 text-[12px] text-muted-foreground">Uses a read-only OpenRouter Management Key to show aggregate spend by model. It is stored locally, sealed, and is never injected into an agent workspace.</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input className={inputClass} type="password" value={managementKey} onChange={(event) => setManagementKey(event.target.value)} placeholder={analyticsConfigured ? 'Configured — enter a new key to replace' : 'OpenRouter Management Key'} />
+            <button className="rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50" disabled={!managementKey.trim() || analyticsSaving} onClick={() => void saveAnalyticsKey()}>{analyticsSaving ? 'Saving…' : analyticsConfigured ? 'Replace key' : 'Save key'}</button>
+          </div>
+          {analyticsConfigured && <button className="mt-3 text-xs text-primary hover:underline" onClick={() => void loadUsage()}>Refresh last 30 days</button>}
+          {usageError && <p className="mt-2 text-xs text-destructive">{usageError}</p>}
+          {usageRows && <div className="mt-3 overflow-x-auto"><table className="w-full text-xs"><thead className="text-muted-foreground"><tr><th className="pb-1 text-left">Model</th><th className="pb-1 text-right">Spend</th><th className="pb-1 text-right">Tokens</th><th className="pb-1 text-right">Requests</th></tr></thead><tbody>{usageRows.map((row) => <tr key={row.model} className="border-t border-border/50"><td className="py-1.5 font-mono">{row.model}</td><td className="py-1.5 text-right">${Number(row.total_usage).toFixed(4)}</td><td className="py-1.5 text-right">{Number(row.tokens_total).toLocaleString()}</td><td className="py-1.5 text-right">{Number(row.request_count).toLocaleString()}</td></tr>)}</tbody></table></div>}
+        </section>
         <div className="mx-auto grid min-w-0 max-w-[1100px] gap-6 2xl:grid-cols-2">
           {/* ============== Credentials ============== */}
           <section className="min-w-0">
