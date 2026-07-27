@@ -100,9 +100,14 @@ describe('reference routes', () => {
   })
 
   it('GET /brazil/history accepts a bounded series filter', async () => {
-    const res = await createReferenceRoutes(mkCtx()).request('/brazil/history?series=SGS%20432&limit=9999')
+    const history = [
+      { seriesId: 'SGS 432', dataAsOf: '2026-06-17', value: 14.25, provider: 'Banco Central do Brasil', collectedAt: '2026-06-18T10:00:00.000Z' },
+      { seriesId: 'SGS 432', dataAsOf: '2026-06-17', value: 14.5, provider: 'Banco Central do Brasil', collectedAt: '2026-06-19T10:00:00.000Z' },
+      { seriesId: 'SGS 12', dataAsOf: '2026-06-17', value: 14.1, provider: 'Banco Central do Brasil', collectedAt: '2026-06-18T10:00:00.000Z' },
+    ]
+    const res = await createReferenceRoutes(mkCtx(), { readBrazilMacroSnapshots: async () => history }).request('/brazil/history?series=SGS%20432&limit=9999')
     expect(res.status).toBe(200)
-    expect((await res.json()).entries).toEqual([])
+    expect((await res.json()).entries).toEqual(history.slice(0, 2))
   })
 
   it('GET /term-structure returns the curves', async () => {

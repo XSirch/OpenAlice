@@ -119,6 +119,14 @@ export interface BrazilMarketBoard {
   meta: ReferenceMeta
 }
 
+export interface BrazilMacroSnapshot {
+  seriesId: string
+  dataAsOf: string
+  value: number
+  collectedAt: string
+  provider: string
+}
+
 export interface TermPoint {
   expiration: string
   price: number | null
@@ -205,6 +213,7 @@ export const referenceApi = {
   calendar: () => fetchJson<CalendarBoard>('/api/reference/calendar'),
   macro: () => fetchJson<MacroBoard>('/api/reference/macro'),
   brazil: () => fetchJson<BrazilMarketBoard>('/api/reference/brazil'),
+  brazilHistory: (limit = 500) => fetchJson<{ entries: BrazilMacroSnapshot[] }>(`/api/reference/brazil/history?limit=${limit}`),
   termStructure: () => fetchJson<TermStructureBoard>('/api/reference/term-structure'),
   valuation: () => fetchJson<ValuationStrip>('/api/reference/valuation'),
   globalMacro: () => fetchJson<GlobalMacroBoard>('/api/reference/global-macro'),

@@ -12,7 +12,7 @@ import { Hono } from 'hono'
 import type { EngineContext } from '../../core/types.js'
 import { readBrazilMacroSnapshots } from '../../core/brazil-macro-snapshots.js'
 
-export function createReferenceRoutes(ctx: EngineContext): Hono {
+export function createReferenceRoutes(ctx: EngineContext, deps = { readBrazilMacroSnapshots }): Hono {
   const app = new Hono()
 
   // GET /api/reference/movers → gainers / losers / active board
@@ -102,7 +102,7 @@ export function createReferenceRoutes(ctx: EngineContext): Hono {
   app.get('/brazil/history', async (c) => {
     const series = c.req.query('series')?.trim()
     const limit = Math.max(1, Math.min(500, Number(c.req.query('limit')) || 90))
-    const entries = await readBrazilMacroSnapshots()
+    const entries = await deps.readBrazilMacroSnapshots()
     const filtered = series ? entries.filter((entry) => entry.seriesId === series) : entries
     return c.json({ entries: filtered.slice(-limit) })
   })
