@@ -1923,7 +1923,7 @@
         {
           "id": "AINV-T1201",
           "title": "Integrar fundamentos e documentos oficiais da CVM",
-          "status": "pending",
+          "status": "in_progress",
           "depends_on": ["AINV-T1200"],
           "scope": ["src/domain/market-data", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Importar e normalizar DFP, ITR, composição de capital e metadados de companhias abertas", "Exibir competência do demonstrativo, data de publicação, versão e link de origem", "Manter BRAPI como cotação complementar, sem apresentar fundamentos de fontes diferentes como equivalentes"],

@@ -102,6 +102,9 @@ importers:
       tar:
         specifier: ^7.5.10
         version: 7.5.16
+      unzipper:
+        specifier: 0.12.3
+        version: 0.12.3
       viem:
         specifier: ^2.48.7
         version: 2.48.7(typescript@5.9.3)(zod@4.3.6)
@@ -133,6 +136,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.14)
+      '@types/unzipper':
+        specifier: ^0.10.11
+        version: 0.10.11
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -1801,6 +1807,9 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@types/unzipper@0.10.11':
+    resolution: {integrity: sha512-D25im2zjyMCcgL9ag6N46+wbtJBnXIr7SI4zHf9eJD2Dw2tEB5e+p5MYkrxKIVRscs5QV0EhtU9rgXSPx90oJg==}
 
   '@types/use-sync-external-store@0.0.6':
     resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
@@ -5926,6 +5935,10 @@ snapshots:
 
   '@types/trusted-types@2.0.7':
     optional: true
+
+  '@types/unzipper@0.10.11':
+    dependencies:
+      '@types/node': 25.2.3
 
   '@types/use-sync-external-store@0.0.6': {}
 
