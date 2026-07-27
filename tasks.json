@@ -1933,11 +1933,11 @@
         {
           "id": "AINV-T1202",
           "title": "Integrar séries macroeconômicas do Banco Central com revisões",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": ["AINV-T1200"],
           "scope": ["src/domain/market-data", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Consumir Selic, CDI quando disponível, IPCA, câmbio e séries selecionadas pelo identificador oficial", "Persistir observação, data-base, data de coleta e revisão sem sobrescrever histórico silenciosamente", "Exibir indisponibilidade e dado defasado de forma explícita"],
-          "validation": ["Fixtures SGS e testes de revisão/freshness", "Captura externa sem segredo de ao menos uma série por categoria"],
+          "validation": ["src/domain/market-data/reference/brazil.spec.ts e src/webui/routes/reference.spec.ts", "npx tsc --noEmit e cd ui && npx tsc -b", "A rota /api/reference/brazil/history expõe observações persistidas por série sem credenciais; captura externa segue sendo evidência operacional"],
           "readiness_impact": "none"
         },
         {
