@@ -7,10 +7,16 @@
  */
 
 import type { IndexClientLike } from '../client/types.js'
-import type { BrazilMarketBoard, MacroPoint, MacroSeriesCard, MacroUnit, ReferenceSeriesProvenance } from './types.js'
+import type { BrazilMacroCalendarEvent, BrazilMarketBoard, MacroPoint, MacroSeriesCard, MacroUnit, ReferenceSeriesProvenance } from './types.js'
 
 const BCB_SGS = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs'
 const MAX_POINTS = 90
+const COPOM_SOURCE = 'https://www.bcb.gov.br/controleinflacao/copom'
+
+const COPOM_DATES: Record<number, Array<[string, string]>> = {
+  2026: [['2026-01-27', '2026-01-28'], ['2026-03-17', '2026-03-18'], ['2026-04-28', '2026-04-29'], ['2026-06-16', '2026-06-17'], ['2026-08-04', '2026-08-05'], ['2026-09-15', '2026-09-16'], ['2026-11-03', '2026-11-04'], ['2026-12-08', '2026-12-09']],
+  2027: [['2027-01-26', '2027-01-27'], ['2027-03-16', '2027-03-17'], ['2027-04-27', '2027-04-28'], ['2027-06-15', '2027-06-16'], ['2027-08-03', '2027-08-04'], ['2027-09-21', '2027-09-22'], ['2027-10-26', '2027-10-27'], ['2027-12-07', '2027-12-08']],
+}
 
 interface SgsRow { data: string; valor: string }
 
@@ -146,7 +152,22 @@ export async function fetchBrazilMarketBoard(indexClient: IndexClientLike): Prom
       card('USDBRL', BCB_SERIES.usdBrl.label, 'brl', usdBrl, { provider: 'Banco Central do Brasil', sourceId: 'SGS 1', classification: 'official_reference', collectedAt }),
       ...indices,
     ],
+    calendar: buildCopomCalendar(new Date().getUTCFullYear()),
     ...(Object.keys(errors).length ? { errors } : {}),
     meta: { provider: 'Banco Central do Brasil + Yahoo Finance', asOf: new Date().toISOString(), origin: 'local' },
   }
+}
+
+/** Official calendars are published by the BCB annually; unknown years stay
+ * empty instead of fabricating policy dates. */
+export function buildCopomCalendar(year: number): BrazilMacroCalendarEvent[] {
+  return (COPOM_DATES[year] ?? []).map(([startDate, endDate]) => ({
+    id: `copom-${startDate}`,
+    kind: 'copom_meeting',
+    label: 'Copom meeting',
+    startDate,
+    endDate,
+    sourceUrl: COPOM_SOURCE,
+    publishedAt: year === 2026 ? '2025-06-24' : '2026-06-23',
+  }))
 }

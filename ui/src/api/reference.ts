@@ -115,8 +115,19 @@ export interface MacroBoard {
 
 export interface BrazilMarketBoard {
   cards: MacroSeriesCard[]
+  calendar?: BrazilMacroCalendarEvent[]
   errors?: Record<string, string>
   meta: ReferenceMeta
+}
+
+export interface BrazilMacroCalendarEvent {
+  id: string
+  kind: 'copom_meeting'
+  label: string
+  startDate: string
+  endDate: string
+  sourceUrl: string
+  publishedAt: string
 }
 
 export interface BrazilMacroSnapshot {
