@@ -99,6 +99,12 @@ describe('reference routes', () => {
     expect(body.meta.provider).toMatch(/Banco Central/)
   })
 
+  it('GET /brazil/history accepts a bounded series filter', async () => {
+    const res = await createReferenceRoutes(mkCtx()).request('/brazil/history?series=SGS%20432&limit=9999')
+    expect(res.status).toBe(200)
+    expect((await res.json()).entries).toEqual([])
+  })
+
   it('GET /term-structure returns the curves', async () => {
     const res = await createReferenceRoutes(mkCtx()).request('/term-structure')
     const body = await res.json()

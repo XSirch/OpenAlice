@@ -10,6 +10,7 @@
 
 import { Hono } from 'hono'
 import type { EngineContext } from '../../core/types.js'
+import { readBrazilMacroSnapshots } from '../../core/brazil-macro-snapshots.js'
 
 export function createReferenceRoutes(ctx: EngineContext): Hono {
   const app = new Hono()
@@ -95,6 +96,15 @@ export function createReferenceRoutes(ctx: EngineContext): Hono {
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502)
     }
+  })
+
+  /** Durable, provenance-aware history used by Brazil macro panels. */
+  app.get('/brazil/history', async (c) => {
+    const series = c.req.query('series')?.trim()
+    const limit = Math.max(1, Math.min(500, Number(c.req.query('limit')) || 90))
+    const entries = await readBrazilMacroSnapshots()
+    const filtered = series ? entries.filter((entry) => entry.seriesId === series) : entries
+    return c.json({ entries: filtered.slice(-limit) })
   })
 
   return app
