@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchBrazilMarketBoard } from './brazil.js'
+import { buildCopomCalendar, fetchBrazilMarketBoard } from './brazil.js'
 import type { IndexClientLike } from '../client/types.js'
 
 const points = (values: string[]) => values.map((valor, index) => ({
@@ -51,5 +51,10 @@ describe('Brazil market board', () => {
     expect(board.errors?.ipca).toMatch(/offline/)
     expect(board.cards.find((entry) => entry.id === 'SELIC')?.latest).toBe(1.1)
     expect(board.cards.find((entry) => entry.id === 'IPCA_12M')?.latest).toBeNull()
+  })
+  it('carries only published Copom dates and never invents an unknown calendar year', () => {
+    expect(buildCopomCalendar(2026)).toHaveLength(8)
+    expect(buildCopomCalendar(2026)[0]).toMatchObject({ startDate: '2026-01-27', endDate: '2026-01-28', sourceUrl: expect.stringMatching(/bcb\.gov\.br/) })
+    expect(buildCopomCalendar(2030)).toEqual([])
   })
 })

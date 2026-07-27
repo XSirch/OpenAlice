@@ -122,9 +122,21 @@ export interface MacroBoard {
  * with delayed Yahoo index closes; every card retains its own data date. */
 export interface BrazilMarketBoard {
   cards: MacroSeriesCard[]
+  /** Official macro-policy dates carried with the Brazil snapshot. */
+  calendar?: BrazilMacroCalendarEvent[]
   /** A source may be unavailable without hiding the rest of the board. */
   errors?: Record<string, string>
   meta: ReferenceMeta
+}
+
+export interface BrazilMacroCalendarEvent {
+  id: string
+  kind: 'copom_meeting'
+  label: string
+  startDate: string
+  endDate: string
+  sourceUrl: string
+  publishedAt: string
 }
 
 // ==================== Service ====================

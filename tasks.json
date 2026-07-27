@@ -2077,7 +2077,7 @@
         {
           "id": "AINV-T1240",
           "title": "Criar snapshot macro Brasil com histórico de revisões",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": ["AINV-T1202"],
           "scope": ["src/domain/market-data", "src/core", "ui/src"],
           "acceptance_criteria": ["Consolidar Selic, inflação, câmbio, indicadores selecionados e calendário em um snapshot versionado", "Preservar série original e revisão, com horário de coleta e fonte", "Cache persistente reduz chamadas sem ocultar dado vencido"],
