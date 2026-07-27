@@ -11,8 +11,15 @@
 import { Hono } from 'hono'
 import type { EngineContext } from '../../core/types.js'
 import { readBrazilMacroSnapshots } from '../../core/brazil-macro-snapshots.js'
+import { fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
 
-export function createReferenceRoutes(ctx: EngineContext, deps = { readBrazilMacroSnapshots }): Hono {
+interface ReferenceRouteDeps {
+  readBrazilMacroSnapshots: typeof readBrazilMacroSnapshots
+  fetchCvmStatementLines: typeof fetchCvmStatementLines
+}
+
+export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<ReferenceRouteDeps> = {}): Hono {
+  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, ...overrides }
   const app = new Hono()
 
   // GET /api/reference/movers → gainers / losers / active board
@@ -105,6 +112,19 @@ export function createReferenceRoutes(ctx: EngineContext, deps = { readBrazilMac
     const entries = await deps.readBrazilMacroSnapshots()
     const filtered = series ? entries.filter((entry) => entry.seriesId === series) : entries
     return c.json({ entries: filtered.slice(-limit) })
+  })
+
+  /** Official CVM DFP/ITR lines, filtered server-side to one issuer. */
+  app.get('/cvm/statements', async (c) => {
+    const cvmCode = c.req.query('cvmCode')?.trim()
+    const kind = c.req.query('kind') === 'ITR' ? 'ITR' : c.req.query('kind') === 'DFP' ? 'DFP' : null
+    const year = Number(c.req.query('year'))
+    if (!cvmCode || !kind || !Number.isInteger(year)) return c.json({ error: 'cvmCode, kind (DFP or ITR), and year are required.' }, 400)
+    try {
+      return c.json({ lines: await deps.fetchCvmStatementLines({ cvmCode, kind, year } satisfies CvmStatementFetchInput) })
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    }
   })
 
   return app

@@ -137,6 +137,7 @@ export interface BrazilMacroSnapshot {
   collectedAt: string
   provider: string
 }
+export interface CvmStatementLine { cvmCode: string; company: string; referenceDate: string; filedAt: string | null; statement: string; accountCode: string; account: string; value: number }
 
 export interface TermPoint {
   expiration: string
@@ -225,6 +226,7 @@ export const referenceApi = {
   macro: () => fetchJson<MacroBoard>('/api/reference/macro'),
   brazil: () => fetchJson<BrazilMarketBoard>('/api/reference/brazil'),
   brazilHistory: (limit = 500) => fetchJson<{ entries: BrazilMacroSnapshot[] }>(`/api/reference/brazil/history?limit=${limit}`),
+  cvmStatements: (input: { cvmCode: string; kind: 'DFP' | 'ITR'; year: number }) => fetchJson<{ lines: CvmStatementLine[] }>(`/api/reference/cvm/statements?cvmCode=${encodeURIComponent(input.cvmCode)}&kind=${input.kind}&year=${input.year}`),
   termStructure: () => fetchJson<TermStructureBoard>('/api/reference/term-structure'),
   valuation: () => fetchJson<ValuationStrip>('/api/reference/valuation'),
   globalMacro: () => fetchJson<GlobalMacroBoard>('/api/reference/global-macro'),

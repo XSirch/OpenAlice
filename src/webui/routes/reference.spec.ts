@@ -110,6 +110,15 @@ describe('reference routes', () => {
     expect((await res.json()).entries).toEqual(history.slice(0, 2))
   })
 
+  it('GET /cvm/statements requires a bounded official-document query and filters server-side', async () => {
+    const fetchCvmStatementLines = async (input: { cvmCode: string; kind: 'DFP' | 'ITR'; year: number }) => [{ cvmCode: input.cvmCode, company: 'Companhia', referenceDate: '2025-12-31', filedAt: null, statement: 'DRE', accountCode: '3.11', account: 'Lucro', value: 10 }]
+    const app = createReferenceRoutes(mkCtx(), { readBrazilMacroSnapshots: async () => [], fetchCvmStatementLines })
+    expect((await app.request('/cvm/statements')).status).toBe(400)
+    const response = await app.request('/cvm/statements?cvmCode=9512&kind=DFP&year=2025')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ lines: [{ cvmCode: '9512', account: 'Lucro' }] })
+  })
+
   it('GET /term-structure returns the curves', async () => {
     const res = await createReferenceRoutes(mkCtx()).request('/term-structure')
     const body = await res.json()
