@@ -1979,7 +1979,7 @@
         {
           "id": "AINV-T1212",
           "title": "Exibir escada de vencimentos, liquidez e taxa líquida de renda fixa",
-          "status": "pending",
+          "status": "validated",
           "depends_on": ["AINV-T1210", "AINV-T1202"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Agrupar vencimentos e liquidez por faixas configuráveis", "Comparar retorno bruto/líquido contra CDI ou indexador informado, preservando premissas", "Separar marcação a mercado de valor de resgate quando ambos existirem"],
