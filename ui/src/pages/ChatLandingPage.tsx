@@ -4,11 +4,13 @@ import {
   ArrowUp,
   Check,
   ChevronDown,
+  CircleDollarSign,
   KeyRound,
   LayoutGrid,
   Loader2,
   MessageSquare,
   Paperclip,
+  RefreshCw,
   X,
 } from 'lucide-react'
 
@@ -38,6 +40,19 @@ export {
   resolveAgentLaunchAiDetails as resolveQuickChatAiDetails,
   resolveAgentLaunchCredentialSlug as resolveQuickChatCredentialSlug,
 } from '../hooks/useAgentLaunchConfig'
+
+type OpenRouterUsageRow = {
+  total_usage: number | string
+}
+
+function formatOpenRouterSpend(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(amount)
+}
 
 function workspaceActivityMs(workspace: Pick<Workspace, 'createdAt' | 'sessions'>): number {
   const sessionActivity = workspace.sessions
@@ -118,6 +133,8 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
   const [value, setValue] = useState('')
   const [launching, setLaunching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [openRouterSpend, setOpenRouterSpend] = useState<number | null>(null)
+  const [openRouterSpendLoading, setOpenRouterSpendLoading] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const launchSelectorsRef = useRef<AgentLaunchSelectorsHandle>(null)
   const credentialWorkspace = workspaceTarget
@@ -132,6 +149,35 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
   const effectiveAgent = launchConfig.effectiveAgent
   const selectedInfo = launchConfig.selectedAgent
   const installHint = selectedInfo ? installHintFor(selectedInfo.id) : undefined
+
+  const loadOpenRouterSpend = async () => {
+    setOpenRouterSpendLoading(true)
+    try {
+      const configuration = await fetch('/api/openrouter-analytics')
+      if (!configuration.ok) return
+      const { configured } = await configuration.json() as { configured?: boolean }
+      if (!configured) return
+
+      const end = new Date()
+      const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const usage = await fetch(`/api/openrouter-analytics/usage?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`)
+      if (!usage.ok) return
+      const body = await usage.json() as { data?: { data?: OpenRouterUsageRow[] } }
+      const total = (body.data?.data ?? []).reduce((sum, row) => {
+        const spend = Number(row.total_usage)
+        return Number.isFinite(spend) ? sum + spend : sum
+      }, 0)
+      setOpenRouterSpend(total)
+    } catch {
+      // Cost analytics is optional. A transient failure must not block Chat.
+    } finally {
+      setOpenRouterSpendLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadOpenRouterSpend()
+  }, [])
 
   const goConfigureProvider = () => {
     openOrFocus({ kind: 'settings', params: { category: 'ai-provider' } })
@@ -272,6 +318,23 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
               <h1 className="text-[19px] md:text-2xl font-semibold text-foreground leading-tight">{t('chatLanding.heading')}</h1>
               <p className="text-[13px] md:text-sm text-muted-foreground leading-relaxed">{t('chatLanding.subheading')}</p>
             </>
+          )}
+          {openRouterSpend !== null && (
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => void loadOpenRouterSpend()}
+                disabled={openRouterSpendLoading}
+                title="Refresh OpenRouter cost for the last 30 days"
+                aria-label="Refresh OpenRouter cost"
+                className="oa-pressable inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-secondary/70 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground disabled:cursor-default disabled:opacity-60"
+              >
+                {openRouterSpendLoading
+                  ? <RefreshCw className="h-3 w-3 animate-spin" />
+                  : <CircleDollarSign className="h-3 w-3 text-primary" />}
+                <span>OpenRouter · {formatOpenRouterSpend(openRouterSpend)} / 30d</span>
+              </button>
+            </div>
           )}
         </div>
 
