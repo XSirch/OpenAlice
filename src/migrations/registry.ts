@@ -48,6 +48,7 @@ import { migration as migration_0033_portfolio_presentation_cache } from './0033
 import { migration as migration_0034_brazil_macro_snapshots } from './0034_brazil_macro_snapshots/index.js'
 import { migration as migration_0035_fixed_income_custody } from './0035_fixed_income_custody/index.js'
 import { migration as migration_0036_fgc_coverage_policy } from './0036_fgc_coverage_policy/index.js'
+import { migration as migration_0037_brazil_market_board_cache } from './0037_brazil_market_board_cache/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -79,4 +80,5 @@ export const REGISTRY: Migration[] = [
   migration_0034_brazil_macro_snapshots,
   migration_0035_fixed_income_custody,
   migration_0036_fgc_coverage_policy,
+  migration_0037_brazil_market_board_cache,
 ]

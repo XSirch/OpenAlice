@@ -36,3 +36,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0034_brazil_macro_snapshots` | 0.84.0-beta | 2026-07-27 | cache/brazil-macro-snapshots.json | Reserve durable provenance-aware Brazil macro snapshot history. |
 | `0035_fixed_income_custody` | 0.84.0-beta | 2026-07-27 | fixed-income-custody.json | Seed explicit fixed-income custody classifications without inferring issuer or FGC data. |
 | `0036_fgc_coverage_policy` | 0.84.0-beta | 2026-07-27 | fgc-coverage-policy.json | Seed dated, user-configurable FGC coverage policy defaults. |
+| `0037_brazil_market_board_cache` | 0.84.0-beta | 2026-07-27 | cache/brazil-market-board.json | Reserve durable cache storage for the Brazil market board. |
