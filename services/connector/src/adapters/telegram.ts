@@ -3,6 +3,7 @@ import { autoRetry } from '@grammyjs/auto-retry'
 import type {
   ConnectorAdapterConfig,
   ConnectorAdapterHealth,
+  ConnectorInboundTextMessage,
   InboxNotification,
 } from '@traderalice/connector-protocol'
 import { TELEGRAM_CONNECTOR_DEFINITION } from '@traderalice/connector-protocol'
@@ -53,6 +54,35 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
         if (!handled) await ctx.reply('Unknown connector command.')
       })
     }
+    bot.on('message:text', async (ctx) => {
+      if (ctx.chat.type !== 'private' || !ctx.from) return
+      const text = ctx.message.text.trim()
+      // grammY command handlers own slash commands; ordinary text is the only
+      // payload allowed through the generic inbound conversation contract.
+      if (!text || text.startsWith('/')) return
+      const userId = String(ctx.from.id)
+      const chatId = String(ctx.chat.id)
+      if (!this.isOwner(userId) || this.chatId !== chatId) return
+      const message: ConnectorInboundTextMessage = {
+        version: 1,
+        connectorId: this.id,
+        correlationId: `telegram-${ctx.update.update_id}`,
+        receivedAt: new Date(ctx.message.date * 1_000).toISOString(),
+        external: {
+          updateId: String(ctx.update.update_id),
+          messageId: String(ctx.message.message_id),
+          senderId: userId,
+          conversationId: chatId,
+        },
+        content: { type: 'text', text },
+      }
+      try {
+        await context.acceptInbound(message)
+      } catch (error) {
+        this.tracker.degraded(error)
+        await ctx.reply('OpenAlice could not accept this message yet. Please try again shortly.').catch(() => undefined)
+      }
+    })
     this.registerCommands(context)
     // Do not hold the Connector HTTP server hostage to Telegram's network
     // round trips. Guardian needs its loopback health endpoint immediately so
@@ -169,7 +199,7 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
         }
         throw error
       }
-      await reply('Started a new conversation. Previous history is retained.')
+      await reply('Started a new conversation. Send your next message to begin; previous history is retained.')
     })
   }
 

@@ -19,6 +19,14 @@ export class ExternalConversationBindingStore {
     if (index >= 0) file.bindings[index] = binding; else file.bindings.push(binding)
     await this.write(file); return binding
   }
+  async unbind(connectorId: string, conversationId: string, ownerId: string): Promise<boolean> {
+    const key = identity(connectorId, conversationId, ownerId)
+    const file = await this.read()
+    const retained = file.bindings.filter((binding) => !(binding.connectorId === connectorId && binding.conversationIdHash === key.conversation && binding.ownerIdHash === key.owner))
+    if (retained.length === file.bindings.length) return false
+    await this.write({ ...file, bindings: retained })
+    return true
+  }
   private async read(): Promise<BindingFile> { try { return JSON.parse(await readFile(this.path, 'utf8')) as BindingFile } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, bindings: [] }; throw error } }
   private async write(file: BindingFile): Promise<void> { await mkdir(dirname(this.path), { recursive: true }); const temporary = `${this.path}.tmp`; await writeFile(temporary, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 }); await rename(temporary, this.path) }
 }
@@ -30,12 +38,16 @@ export async function rotateExternalConversationBinding(
   connectorId: string,
   conversationId: string,
   ownerId: string,
-): Promise<ExternalConversationBinding> {
+): Promise<void> {
   const previous = await store.resolve(connectorId, conversationId, ownerId)
-  if (!previous) throw new Error('external conversation is not bound')
+  // `/new` is safe before a first inbound turn: there is no history or
+  // binding to rotate yet, and the next private message will create one.
+  if (!previous) return
   const identity = registry.get(previous.resumeId)
   if (!identity) throw new Error('bound resume identity is unavailable')
-  const next = await registry.ensure({ wsId: identity.wsId, agent: identity.agent })
-  return store.bind(connectorId, conversationId, ownerId, next.resumeId)
+  // A native Session cannot be created until the next user prompt arrives.
+  // Remove only the external pointer now; its old resume/history remains in
+  // the registry, and the next private text creates and binds a fresh Session.
+  await store.unbind(connectorId, conversationId, ownerId)
 }
 function identity(connectorId: string, conversationId: string, ownerId: string) { const hash = (value: string) => createHash('sha256').update(`${connectorId}\u0000${value}`).digest('hex'); return { conversation: hash(conversationId), owner: hash(ownerId) } }
