@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   ConnectorAdapterConfig,
   ConnectorAdapterHealth,
+  ConnectorInboundTextMessage,
   InboxNotification,
 } from '@traderalice/connector-protocol'
 import type { ConnectorAdapter, ConnectorAdapterContext } from './adapter.js'
@@ -21,8 +22,10 @@ class FakeThirdPartyAdapter implements ConnectorAdapter {
   readonly id = 'carrier-pigeon'
   readonly delivered: InboxNotification[] = []
   private status: ConnectorAdapterHealth['status'] = 'stopped'
+  context?: ConnectorAdapterContext
 
-  async start(_config: ConnectorAdapterConfig, _context: ConnectorAdapterContext): Promise<void> {
+  async start(_config: ConnectorAdapterConfig, context: ConnectorAdapterContext): Promise<void> {
+    this.context = context
     this.status = 'healthy'
   }
 
@@ -99,6 +102,34 @@ describe('DeliveryManager connector registry', () => {
       title: 'Still durable',
       body: '',
     })).resolves.toBeUndefined()
+  })
+
+  it('passes authenticated inbound messages through the generic adapter context', async () => {
+    const adapter = new FakeThirdPartyAdapter()
+    const acceptInbound = vi.fn(async (_message: ConnectorInboundTextMessage) => undefined)
+    const registry = new ConnectorRegistry()
+    registry.register({
+      definition: { id: adapter.id, label: 'Fake', description: 'Fake.', fields: [], commands: [] },
+      create: () => adapter,
+    })
+    const manager = new DeliveryManager({
+      registry,
+      config: { version: 1, adapters: { [adapter.id]: { enabled: true, settings: {} } } },
+      updateAdapterSettings: vi.fn(),
+      acceptInbound,
+    })
+    await manager.start()
+    expect(adapter.context).toBeDefined()
+    await adapter.context!.acceptInbound({
+      version: 1,
+      connectorId: adapter.id,
+      correlationId: 'test-inbound-1',
+      receivedAt: '2026-07-27T00:00:00.000Z',
+      external: { senderId: 'owner', conversationId: 'chat', messageId: 'message-1' },
+      content: { type: 'text', text: 'Hello' },
+    })
+    expect(acceptInbound).toHaveBeenCalledOnce()
+    await manager.stop()
   })
 
   it('treats an online bot waiting for /link as an intentional setup phase', async () => {

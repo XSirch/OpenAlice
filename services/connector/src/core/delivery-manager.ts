@@ -6,6 +6,7 @@ import type {
   ConnectorDeliveryReceipt,
   ConnectorServiceHealth,
   InboxNotification,
+  ConnectorInboundTextMessage,
 } from '@traderalice/connector-protocol'
 import {
   CommandRegistry,
@@ -25,6 +26,7 @@ export interface DeliveryManagerOptions {
   updateAdapterSettings(id: string, patch: Record<string, string | number | boolean>): Promise<void>
   startedAt?: string
   recorder?: ConnectorIORecorder
+  acceptInbound?(message: ConnectorInboundTextMessage): Promise<void>
   rotateConversation?(connectorId: string, ownerId: string, conversationId: string): Promise<void>
 }
 
@@ -149,6 +151,10 @@ export class DeliveryManager {
       updateSettings: (patch) => this.options.updateAdapterSettings(id, patch),
       getServiceStatus: () => this.health().status,
       sendTest: (connectorId) => this.sendTest(connectorId),
+      acceptInbound: (message) => {
+        if (!this.options.acceptInbound) throw new Error('Inbound Connector messaging is unavailable')
+        return this.options.acceptInbound(message)
+      },
       rotateConversation: (connectorId, ownerId, conversationId) => {
         if (!this.options.rotateConversation) throw new Error('Conversation rotation is unavailable')
         return this.options.rotateConversation(connectorId, ownerId, conversationId)

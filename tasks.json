@@ -207,7 +207,7 @@
         {
           "id": "AINV-T114",
           "title": "Implementar bridge autenticado Connector para Alice",
-          "status": "implemented",
+          "status": "in_progress",
           "depends_on": [
             "AINV-T113"
           ],
@@ -228,12 +228,13 @@
             "Testes de contrato e autenticação",
             "Teste de Connector indisponível",
             "pnpm test:guardian-recovery"
-          ]
+          ],
+          "status_note": "Auditoria de 2026-07-27: cliente e rota autenticados existem, mas o processo Connector ainda não instancia o bridge nem encaminha mensagens recebidas."
         },
         {
           "id": "AINV-T115",
           "title": "Validar restart e recovery do transporte inbound",
-          "status": "implemented",
+          "status": "in_progress",
           "depends_on": [
             "AINV-T114"
           ],
@@ -251,7 +252,8 @@
             "Suite de restart/recovery",
             "pnpm test:connector-service",
             "pnpm test:connector-replay"
-          ]
+          ],
+          "status_note": "Auditoria de 2026-07-27: o dispatcher possui recovery testado isoladamente, mas o startup real do Connector não chama recover()."
         },
         {
           "id": "AINV-T116",
@@ -363,7 +365,7 @@
         {
           "id": "AINV-T201",
           "title": "Despachar conversa inbound para Session e Inbox",
-          "status": "implemented",
+          "status": "in_progress",
           "depends_on": [
             "AINV-T200"
           ],
@@ -380,12 +382,13 @@
           "validation": [
             "Integração inbound para Session, Inbox e outbound gravado",
             "Testes de concorrência e timeout"
-          ]
+          ],
+          "status_note": "Auditoria de 2026-07-27: a rota exige binding prévio e só registra indisponibilidade; ela ainda não cria a primeira Session nem entrega a resposta normal pela Inbox."
         },
         {
           "id": "AINV-T202",
           "title": "Adicionar comandos locais de ciclo de conversa",
-          "status": "implemented",
+          "status": "in_progress",
           "depends_on": [
             "AINV-T201"
           ],
@@ -401,7 +404,8 @@
           ],
           "validation": [
             "Testes de autorização, /new e resposta segura"
-          ]
+          ],
+          "status_note": "Auditoria de 2026-07-27: /new depende de um binding que nenhuma mensagem Telegram cria atualmente."
         }
       ]
     },

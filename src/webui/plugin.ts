@@ -212,18 +212,32 @@ export class WebPlugin implements Plugin {
     // Process-to-process HMAC authentication is intentionally separate from
     // browser/session auth and accepts no user-facing traffic.
     const conversationBindings = new ExternalConversationBindingStore(dataPath('config', 'external-conversation-bindings.json'))
+    let conversationDispatcher: ExternalConversationDispatcher | undefined
     const inboundReceiver = new ConnectorInboundReceiver(async (message) => {
       const workspaceService = this.workspaceServiceRef?.current ?? this.workspaceService
       if (!workspaceService) throw new ConnectorInboundUnavailableError('Workspace service is unavailable for Connector inbound bridge')
-      const binding = await conversationBindings.resolve(message.connectorId, message.external.conversationId, message.external.senderId)
-      if (!binding) throw new Error('external conversation is not bound to a Session')
-      const identity = workspaceService.resumeRegistry.get(binding.resumeId)
-      if (!identity) throw new Error('bound Session is unavailable')
-      const conversationDispatcher = new ExternalConversationDispatcher(
-        workspaceConversationDispatchTarget(createWorkspaceConversationControl(workspaceService)),
+      const control = createWorkspaceConversationControl(workspaceService)
+      conversationDispatcher ??= new ExternalConversationDispatcher(
+        workspaceConversationDispatchTarget(control),
         ctx.inboxStore,
       )
-      await conversationDispatcher.dispatch({ resumeId: binding.resumeId, workspaceId: identity.wsId, prompt: message.content.text })
+      const binding = await conversationBindings.resolve(message.connectorId, message.external.conversationId, message.external.senderId)
+      if (binding) {
+        const identity = workspaceService.resumeRegistry.get(binding.resumeId)
+        if (!identity) throw new Error('bound Session is unavailable')
+        void conversationDispatcher.dispatch({ resumeId: binding.resumeId, workspaceId: identity.wsId, prompt: message.content.text })
+        return
+      }
+      const chat = await workspaceService.resolveOrCreateChatWorkspace()
+      if (!chat.ok) throw new Error(`Chat workspace is unavailable: ${chat.message}`)
+      const started = await control.ask({
+        target: { kind: 'workspace', workspaceId: chat.workspace.id },
+        prompt: message.content.text,
+        timeoutMs: 300_000,
+      })
+      if (started.status === 'unavailable') throw new Error('Chat Session is unavailable')
+      await conversationBindings.bind(message.connectorId, message.external.conversationId, message.external.senderId, started.resumeId)
+      void conversationDispatcher.watch({ resumeId: started.resumeId, workspaceId: started.workspaceId, taskId: started.taskId })
     })
     app.route('/api/connector-inbound', createConnectorInboundRoutes(
       (message) => inboundReceiver.receive(message),
