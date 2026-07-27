@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { api, type Position, type WalletCommitLog, type EquityCurvePoint, type UTASnapshotSummary } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
@@ -71,6 +71,19 @@ interface PersistedPortfolio {
   refreshedAt: string
 }
 
+function decodePortfolioCache(raw: unknown): PersistedPortfolio | null {
+  if (!raw || typeof raw !== 'object') return null
+  const cached = raw as Partial<PersistedPortfolio>
+  if (!cached.data || !Array.isArray(cached.data.accounts) || !Array.isArray(cached.data.fxRates) || typeof cached.refreshedAt !== 'string') return null
+  return {
+    data: cached.data,
+    aggregateCurve: cached.aggregateCurve ?? null,
+    curvePoints: Array.isArray(cached.curvePoints) ? cached.curvePoints : [],
+    curveAccountId: cached.curveAccountId === 'all' || typeof cached.curveAccountId === 'string' ? cached.curveAccountId : 'all',
+    refreshedAt: cached.refreshedAt,
+  }
+}
+
 /** Portfolio reads can involve several broker and Open Finance calls. Keep the
  * last successful, credential-free result locally so the page opens instantly
  * and refreshes it in the background. The header continues to show its exact
@@ -81,15 +94,7 @@ function readPortfolioCache(): PersistedPortfolio | null {
   try {
     const raw = window.localStorage.getItem(PORTFOLIO_CACHE_KEY)
     if (!raw) return null
-    const cached = JSON.parse(raw) as Partial<PersistedPortfolio>
-    if (!cached.data || !Array.isArray(cached.data.accounts) || !Array.isArray(cached.data.fxRates) || typeof cached.refreshedAt !== 'string') return null
-    return {
-      data: cached.data,
-      aggregateCurve: cached.aggregateCurve ?? null,
-      curvePoints: Array.isArray(cached.curvePoints) ? cached.curvePoints : [],
-      curveAccountId: cached.curveAccountId === 'all' || typeof cached.curveAccountId === 'string' ? cached.curveAccountId : 'all',
-      refreshedAt: cached.refreshedAt,
-    }
+    return decodePortfolioCache(JSON.parse(raw))
   } catch {
     return null
   }
@@ -161,6 +166,7 @@ function summarizeAggregateCurve(points: EquityCurvePoint[]): CurveSummary {
 
 export function PortfolioPage() {
   const [cached] = useState(readPortfolioCache)
+  const hasFreshPortfolioResult = useRef(Boolean(cached))
   const tradingMode = useTradingMode((s) => s.status.mode)
   const tradingModeLoading = useTradingMode((s) => s.loading)
   const healthMap = useAccountHealth()
@@ -209,6 +215,7 @@ export function PortfolioPage() {
     if (tradingModeLoading) return
     if (tradingMode === 'lite') {
       clearPortfolioCache()
+      void api.portfolioCache.clear().catch(() => {})
       setData(EMPTY)
       setAggregateCurve(null)
       setCurvePoints([])
@@ -239,18 +246,40 @@ export function PortfolioPage() {
     setCurvePoints(points)
 
     const refreshedAt = new Date()
-    setLastRefresh(refreshedAt)
-    writePortfolioCache({
+    const nextCache: PersistedPortfolio = {
       data: result,
       aggregateCurve: nextAggregateCurve,
       curvePoints: points,
       curveAccountId: effectiveId,
       refreshedAt: refreshedAt.toISOString(),
-    })
+    }
+    setLastRefresh(refreshedAt)
+    hasFreshPortfolioResult.current = true
+    writePortfolioCache(nextCache)
+    void api.portfolioCache.save({ version: 1, ...nextCache }).catch(() => {})
     setLoading(false)
   }, [curveAccountId, fetchCurveData, tradingMode, tradingModeLoading])
 
   useEffect(() => { ensureTradingModePolling() }, [])
+  // A server-side projection survives browser storage cleanup, a different
+  // browser, and container restarts. Use it only when this browser has no
+  // newer local view, then let the normal live refresh replace it.
+  useEffect(() => {
+    if (cached || tradingModeLoading || tradingMode === 'lite') return
+    let active = true
+    void api.portfolioCache.load().then(({ cache }) => {
+      const remote = decodePortfolioCache(cache)
+      if (!active || hasFreshPortfolioResult.current || !remote) return
+      setData(remote.data)
+      setAggregateCurve(remote.aggregateCurve)
+      setCurvePoints(remote.curvePoints)
+      setCurveAccountId(remote.curveAccountId)
+      setLastRefresh(new Date(remote.refreshedAt))
+      setLoading(false)
+      writePortfolioCache(remote)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [cached, tradingMode, tradingModeLoading])
   useEffect(() => { refresh() }, [refresh])
 
   // Auto-refresh every 30s
