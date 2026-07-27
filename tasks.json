@@ -207,7 +207,7 @@
         {
           "id": "AINV-T114",
           "title": "Implementar bridge autenticado Connector para Alice",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": [
             "AINV-T113"
           ],
@@ -229,12 +229,12 @@
             "Teste de Connector indisponível",
             "pnpm test:guardian-recovery"
           ],
-          "status_note": "Auditoria de 2026-07-27: cliente e rota autenticados existem, mas o processo Connector ainda não instancia o bridge nem encaminha mensagens recebidas."
+          "status_note": "Revalidado em 2026-07-27: Connector instancia AliceInboundClient e ConnectorInboundDispatcher, encaminha envelopes autenticados e o Connector service smoke, rota inbound e guardian recovery passaram."
         },
         {
           "id": "AINV-T115",
           "title": "Validar restart e recovery do transporte inbound",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": [
             "AINV-T114"
           ],
@@ -253,7 +253,7 @@
             "pnpm test:connector-service",
             "pnpm test:connector-replay"
           ],
-          "status_note": "Auditoria de 2026-07-27: o dispatcher possui recovery testado isoladamente, mas o startup real do Connector não chama recover()."
+          "status_note": "Revalidado em 2026-07-27: o startup real chama inboundDispatcher.recover(); dispatcher/replay, Connector service smoke e guardian recovery passaram."
         },
         {
           "id": "AINV-T116",
@@ -342,7 +342,7 @@
         {
           "id": "AINV-T200",
           "title": "Persistir binding de conversa externa para resumeId",
-          "status": "implemented",
+          "status": "validated",
           "depends_on": [
             "AINV-T115"
           ],
@@ -357,15 +357,14 @@
             "Alterações usam migração idempotente"
           ],
           "validation": [
-            "Testes de binding, restart e isolamento de proprietário",
-            "pnpm build:migration-index",
-            "pnpm test"
+            "external-conversation-bindings.spec.ts passou: binding owner-isolated, persistência sem IDs externos em claro e /new seguro antes da primeira mensagem",
+            "pnpm build:migration-index"
           ]
         },
         {
           "id": "AINV-T201",
           "title": "Despachar conversa inbound para Session e Inbox",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": [
             "AINV-T200"
           ],
@@ -383,12 +382,12 @@
             "Integração inbound para Session, Inbox e outbound gravado",
             "Testes de concorrência e timeout"
           ],
-          "status_note": "Auditoria de 2026-07-27: a rota exige binding prévio e só registra indisponibilidade; ela ainda não cria a primeira Session nem entrega a resposta normal pela Inbox."
+          "status_note": "Revalidado em 2026-07-27: primeiro inbound cria Session e binding; turnos seguintes são serializados por resumeId e ExternalConversationDispatcher entrega resposta ou indisponibilidade pela Inbox. Specs de dispatcher e rota passaram."
         },
         {
           "id": "AINV-T202",
           "title": "Adicionar comandos locais de ciclo de conversa",
-          "status": "in_progress",
+          "status": "validated",
           "depends_on": [
             "AINV-T201"
           ],
@@ -405,7 +404,7 @@
           "validation": [
             "Testes de autorização, /new e resposta segura"
           ],
-          "status_note": "Auditoria de 2026-07-27: /new depende de um binding que nenhuma mensagem Telegram cria atualmente."
+          "status_note": "Revalidado em 2026-07-27: mensagens comuns criam binding no primeiro turno; /new rota o binding sem apagar histórico e é seguro antes do primeiro turno. A autorização owner-only é aplicada pelo adapter Telegram."
         }
       ]
     },
