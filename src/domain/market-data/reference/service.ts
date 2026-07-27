@@ -16,6 +16,7 @@ import { fetchBrazilMarketBoard } from './brazil.js'
 import { cachedBoard } from './cache.js'
 import { createHubFetcher, markLocal, type HubConfig } from './hub.js'
 import { recordBrazilMacroSnapshots } from '../../../core/brazil-macro-snapshots.js'
+import { readBrazilMarketBoardCache, resolvePersistentBrazilBoard, writeBrazilMarketBoardCache } from '../../../core/brazil-market-board-cache.js'
 
 export interface ReferenceDataDeps {
   equityClient: EquityClientLike
@@ -133,7 +134,14 @@ export function createReferenceData(deps: ReferenceDataDeps): ReferenceDataServi
   const macro = cachedBoard(TTL.macro, async () =>
     (await viaHub<MacroBoard>('macro')) ?? markLocal(await fetchMacroBoard(deps.economyClient)))
   const brazil = cachedBoard(TTL.brazil, async (): Promise<BrazilMarketBoard> => {
-    const board = await fetchBrazilMarketBoard(deps.indexClient)
+    const resolved = await resolvePersistentBrazilBoard({
+      read: readBrazilMarketBoardCache,
+      write: writeBrazilMarketBoardCache,
+      refresh: () => fetchBrazilMarketBoard(deps.indexClient),
+      ttlMs: TTL.brazil,
+    })
+    const board = resolved.board
+    if (resolved.source === 'persistent-cache') return board
     await recordBrazilMacroSnapshots(board.cards.flatMap((card) => {
       const provenance = card.provenance
       return card.latest != null && provenance?.dataAsOf
