@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getQuickChat: vi.fn(),
   rememberRecentChatWorkspace: vi.fn(),
   rememberQuickChatCredential: vi.fn(),
+  fetch: vi.fn(),
 }))
 
 vi.mock('../contexts/workspaces-context', () => ({
@@ -117,6 +118,7 @@ let workspaces: Workspace[]
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  vi.stubGlobal('fetch', mocks.fetch)
   await i18n.changeLanguage('en')
   workspaces = [chatWorkspace()]
   mocks.useWorkspaces.mockImplementation(() => context(workspaces))
@@ -183,9 +185,21 @@ beforeEach(async () => {
   })
   mocks.rememberRecentChatWorkspace.mockResolvedValue(undefined)
   mocks.rememberQuickChatCredential.mockResolvedValue(undefined)
+  mocks.fetch.mockImplementation((url: string) => {
+    if (url === '/api/openrouter-analytics') {
+      return Promise.resolve({ ok: true, json: async () => ({ configured: true }) })
+    }
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ data: { data: [{ total_usage: '1.2345' }, { total_usage: '0.1000' }] } }),
+    })
+  })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 describe('ChatLandingPage polling stability', () => {
   it('does not re-run credential detection when a poll replaces the Workspace object with the same id', async () => {
@@ -324,5 +338,15 @@ describe('ChatLandingPage AI source disclosure', () => {
     expect(await screen.findByLabelText('Model gemini-3.1-pro-preview')).toBeTruthy()
     expect(screen.queryByLabelText('Model deepseek-v3.2')).toBeNull()
     expect(mocks.detectWorkspaceCredential).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('ChatLandingPage OpenRouter cost', () => {
+  it('shows the configured OpenRouter total and allows a refresh', async () => {
+    render(<ChatLandingPage spec={{ params: { targetWsId: 'chat-1' } }} />)
+
+    expect(await screen.findByText('OpenRouter · $1.3345 / 30d')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh OpenRouter cost' }))
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(4))
   })
 })
