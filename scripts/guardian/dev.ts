@@ -195,7 +195,11 @@ async function main(): Promise<void> {
     name: 'connector',
     command: 'tsx',
     args: buildTsxWatchArgs('services/connector/src/main.ts', CONNECTOR_BACKEND_WATCH_INCLUDES, process.env),
-    env: { ...baseEnv, OPENALICE_CONNECTOR_PORT: String(ports.connectorPort) },
+    env: {
+      ...baseEnv,
+      OPENALICE_CONNECTOR_PORT: String(ports.connectorPort),
+      OPENALICE_URL: `http://127.0.0.1:${ports.webPort}`,
+    },
     prefixLogs: true,
   }
   let connector: OptionalServiceController | null = null
