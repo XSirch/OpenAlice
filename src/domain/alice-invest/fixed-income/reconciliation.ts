@@ -45,6 +45,7 @@ export function reconcilePluggyFixedIncomeCustody(snapshot: CustodySnapshot, def
       product: definition.product,
       investedAmountBRL,
       currentAmountBRL,
+      ...(dateOnly(custody.acquiredAt ?? '') ? { acquiredDate: dateOnly(custody.acquiredAt ?? '') } : {}),
       custodyAsOf,
       source: definition.source,
     }))

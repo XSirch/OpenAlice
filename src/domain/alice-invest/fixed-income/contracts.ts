@@ -66,6 +66,8 @@ export const fixedIncomePositionSchema = z.object({
   currentAmountBRL: nonnegativeDecimalString,
   marketValueBRL: nonnegativeDecimalString.optional(),
   redemptionAmountBRL: nonnegativeDecimalString.optional(),
+  /** Investor acquisition date when the custody provider can establish it. */
+  acquiredDate: dateOnly.optional(),
   custodyAsOf: dateOnly,
   source: z.object({ provider: z.string().trim().min(1).max(64), positionId: z.string().trim().min(1).max(256) }).strict(),
 }).strict().superRefine((position, context) => {
