@@ -1907,6 +1907,216 @@
           "workflow_url": "https://github.com/XSirch/OpenAlice/actions/runs/29610105448"
         }
       ]
+    },
+    {
+      "id": "AINV-P12",
+      "title": "Dados oficiais e proveniência Brasil",
+      "tasks": [
+        {
+          "id": "AINV-T1200",
+          "title": "Definir contratos, licença, atraso e data-base para fontes brasileiras",
+          "status": "pending",
+          "depends_on": ["AINV-T610A"],
+          "scope": ["src/domain/market-data", "docs/market-data-architecture.md", "docs/alice-invest-security.md"],
+          "acceptance_criteria": ["Catalogar BCB/SGS, CVM, B3/fornecedor licenciado e fontes de eventos com frequência, licença, atraso, revisão e limite de uso", "Cada valor mostrado carrega fonte, data-base, horário de coleta e classificação realtime/delayed/end-of-day", "Nenhuma fonte muda b3_signals ou execution_enabled"],
+          "validation": ["Testes de schema para proveniência, freshness e revisão", "Revisão de licença e termos antes de ativar cada conector"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1201",
+          "title": "Integrar fundamentos e documentos oficiais da CVM",
+          "status": "pending",
+          "depends_on": ["AINV-T1200"],
+          "scope": ["src/domain/market-data", "src/webui/routes", "ui/src"],
+          "acceptance_criteria": ["Importar e normalizar DFP, ITR, composição de capital e metadados de companhias abertas", "Exibir competência do demonstrativo, data de publicação, versão e link de origem", "Manter BRAPI como cotação complementar, sem apresentar fundamentos de fontes diferentes como equivalentes"],
+          "validation": ["Fixtures públicas de ao menos PETR4 e VALE3", "Typecheck e testes de parsing, revisão e fallback sem rede"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1202",
+          "title": "Integrar séries macroeconômicas do Banco Central com revisões",
+          "status": "pending",
+          "depends_on": ["AINV-T1200"],
+          "scope": ["src/domain/market-data", "src/webui/routes", "ui/src"],
+          "acceptance_criteria": ["Consumir Selic, CDI quando disponível, IPCA, câmbio e séries selecionadas pelo identificador oficial", "Persistir observação, data-base, data de coleta e revisão sem sobrescrever histórico silenciosamente", "Exibir indisponibilidade e dado defasado de forma explícita"],
+          "validation": ["Fixtures SGS e testes de revisão/freshness", "Captura externa sem segredo de ao menos uma série por categoria"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1203",
+          "title": "Criar adaptador de eventos corporativos e proventos brasileiros",
+          "status": "pending",
+          "depends_on": ["AINV-T1200"],
+          "scope": ["src/domain/market-data", "src/domain/alice-invest", "ui/src"],
+          "acceptance_criteria": ["Normalizar provento, data-com, data-ex, pagamento, grupamento, desdobramento, subscrição e fato relevante", "Identificar a fonte/licença de cada evento e nunca inventar evento ausente", "Dedupe por emissor, instrumento, tipo, competência e revisão"],
+          "validation": ["Fixtures públicas com provento e evento societário", "Teste de dedupe e de alteração de evento já publicado"],
+          "readiness_impact": "none"
+        }
+      ]
+    },
+    {
+      "id": "AINV-P13",
+      "title": "Renda fixa brasileira, liquidez e cobertura FGC",
+      "tasks": [
+        {
+          "id": "AINV-T1210",
+          "title": "Normalizar posições brasileiras de renda fixa por emissor e produto",
+          "status": "pending",
+          "depends_on": ["AINV-T1200", "AINV-T500"],
+          "scope": ["src/domain/alice-invest", "services/uta", "src/core"],
+          "acceptance_criteria": ["Representar emissor, conglomerado, produto, indexador, taxa, vencimento, liquidez, valor aplicado e valor atual", "Distinguir produtos cobertos e não cobertos pelo FGC sem inferir elegibilidade ausente", "Usar Decimal para valores e preservar data-base da custódia"],
+          "validation": ["Testes de schema para CDB, LCI/LCA, Tesouro, fundos, debêntures, CRI e CRA", "Reconciliação com uma custódia Pluggy redigida"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1211",
+          "title": "Calcular exposição e concentração FGC por conglomerado",
+          "status": "pending",
+          "depends_on": ["AINV-T1210"],
+          "scope": ["src/domain/alice-invest", "src/webui/routes", "ui/src"],
+          "acceptance_criteria": ["Somar somente instrumentos elegíveis por CPF/CNPJ e conglomerado", "Exibir cobertura estimada, parcela descoberta e aviso de que é apoio à decisão, não confirmação do FGC", "Aplicar os limites configuráveis vigentes e apresentar a referência normativa/data de vigência"],
+          "validation": ["Casos de limite por conglomerado, produtos não elegíveis e teto agregado", "Revisão manual contra regra FGC publicada"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1212",
+          "title": "Exibir escada de vencimentos, liquidez e taxa líquida de renda fixa",
+          "status": "pending",
+          "depends_on": ["AINV-T1210", "AINV-T1202"],
+          "scope": ["src/domain/alice-invest", "ui/src"],
+          "acceptance_criteria": ["Agrupar vencimentos e liquidez por faixas configuráveis", "Comparar retorno bruto/líquido contra CDI ou indexador informado, preservando premissas", "Separar marcação a mercado de valor de resgate quando ambos existirem"],
+          "validation": ["Testes de cálculo Decimal e snapshots de UI", "Verificação de arredondamento e de dados sem taxa ou vencimento"],
+          "readiness_impact": "none"
+        }
+      ]
+    },
+    {
+      "id": "AINV-P14",
+      "title": "Apuração e exportação tributária brasileira",
+      "tasks": [
+        {
+          "id": "AINV-T1220",
+          "title": "Definir escopo tributário, premissas e limites de responsabilidade",
+          "status": "pending",
+          "depends_on": ["AINV-T1210"],
+          "scope": ["docs/alice-invest-tax.md", "src/domain/alice-invest"],
+          "acceptance_criteria": ["Documentar escopo por classe, regras parametrizáveis, fontes necessárias e hipóteses não cobertas", "Rotular toda saída como estimativa para conferência, sem envio de declaração ou pagamento", "Proibir recomendação tributária individual e ações financeiras automáticas"],
+          "validation": ["Revisão de cenários e lacunas por contador ou consultor tributário indicado pelo proprietário", "Testes de configuração fail-closed quando faltar dado essencial"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1221",
+          "title": "Importar notas de corretagem e manter razão auditável de preço médio",
+          "status": "pending",
+          "depends_on": ["AINV-T1220"],
+          "scope": ["src/domain/alice-invest", "src/migrations", "src/webui/routes", "ui/src"],
+          "acceptance_criteria": ["Importar arquivos suportados com confirmação antes de persistir", "Registrar operação, quantidade, preço, taxas, impostos, origem e hash sem duplicar notas", "Calcular preço médio por ativo e mercado com trilha de auditoria"],
+          "validation": ["Fixtures anonimizadas de notas B3 e testes de dedupe", "Migração idempotente, typecheck e testes de arredondamento"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1222",
+          "title": "Estimar resultado e tributos por classe de ativo sem declarar ou pagar",
+          "status": "pending",
+          "depends_on": ["AINV-T1221", "AINV-T1220"],
+          "scope": ["src/domain/alice-invest", "ui/src"],
+          "acceptance_criteria": ["Separar ações/ETFs/FIIs, renda fixa, fundos e cripto por regras e dados disponíveis", "Exibir eventos não apuráveis, prejuízos e premissas em vez de estimar silenciosamente", "Não criar DARF, pagamento, ordem ou integração com órgão fiscal"],
+          "validation": ["Casos determinísticos de ganho, perda, isenção configurada e dados incompletos", "Revisão humana das fórmulas antes de disponibilizar o recurso"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1223",
+          "title": "Exportar relatório tributário auditável para conferência",
+          "status": "pending",
+          "depends_on": ["AINV-T1222"],
+          "scope": ["src/webui/routes", "ui/src", "docs/alice-invest-tax.md"],
+          "acceptance_criteria": ["Gerar CSV/PDF com período, fontes, premissas, operações e avisos", "Mascarar identificadores sensíveis por padrão e nunca incluir credenciais", "Permitir reconciliação por nota/custódia sem modificar os dados de origem"],
+          "validation": ["Snapshot de exportação e inspeção de redaction", "Teste de autorização do download"],
+          "readiness_impact": "none"
+        }
+      ]
+    },
+    {
+      "id": "AINV-P15",
+      "title": "Eventos, proventos e retorno total",
+      "tasks": [
+        {
+          "id": "AINV-T1230",
+          "title": "Associar eventos corporativos às posições e à carteira",
+          "status": "pending",
+          "depends_on": ["AINV-T1203", "AINV-T1221"],
+          "scope": ["src/domain/alice-invest", "src/webui/routes"],
+          "acceptance_criteria": ["Relacionar eventos ao instrumento correto, inclusive códigos antigos quando mapeados", "Exibir confiança e origem; eventos ambíguos exigem revisão humana", "Não alterar preço médio nem custódia sem evento confirmado"],
+          "validation": ["Fixtures de provento, grupamento e subscrição", "Teste de mapeamento e evento ambíguo"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1231",
+          "title": "Criar calendário brasileiro de proventos e eventos relevantes",
+          "status": "pending",
+          "depends_on": ["AINV-T1230"],
+          "scope": ["ui/src", "src/webui/routes", "src/domain/alice-invest"],
+          "acceptance_criteria": ["Mostrar data-com, ex-data, pagamento, tipo, valor e fonte por posição", "Permitir filtros por carteira e janela temporal", "Distinguir evento anunciado, confirmado, revisado e pago"],
+          "validation": ["Teste de ordenação, timezone Brasil e revisão de evento", "Walkthrough de UI com dados fixture"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1232",
+          "title": "Calcular retorno total separando preço, proventos e aportes",
+          "status": "pending",
+          "depends_on": ["AINV-T1230", "AINV-T1221"],
+          "scope": ["src/domain/alice-invest", "ui/src"],
+          "acceptance_criteria": ["Separar retorno por preço, proventos, custos e aportes/saques", "Exibir períodos e dados-base usados no cálculo", "Não comparar retorno com benchmark sem declarar metodologia"],
+          "validation": ["Casos de aporte, venda parcial, provento e desdobramento", "Testes Decimal e snapshots de gráfico"],
+          "readiness_impact": "none"
+        }
+      ]
+    },
+    {
+      "id": "AINV-P16",
+      "title": "Cenário macro brasileiro e alertas contextuais",
+      "tasks": [
+        {
+          "id": "AINV-T1240",
+          "title": "Criar snapshot macro Brasil com histórico de revisões",
+          "status": "pending",
+          "depends_on": ["AINV-T1202"],
+          "scope": ["src/domain/market-data", "src/core", "ui/src"],
+          "acceptance_criteria": ["Consolidar Selic, inflação, câmbio, indicadores selecionados e calendário em um snapshot versionado", "Preservar série original e revisão, com horário de coleta e fonte", "Cache persistente reduz chamadas sem ocultar dado vencido"],
+          "validation": ["Testes de cache, expiração, revisão e indisponibilidade", "Captura externa sem segredo e inspeção visual de data-base"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1241",
+          "title": "Relacionar cenário macro à exposição da carteira",
+          "status": "pending",
+          "depends_on": ["AINV-T1240", "AINV-T1212", "AINV-T1232"],
+          "scope": ["src/domain/alice-invest", "ui/src"],
+          "acceptance_criteria": ["Exibir exposição explicável a inflação, juros, câmbio, liquidez e concentração", "Usar linguagem de cenário e sensibilidade, não previsão determinística ou recomendação de ordem", "Listar ativos e premissas que contribuíram para cada indicador"],
+          "validation": ["Fixtures de carteira e testes de explicabilidade", "Revisão de limites de linguagem financeira"],
+          "readiness_impact": "none"
+        },
+        {
+          "id": "AINV-T1242",
+          "title": "Entregar alertas brasileiros contextualizados e acionáveis",
+          "status": "pending",
+          "depends_on": ["AINV-T1211", "AINV-T1231", "AINV-T1241"],
+          "scope": ["src/domain/alice-invest", "services/connector", "ui/src"],
+          "acceptance_criteria": ["Alertar concentração FGC, vencimento, liquidez, evento societário e dado macro revisado", "Toda notificação mostra fonte, data-base, confiança e link para explicação", "Deduplicar alertas e manter telegram_inbound_enabled/notifications sob kill switches; execução permanece false"],
+          "validation": ["Testes de dedupe, stale, kill switch e redaction", "E2E em Inbox antes de qualquer entrega externa"],
+          "readiness_impact": "paper_alerts only"
+        },
+        {
+          "id": "AINV-T1243",
+          "title": "Validar experiência Brasil-first e observabilidade do pacote",
+          "status": "pending",
+          "depends_on": ["AINV-T1201", "AINV-T1212", "AINV-T1223", "AINV-T1232", "AINV-T1242"],
+          "scope": ["docs/alice-invest-validation-report.md", "ui/src", "src/domain/alice-invest"],
+          "acceptance_criteria": ["Validar uma carteira brasileira diversificada sem credenciais expostas", "Demonstrar dados-base, cache, falhas e estados vazios em cada painel", "Confirmar global not_ready, sinais B3/cripto research_only e execution_enabled false"],
+          "validation": ["Matriz local completa, walkthrough de UI e evidência externa somente para fontes autorizadas"],
+          "readiness_impact": "none"
+        }
+      ]
     }
   ],
   "status_definitions": {
