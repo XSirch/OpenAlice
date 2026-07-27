@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import type { CustodySnapshot } from '../api/open-finance'
+import type { CustodySnapshot, FgcExposure } from '../api/open-finance'
 import { fmt, fmtNum } from '../lib/format'
 
 export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (snapshot: CustodySnapshot | null) => void }) {
@@ -10,6 +10,7 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
   const [clientSecret, setClientSecret] = useState('')
   const [itemIds, setItemIds] = useState<string[]>([])
   const [snapshot, setSnapshot] = useState<CustodySnapshot | null>(null)
+  const [fgc, setFgc] = useState<FgcExposure | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const total = useMemo(() => snapshot?.positions.reduce((sum, position) => sum + (position.currency === 'BRL' ? position.value ?? 0 : 0), 0) ?? 0, [snapshot])
@@ -22,8 +23,8 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
       setItemIds(config.pluggy.itemIds)
       if (config.pluggy.enabled && config.pluggy.configured) {
         const next = await api.openFinance.custody()
-        setSnapshot(next); onSnapshotChange?.(next)
-      } else onSnapshotChange?.(null)
+        setSnapshot(next); onSnapshotChange?.(next); setFgc(await api.openFinance.fgc())
+      } else { onSnapshotChange?.(null); setFgc(null) }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load Open Finance custody.') }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -37,12 +38,12 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
       setClientId(''); setClientSecret('')
       if (config.pluggy.enabled && config.pluggy.configured) {
         const next = await api.openFinance.custody()
-        setSnapshot(next); onSnapshotChange?.(next)
-      } else { setSnapshot(null); onSnapshotChange?.(null) }
+        setSnapshot(next); onSnapshotChange?.(next); setFgc(await api.openFinance.fgc())
+      } else { setSnapshot(null); setFgc(null); onSnapshotChange?.(null) }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save Pluggy settings.') }
     finally { setBusy(false) }
   }
-  const refresh = async () => { setBusy(true); setError(null); try { const next = await api.openFinance.custody(); setSnapshot(next); onSnapshotChange?.(next) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
+  const refresh = async () => { setBusy(true); setError(null); try { const next = await api.openFinance.custody(); setSnapshot(next); onSnapshotChange?.(next); setFgc(await api.openFinance.fgc()) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
 
   return (
     <section className="border border-border rounded-lg bg-secondary p-5" aria-label="MeuPluggy account settings">
@@ -60,6 +61,12 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
       <label className="mt-4 flex items-center gap-2 text-[12px] text-muted-foreground"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} /> Enable read-only custody sync</label>
       <div className="mt-4 flex items-center gap-2"><button className="btn-primary text-[12px]" disabled={busy || (!configured && (!clientId || !clientSecret)) || (enabled && itemIds.every((id) => !id.trim()))} onClick={() => void save()}>{busy ? 'Saving...' : configured ? 'Update' : 'Save and connect'}</button>{configured && enabled && <button className="btn-secondary-sm" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing...' : 'Refresh custody'}</button>}</div>
       {error && <p role="alert" className="mt-3 text-[12px] text-destructive">{error}</p>}
+      {fgc && <div className="mt-5 border-t border-border pt-4" aria-label="FGC estimated coverage">
+        <div className="flex items-center justify-between gap-3"><div><h3 className="text-[12px] font-semibold text-foreground">FGC estimated coverage</h3><p className="mt-1 text-[11px] text-muted-foreground">Effective from {new Date(`${fgc.policy.effectiveFrom}T00:00:00`).toLocaleDateString()} · <a className="underline" href={fgc.policy.referenceUrl} target="_blank" rel="noreferrer">official reference</a></p></div><span className="text-sm font-semibold">{fmt(Number(fgc.estimatedCoverageAfterAggregateLimitBRL), 'BRL')}</span></div>
+        <div className="mt-3 grid gap-2 text-[12px] md:grid-cols-3"><span>Eligible: {fmt(Number(fgc.eligibleAmountBRL), 'BRL')}</span><span>Estimated uncovered: {fmt(Number(fgc.estimatedUncoveredBRL), 'BRL')}</span><span>Aggregate remaining: {fmt(Number(fgc.remainingAggregateLimitBRL), 'BRL')}</span></div>
+        {fgc.groups.length > 0 && <div className="mt-3 space-y-1 text-[11px] text-muted-foreground">{fgc.groups.map(group => <div key={group.conglomerate} className="flex justify-between gap-3"><span>{group.conglomerate}</span><span>{fmt(Number(group.estimatedCoveredBeforeAggregateLimitBRL), 'BRL')} covered of {fmt(Number(group.eligibleAmountBRL), 'BRL')}</span></div>)}</div>}
+        <p className="mt-3 text-[11px] text-muted-foreground">{fgc.disclaimer}</p>
+      </div>}
       {snapshot && <div className="mt-5 border-t border-border pt-4"><div className="mb-3 flex items-center justify-between"><span className="text-[12px] text-muted-foreground">{snapshot.positions.length} positions · refreshed {new Date(snapshot.fetchedAt).toLocaleString()}</span><span className="text-sm font-semibold" title="Sum of net position balances in BRL">{fmt(total, 'BRL')}</span></div><div className="mb-2 grid grid-cols-[1fr_auto_auto] gap-4 text-[10px] uppercase tracking-wide text-muted-foreground"><span>Asset</span><span>Quantity · unit value</span><span className="min-w-20 text-right">Net balance</span></div><div className="space-y-2">{snapshot.positions.map(position => <div key={position.id} className="grid grid-cols-[1fr_auto_auto] gap-4 text-[12px]"><span><span className="font-medium text-foreground">{position.code ?? position.name}</span>{position.code && <span className="ml-2 text-muted-foreground">{position.name}</span>}<span className="ml-2 text-muted-foreground">{position.institution ?? ''}</span>{position.asOf && <span className="block text-[11px] text-muted-foreground">Base date: {new Date(position.asOf).toLocaleDateString()}</span>}</span><span className="text-right text-muted-foreground">{position.quantity == null ? '—' : fmtNum(position.quantity)}{position.unitValue == null ? '' : <span className="block text-[11px]">{fmt(position.unitValue, position.currency)}</span>}</span><span className="min-w-20 text-right text-foreground">{position.value == null ? '—' : fmt(position.value, position.currency)}{position.grossAmount != null && position.grossAmount !== position.value && <span className="block text-[11px] text-muted-foreground">gross {fmt(position.grossAmount, position.currency)}</span>}</span></div>)}</div></div>}
     </section>
   )

@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { readFixedIncomeCustodyDefinitions, writeFixedIncomeCustodyDefinitions } from '../../core/fixed-income-custody.js'
+import { readFgcCoveragePolicy, writeFgcCoveragePolicy } from '../../core/fgc-coverage-policy.js'
 import { readOpenFinanceConfig, readPublicOpenFinanceConfig, writeOpenFinanceConfig } from '../../core/open-finance-config.js'
+import { calculateFgcExposure } from '../../domain/alice-invest/fixed-income/fgc.js'
 import { reconcilePluggyFixedIncomeCustody } from '../../domain/alice-invest/fixed-income/reconciliation.js'
 import { fetchPluggyCustody } from '../../domain/open-finance/pluggy.js'
 import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
@@ -11,6 +13,8 @@ const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optio
 export function createOpenFinanceRoutes(deps = {
   readDefinitions: readFixedIncomeCustodyDefinitions,
   writeDefinitions: writeFixedIncomeCustodyDefinitions,
+  readFgcPolicy: readFgcCoveragePolicy,
+  writeFgcPolicy: writeFgcCoveragePolicy,
   readConfig: readOpenFinanceConfig,
   fetchCustody: fetchPluggyCustody,
 }) {
@@ -48,6 +52,26 @@ export function createOpenFinanceRoutes(deps = {
         deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
       ])
       return c.json(reconcilePluggyFixedIncomeCustody(snapshot, definitions))
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    }
+  })
+  app.get('/fixed-income/fgc-policy', async (c) => c.json(await deps.readFgcPolicy()))
+  app.put('/fixed-income/fgc-policy', async (c) => {
+    try { return c.json(await deps.writeFgcPolicy(await c.req.json())) }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
+  })
+  app.get('/fixed-income/fgc', async (c) => {
+    try {
+      const config = await deps.readConfig()
+      if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
+      const [definitions, policy, snapshot] = await Promise.all([
+        deps.readDefinitions(),
+        deps.readFgcPolicy(),
+        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+      ])
+      const reconciliation = reconcilePluggyFixedIncomeCustody(snapshot, definitions)
+      return c.json({ ...calculateFgcExposure(reconciliation.positions, policy), reconciliation })
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
     }

@@ -28,10 +28,21 @@ export interface CustodySnapshot {
   fetchedAt: string
 }
 
+export interface FgcExposure {
+  groups: Array<{ conglomerate: string; eligibleAmountBRL: string; estimatedCoveredBeforeAggregateLimitBRL: string; estimatedUncoveredBRL: string }>
+  eligibleAmountBRL: string
+  estimatedCoverageAfterAggregateLimitBRL: string
+  estimatedUncoveredBRL: string
+  remainingAggregateLimitBRL: string
+  policy: { effectiveFrom: string; referenceUrl: string }
+  disclaimer: string
+}
+
 export const openFinanceApi = {
   load: (): Promise<OpenFinanceConfig> => fetchJson('/api/open-finance'),
   save: (input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<OpenFinanceConfig> =>
     fetchJson('/api/open-finance', { method: 'PUT', headers, body: JSON.stringify(input) }),
   custody: (): Promise<CustodySnapshot> => fetchJson('/api/open-finance/custody'),
+  fgc: (): Promise<FgcExposure> => fetchJson('/api/open-finance/fixed-income/fgc'),
   test: (): Promise<{ ok: boolean; positions: number }> => fetchJson('/api/open-finance/test', { method: 'POST' }),
 }
