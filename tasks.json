@@ -258,7 +258,7 @@
         {
           "id": "AINV-T116",
           "title": "Validate owner-only Telegram inbound E2E",
-          "status": "blocked",
+          "status": "done",
           "depends_on": [
             "AINV-T115",
             "AINV-T201"
@@ -270,10 +270,8 @@
             "Prove Telegram to Connector to Alice to Session to Inbox to Connector without secrets"
           ],
           "validation": [
-            "Record real external evidence without secrets"
-          ],
-          "blocked_reason": "An owner Telegram bot and linked private chat are required.",
-          "next_action": "The owner must provide a dedicated bot, bind one private chat, and authorize an isolated end-to-end inbound run."
+            "2026-07-27 production run: a linked private owner chat sent a non-financial message and received one visible reply; Connector journal recorded the Telegram envelope completed in one attempt without secrets."
+          ]
         },
         {
           "id": "AINV-T117",

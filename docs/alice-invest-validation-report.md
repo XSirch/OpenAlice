@@ -2,6 +2,17 @@
 
 ## Audit baseline
 
+## Production Telegram inbound E2E — 2026-07-27
+
+- A private chat linked to the configured Telegram owner sent one non-financial
+  message and received one visible response.
+- The production Connector health endpoint reported the Telegram adapter
+  healthy and owner-bound. Its inbound journal recorded the event as completed
+  with one attempt and a sub-second Connector-to-Alice handoff.
+- No token, chat ID, message body, account data, or execution capability was
+  captured. This closes `AINV-T116` only; restart recovery, duplicate delivery,
+  retry, and outage tasks remain blocked pending separate controlled runs.
+
 ## Current reconciliation — 2026-07-27
 
 - Current backlog: 13 `done`, 55 `validated`, and 22 `blocked`; there are no
