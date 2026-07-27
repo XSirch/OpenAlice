@@ -89,6 +89,14 @@ export interface MacroPoint {
   value: number
 }
 
+export interface ReferenceSeriesProvenance {
+  provider: string
+  sourceId?: string
+  classification: 'official_reference' | 'delayed_market' | 'end_of_day' | 'derived'
+  dataAsOf: string | null
+  collectedAt: string
+}
+
 export interface MacroSeriesCard {
   id: string
   label: string
@@ -97,6 +105,7 @@ export interface MacroSeriesCard {
   latest: number | null
   latestDate: string | null
   change: number | null
+  provenance?: ReferenceSeriesProvenance
 }
 
 export interface MacroBoard {

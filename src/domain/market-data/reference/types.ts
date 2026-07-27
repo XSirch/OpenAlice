@@ -81,6 +81,20 @@ export interface MacroPoint {
   value: number
 }
 
+/** Provenance carried by an individual reference series.  A board can mix
+ * official reference rates with delayed market closes, so the board-level
+ * provider label alone is not enough for a Brazilian-market decision. */
+export interface ReferenceSeriesProvenance {
+  provider: string
+  /** Stable upstream identifier, such as a Banco Central SGS series id. */
+  sourceId?: string
+  classification: 'official_reference' | 'delayed_market' | 'end_of_day' | 'derived'
+  /** Date represented by the latest observation, never the fetch time. */
+  dataAsOf: string | null
+  /** ISO time at which OpenAlice collected the series. */
+  collectedAt: string
+}
+
 /** One dashboard card — a curated FRED series (or a derived one, e.g.
  *  CPI YoY computed from the CPIAUCSL index). */
 export interface MacroSeriesCard {
@@ -95,6 +109,8 @@ export interface MacroSeriesCard {
   latestDate: string | null
   /** Latest minus previous observation (same unit as the series). */
   change: number | null
+  /** Optional for generic global boards; required by Brazil-oriented producers. */
+  provenance?: ReferenceSeriesProvenance
 }
 
 export interface MacroBoard {

@@ -34,6 +34,12 @@ describe('Brazil market board', () => {
     expect(board.cards.find((entry) => entry.id === 'CDI')?.latest).toBeCloseTo(16.32, 1)
     expect(board.cards.find((entry) => entry.id === 'IPCA_12M')?.latest).toBeCloseTo(12.68, 2)
     expect(board.cards.find((entry) => entry.id === 'IBOV')?.latestDate).toBe('2026-01-03')
+    expect(board.cards.find((entry) => entry.id === 'SELIC')?.provenance).toMatchObject({
+      provider: 'Banco Central do Brasil', sourceId: 'SGS 432', classification: 'official_reference', dataAsOf: '2026-01-02',
+    })
+    expect(board.cards.find((entry) => entry.id === 'IBOV')?.provenance).toMatchObject({
+      provider: 'Yahoo Finance', sourceId: '^BVSP', classification: 'delayed_market', dataAsOf: '2026-01-03',
+    })
   })
 
   it('returns the available cards and makes a failed source explicit', async () => {

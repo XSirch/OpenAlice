@@ -8,10 +8,13 @@ import type { MacroSeriesCard } from '../../api/reference'
  */
 export function SeriesCard({ card, label, emptyText }: { card: MacroSeriesCard; label: string; emptyText: string }) {
   const empty = card.points.length === 0
+  const provenance = card.provenance
+    ? `${card.provenance.provider}${card.provenance.sourceId ? ` · ${card.provenance.sourceId}` : ''} · ${classificationLabel(card.provenance.classification)} · coletado ${new Date(card.provenance.collectedAt).toLocaleString('pt-BR')}`
+    : card.id
   return (
     <div className="min-w-0 border border-border rounded-md bg-secondary/40 px-3 py-2.5 flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[12px] text-muted-foreground truncate" title={card.id}>{label}</span>
+        <span className="text-[12px] text-muted-foreground truncate" title={provenance}>{label}</span>
         <span className="shrink-0 text-[10px] text-muted-foreground">{card.latestDate ?? ''}</span>
       </div>
       <div className="flex min-w-0 items-end justify-between gap-2">
@@ -35,6 +38,15 @@ export function SeriesCard({ card, label, emptyText }: { card: MacroSeriesCard; 
       {empty && <span className="text-[11px] text-muted-foreground">{emptyText}</span>}
     </div>
   )
+}
+
+function classificationLabel(value: NonNullable<MacroSeriesCard['provenance']>['classification']): string {
+  switch (value) {
+    case 'official_reference': return 'referência oficial'
+    case 'delayed_market': return 'mercado atrasado'
+    case 'end_of_day': return 'fechamento'
+    case 'derived': return 'calculado a partir da série oficial'
+  }
 }
 
 export function fmtSeriesValue(card: MacroSeriesCard, v: number | null): string {

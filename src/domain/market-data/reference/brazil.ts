@@ -7,7 +7,7 @@
  */
 
 import type { IndexClientLike } from '../client/types.js'
-import type { BrazilMarketBoard, MacroPoint, MacroSeriesCard, MacroUnit } from './types.js'
+import type { BrazilMarketBoard, MacroPoint, MacroSeriesCard, MacroUnit, ReferenceSeriesProvenance } from './types.js'
 
 const BCB_SGS = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs'
 const MAX_POINTS = 90
@@ -60,7 +60,7 @@ async function sgsSeries(id: number, lookbackDays: number): Promise<MacroPoint[]
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
-function card(id: string, label: string, unit: MacroUnit, points: MacroPoint[]): MacroSeriesCard {
+function card(id: string, label: string, unit: MacroUnit, points: MacroPoint[], provenance?: Omit<ReferenceSeriesProvenance, 'dataAsOf'>): MacroSeriesCard {
   const recent = points.slice(-MAX_POINTS)
   const latest = recent.at(-1) ?? null
   const previous = recent.at(-2) ?? null
@@ -72,6 +72,7 @@ function card(id: string, label: string, unit: MacroUnit, points: MacroPoint[]):
     latest: latest?.value ?? null,
     latestDate: latest?.date ?? null,
     change: latest && previous ? latest.value - previous.value : null,
+    ...(provenance ? { provenance: { ...provenance, dataAsOf: latest?.date ?? null } } : {}),
   }
 }
 
@@ -95,7 +96,7 @@ function rollingIpca12m(points: MacroPoint[]): MacroPoint[] {
   })
 }
 
-async function b3Indices(indexClient: IndexClientLike): Promise<MacroSeriesCard[]> {
+async function b3Indices(indexClient: IndexClientLike, collectedAt: string): Promise<MacroSeriesCard[]> {
   const start = new Date()
   start.setDate(start.getDate() - 120)
   const rows = await indexClient.getHistorical({
@@ -110,18 +111,19 @@ async function b3Indices(indexClient: IndexClientLike): Promise<MacroSeriesCard[
       : [])
     .sort((a, b) => a.date.localeCompare(b.date))
   return [
-    card('IBOV', 'Ibovespa', 'index', rowsFor('^BVSP')),
-    card('IFIX', 'IFIX', 'index', rowsFor('^IFIX')),
+    card('IBOV', 'Ibovespa', 'index', rowsFor('^BVSP'), { provider: 'Yahoo Finance', sourceId: '^BVSP', classification: 'delayed_market', collectedAt }),
+    card('IFIX', 'IFIX', 'index', rowsFor('^IFIX'), { provider: 'Yahoo Finance', sourceId: '^IFIX', classification: 'delayed_market', collectedAt }),
   ]
 }
 
 export async function fetchBrazilMarketBoard(indexClient: IndexClientLike): Promise<BrazilMarketBoard> {
+  const collectedAt = new Date().toISOString()
   const results = await Promise.allSettled([
     sgsSeries(BCB_SERIES.selic.id, BCB_SERIES.selic.lookbackDays),
     sgsSeries(BCB_SERIES.cdi.id, BCB_SERIES.cdi.lookbackDays),
     sgsSeries(BCB_SERIES.ipca.id, BCB_SERIES.ipca.lookbackDays),
     sgsSeries(BCB_SERIES.usdBrl.id, BCB_SERIES.usdBrl.lookbackDays),
-    b3Indices(indexClient),
+    b3Indices(indexClient, collectedAt),
   ])
   const errors: Record<string, string> = {}
   const value = <T>(result: PromiseSettledResult<T>, key: string, fallback: T): T => {
@@ -138,10 +140,10 @@ export async function fetchBrazilMarketBoard(indexClient: IndexClientLike): Prom
   ]
   return {
     cards: [
-      card('SELIC', BCB_SERIES.selic.label, 'percent', selic),
-      card('CDI', BCB_SERIES.cdi.label, 'percent', annualizeCdi(cdi)),
-      card('IPCA_12M', BCB_SERIES.ipca.label, 'percent', rollingIpca12m(ipca)),
-      card('USDBRL', BCB_SERIES.usdBrl.label, 'brl', usdBrl),
+      card('SELIC', BCB_SERIES.selic.label, 'percent', selic, { provider: 'Banco Central do Brasil', sourceId: 'SGS 432', classification: 'official_reference', collectedAt }),
+      card('CDI', BCB_SERIES.cdi.label, 'percent', annualizeCdi(cdi), { provider: 'Banco Central do Brasil', sourceId: 'SGS 12', classification: 'derived', collectedAt }),
+      card('IPCA_12M', BCB_SERIES.ipca.label, 'percent', rollingIpca12m(ipca), { provider: 'Banco Central do Brasil', sourceId: 'SGS 433', classification: 'derived', collectedAt }),
+      card('USDBRL', BCB_SERIES.usdBrl.label, 'brl', usdBrl, { provider: 'Banco Central do Brasil', sourceId: 'SGS 1', classification: 'official_reference', collectedAt }),
       ...indices,
     ],
     ...(Object.keys(errors).length ? { errors } : {}),
