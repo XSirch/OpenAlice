@@ -160,7 +160,15 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
     context.commands.register('new', async ({ userId, chatId, reply }) => {
       if (!this.isOwner(userId)) return reply('This command is only available to the linked owner.')
       if (!chatId) throw new Error('Telegram private chat ID is missing')
-      await context.rotateConversation(this.id, userId, chatId)
+      try {
+        await context.rotateConversation(this.id, userId, chatId)
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('external conversation is not bound')) {
+          await reply('There is no linked bot conversation to restart yet. Telegram currently delivers Inbox notifications; use the OpenAlice web app to start a new chat.')
+          return
+        }
+        throw error
+      }
       await reply('Started a new conversation. Previous history is retained.')
     })
   }
