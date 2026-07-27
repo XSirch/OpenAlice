@@ -13,6 +13,8 @@ export interface CvmStatementLine {
   value: number
 }
 
+export interface CvmIssuerMapping { ticker: string; cvmCode: string; company: string; updatedAt: string | null }
+
 export function cvmArchiveUrl(kind: CvmStatementKind, year: number): string {
   if (!Number.isInteger(year) || year < 2010 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM archive year.')
   return `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/${kind}/DADOS/${kind.toLowerCase()}_cia_aberta_${year}.zip`
@@ -28,6 +30,14 @@ export function parseCvmStatementRow(row: Record<string, string>): CvmStatementL
     filedAt: iso(row.DT_RECEB) ?? null, statement: row.GRUP_DFP,
     accountCode: row.CD_CONTA, account: row.DS_CONTA ?? row.CD_CONTA, value,
   }
+}
+
+/** FCA rows are the authoritative ticker-to-emitter join; symbols absent from
+ * the public row remain unresolved instead of falling back to name matching. */
+export function parseCvmIssuerMapping(row: Record<string, string>): CvmIssuerMapping | null {
+  const ticker = (row.TP_MERC ?? row.CD_NEGOCIACAO ?? row.TICKER ?? '').trim().toUpperCase()
+  if (!/^[A-Z]{4}\d{1,2}[A-Z]?$/.test(ticker) || !row.CD_CVM || !row.DENOM_CIA) return null
+  return { ticker, cvmCode: row.CD_CVM, company: row.DENOM_CIA, updatedAt: iso(row.DT_REFER) ?? iso(row.DT_RECEB) ?? null }
 }
 
 function iso(value: string | undefined): string | null {
