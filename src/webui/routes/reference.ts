@@ -11,15 +11,16 @@
 import { Hono } from 'hono'
 import type { EngineContext } from '../../core/types.js'
 import { readBrazilMacroSnapshots } from '../../core/brazil-macro-snapshots.js'
-import { fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
+import { fetchCvmIssuerMapping, fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
 
 interface ReferenceRouteDeps {
   readBrazilMacroSnapshots: typeof readBrazilMacroSnapshots
   fetchCvmStatementLines: typeof fetchCvmStatementLines
+  fetchCvmIssuerMapping: typeof fetchCvmIssuerMapping
 }
 
 export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<ReferenceRouteDeps> = {}): Hono {
-  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, ...overrides }
+  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, fetchCvmIssuerMapping, ...overrides }
   const app = new Hono()
 
   // GET /api/reference/movers → gainers / losers / active board
@@ -122,6 +123,17 @@ export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<Ref
     if (!cvmCode || !kind || !Number.isInteger(year)) return c.json({ error: 'cvmCode, kind (DFP or ITR), and year are required.' }, 400)
     try {
       return c.json({ lines: await deps.fetchCvmStatementLines({ cvmCode, kind, year } satisfies CvmStatementFetchInput) })
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    }
+  })
+  app.get('/cvm/issuer', async (c) => {
+    const ticker = c.req.query('ticker')?.trim()
+    const year = Number(c.req.query('year'))
+    if (!ticker || !Number.isInteger(year)) return c.json({ error: 'ticker and year are required.' }, 400)
+    try {
+      const issuer = await deps.fetchCvmIssuerMapping(ticker, year)
+      return issuer ? c.json({ issuer }) : c.json({ error: 'No unambiguous official FCA issuer mapping was found.' }, 404)
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
     }

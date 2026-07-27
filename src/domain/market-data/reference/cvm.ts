@@ -21,6 +21,11 @@ export function cvmArchiveUrl(kind: CvmStatementKind, year: number): string {
   return `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/${kind}/DADOS/${kind.toLowerCase()}_cia_aberta_${year}.zip`
 }
 
+export function cvmFcaArchiveUrl(year: number): string {
+  if (!Number.isInteger(year) || year < 2010 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM FCA archive year.')
+  return `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/FCA/DADOS/fca_cia_aberta_${year}.zip`
+}
+
 export interface CvmStatementFetchInput { kind: CvmStatementKind; year: number; cvmCode: string }
 interface CvmArchiveFile { path: string; buffer(): Promise<Buffer> }
 
@@ -34,7 +39,7 @@ export async function fetchCvmStatementLines(input: CvmStatementFetchInput): Pro
   if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for ${input.kind} ${input.year}.`)
   const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
   const files = archive.files.filter((file) => /_(BPA|BPP|DRE|DFC|DVA|DMPL)_(con|ind)_\d{4}\.csv$/i.test(file.path))
-  return extractCvmStatementLines(await Promise.all(files.map(async (file) => ({ path: file.path, text: (await file.buffer()).toString('utf8') }))), input.cvmCode)
+  return extractCvmStatementLines(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), input.cvmCode)
 }
 
 /** Parse CSV fixture/archive files without retaining unrelated issuer rows. */
@@ -49,6 +54,44 @@ export function extractCvmStatementLines(files: Array<{ path: string; text: stri
     }
   }
   return lines.sort((a, b) => a.referenceDate.localeCompare(b.referenceDate) || a.statement.localeCompare(b.statement) || a.accountCode.localeCompare(b.accountCode))
+}
+
+/** Read the public FCA archive and resolve one ticker only from a matching
+ * official record. Ambiguous mappings are deliberately returned as null. */
+export async function fetchCvmIssuerMapping(ticker: string, year: number): Promise<CvmIssuerMapping | null> {
+  const response = await fetch(cvmFcaArchiveUrl(year), { signal: AbortSignal.timeout(30_000) })
+  if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for FCA ${year}.`)
+  const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
+  const files = archive.files.filter((file) => /(?:^|_)cia_aberta(?:_valor_mobiliario)?_\d{4}\.csv$/i.test(file.path))
+  return extractCvmIssuerMapping(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), ticker)
+}
+
+export function extractCvmIssuerMapping(files: Array<{ path: string; text: string }>, ticker: string): CvmIssuerMapping | null {
+  const target = ticker.trim().toUpperCase()
+  const matches: CvmIssuerMapping[] = []
+  const issuersByCnpj = new Map<string, Omit<CvmIssuerMapping, 'ticker'>>()
+  for (const file of files) {
+    for (const row of parseSemicolonCsv(file.text)) {
+      const issuer = parseCvmIssuerIdentity(row)
+      const cnpj = row.CNPJ_CIA ?? row.CNPJ_Companhia
+      if (issuer && cnpj) issuersByCnpj.set(cnpj, issuer)
+    }
+  }
+  for (const file of files) {
+    for (const row of parseSemicolonCsv(file.text)) {
+      const cnpj = row.CNPJ_CIA ?? row.CNPJ_Companhia
+      const mapping = parseCvmIssuerMapping(row)
+      if (mapping?.ticker === target) matches.push(mapping)
+      const listedTicker = (row.Codigo_Negociacao ?? row.CODIGO_NEGOCIACAO ?? '').trim().toUpperCase()
+      if (listedTicker === target && cnpj) {
+        const listedIssuer = issuersByCnpj.get(cnpj)
+        if (listedIssuer) matches.push({ ...listedIssuer, ticker: listedTicker, updatedAt: iso(row.Data_Referencia) ?? listedIssuer.updatedAt })
+      }
+    }
+  }
+  const byCvmCode = new Map(matches.map((mapping) => [mapping.cvmCode, mapping]))
+  if (byCvmCode.size !== 1) return null
+  return [...byCvmCode.values()].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))[0] ?? null
 }
 
 /** Parses a semicolon CSV row from CVM's DFP/ITR statement files. */
@@ -66,9 +109,22 @@ export function parseCvmStatementRow(row: Record<string, string>): CvmStatementL
 /** FCA rows are the authoritative ticker-to-emitter join; symbols absent from
  * the public row remain unresolved instead of falling back to name matching. */
 export function parseCvmIssuerMapping(row: Record<string, string>): CvmIssuerMapping | null {
-  const ticker = (row.TICKER ?? row.CD_NEGOCIACAO ?? row.TP_MERC ?? '').trim().toUpperCase()
-  if (!/^[A-Z]{4}\d{1,2}[A-Z]?$/.test(ticker) || !row.CD_CVM || !row.DENOM_CIA) return null
-  return { ticker, cvmCode: row.CD_CVM, company: row.DENOM_CIA, updatedAt: iso(row.DT_REFER) ?? iso(row.DT_RECEB) ?? null }
+  const ticker = (row.TICKER ?? row.CD_NEGOCIACAO ?? row.Codigo_Negociacao ?? row.CODIGO_NEGOCIACAO ?? '').trim().toUpperCase()
+  const issuer = parseCvmIssuerIdentity(row)
+  if (!/^[A-Z]{4}\d{1,2}[A-Z]?$/.test(ticker) || !issuer) return null
+  return { ...issuer, ticker }
+}
+
+function parseCvmIssuerIdentity(row: Record<string, string>): Omit<CvmIssuerMapping, 'ticker'> | null {
+  const cvmCode = row.CD_CVM ?? row.Codigo_CVM
+  const company = row.DENOM_CIA ?? row.Nome_Empresarial
+  if (!cvmCode || !company) return null
+  return { cvmCode, company, updatedAt: iso(row.DT_REFER) ?? iso(row.Data_Referencia) ?? iso(row.DT_RECEB) ?? null }
+}
+
+function decodeCvmCsv(buffer: Buffer): string {
+  const utf8 = buffer.toString('utf8')
+  return utf8.includes('\uFFFD') ? buffer.toString('latin1') : utf8
 }
 
 function iso(value: string | undefined): string | null {
@@ -77,7 +133,7 @@ function iso(value: string | undefined): string | null {
 }
 
 /** RFC-4180-style quoted cells with the semicolon delimiter used by CVM. */
-function parseSemicolonCsv(text: string): Record<string, string>[] {
+export function parseSemicolonCsv(text: string): Record<string, string>[] {
   const rows: string[][] = []
   let row: string[] = []
   let cell = ''
