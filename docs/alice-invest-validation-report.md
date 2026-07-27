@@ -2,6 +2,25 @@
 
 ## Audit baseline
 
+## Current reconciliation — 2026-07-27
+
+- Current backlog: 13 `done`, 55 `validated`, and 22 `blocked`; there are no
+  remaining `pending`, `in_progress`, or merely `implemented` Alice Invest
+  tasks.
+- The current local evidence includes 82 focused Alice Invest tests, 25
+  Connector/protocol/readiness/UI tests, Connector service smoke, Connector
+  replay, and Guardian recovery smoke. The production build also passed.
+- The prior master promotion PR #74 passed its complete GitHub matrix:
+  TypeScript/build/test, Alice Invest validation, Ubuntu package smoke, and
+  Docker smoke. Its merge commit is `98b7a7d52168bd1b436b6f9f9569c2ae3ac529f8`.
+- The remaining tasks are intentionally blocked, rather than incomplete code:
+  owner-authorized Telegram and OpenRouter runs, configured read-only B3 and
+  crypto sources, and bounded real shadow observations. No fixture is treated
+  as evidence for those external/temporal requirements.
+- Readiness remains fail-closed: `global=not_ready`,
+  `fixed_income=research_only`, `b3_signals=research_only`,
+  `crypto_signals=research_only`, and `execution_enabled=false`.
+
 - Audit date: 2026-07-16
 - Audited commit before this change: `d56a7c7c9c7b6fc5755ed7ed62b45e5fcac4c661`
 - Environment: local Windows workspace; no credentials were inspected,
