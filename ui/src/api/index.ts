@@ -20,6 +20,7 @@ import { preferencesApi } from './preferences'
 import { inquiriesApi } from './inquiries'
 import { connectorsApi } from './connectors'
 import { openFinanceApi } from './open-finance'
+import { portfolioCacheApi } from './portfolio-cache'
 export const api = {
   config: configApi,
   schedule: scheduleApi,
@@ -39,6 +40,7 @@ export const api = {
   inquiries: inquiriesApi,
   connectors: connectorsApi,
   openFinance: openFinanceApi,
+  portfolioCache: portfolioCacheApi,
 }
 
 // Re-export all types for convenience
