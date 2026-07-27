@@ -80,3 +80,23 @@ export type FixedIncomePosition = z.infer<typeof fixedIncomePositionSchema>
 export function normalizeFixedIncomePosition(input: unknown): FixedIncomePosition {
   return fixedIncomePositionSchema.parse(input)
 }
+
+/** Product metadata explicitly associated with one read-only custody record. */
+export const fixedIncomeCustodyDefinitionSchema = z.object({
+  source: z.object({ provider: z.literal('pluggy'), positionId: z.string().trim().min(1).max(256) }).strict(),
+  product: fixedIncomeProductSchema,
+}).strict()
+
+export const fixedIncomeCustodyDefinitionsSchema = z.object({
+  version: z.literal(1),
+  entries: z.array(fixedIncomeCustodyDefinitionSchema).max(2_000),
+}).strict().superRefine((value, context) => {
+  const seen = new Set<string>()
+  value.entries.forEach((entry, index) => {
+    if (seen.has(entry.source.positionId)) context.addIssue({ code: 'custom', path: ['entries', index, 'source', 'positionId'], message: 'a custody position can have only one fixed-income definition' })
+    seen.add(entry.source.positionId)
+  })
+})
+
+export type FixedIncomeCustodyDefinition = z.infer<typeof fixedIncomeCustodyDefinitionSchema>
+export type FixedIncomeCustodyDefinitions = z.infer<typeof fixedIncomeCustodyDefinitionsSchema>

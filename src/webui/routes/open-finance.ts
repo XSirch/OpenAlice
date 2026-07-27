@@ -1,12 +1,19 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { readFixedIncomeCustodyDefinitions, writeFixedIncomeCustodyDefinitions } from '../../core/fixed-income-custody.js'
 import { readOpenFinanceConfig, readPublicOpenFinanceConfig, writeOpenFinanceConfig } from '../../core/open-finance-config.js'
+import { reconcilePluggyFixedIncomeCustody } from '../../domain/alice-invest/fixed-income/reconciliation.js'
 import { fetchPluggyCustody } from '../../domain/open-finance/pluggy.js'
 import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 
-export function createOpenFinanceRoutes() {
+export function createOpenFinanceRoutes(deps = {
+  readDefinitions: readFixedIncomeCustodyDefinitions,
+  writeDefinitions: writeFixedIncomeCustodyDefinitions,
+  readConfig: readOpenFinanceConfig,
+  fetchCustody: fetchPluggyCustody,
+}) {
   const app = new Hono()
   app.get('/', async (c) => c.json(await readPublicOpenFinanceConfig()))
   app.put('/', async (c) => {
@@ -23,6 +30,27 @@ export function createOpenFinanceRoutes() {
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
       return c.json(await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds))
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  app.get('/fixed-income/definitions', async (c) => c.json(await deps.readDefinitions()))
+  app.put('/fixed-income/definitions', async (c) => {
+    try {
+      return c.json(await deps.writeDefinitions(await c.req.json()))
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+    }
+  })
+  app.get('/fixed-income/reconcile', async (c) => {
+    try {
+      const config = await deps.readConfig()
+      if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
+      const [definitions, snapshot] = await Promise.all([
+        deps.readDefinitions(),
+        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+      ])
+      return c.json(reconcilePluggyFixedIncomeCustody(snapshot, definitions))
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    }
   })
   app.post('/test', async (c) => {
     try {
