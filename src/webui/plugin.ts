@@ -12,6 +12,7 @@ import { createChannelsRoutes, type SSEClient } from './routes/channels.js'
 import { createConfigRoutes, createMarketDataRoutes } from './routes/config.js'
 import { createConnectorRoutes } from './routes/connectors.js'
 import { createOpenFinanceRoutes } from './routes/open-finance.js'
+import { createOpenRouterAnalyticsRoutes } from './routes/openrouter-analytics.js'
 import { ConnectorInboundUnavailableError, createConnectorInboundRoutes } from './routes/connector-inbound.js'
 import { ConnectorInboundReceiver } from '../core/connector-inbound-receiver.js'
 import { ExternalConversationBindingStore, rotateExternalConversationBinding } from '../core/external-conversation-bindings.js'
@@ -261,6 +262,7 @@ export class WebPlugin implements Plugin {
     app.route('/api/config', createConfigRoutes({ ctx }))
     app.route('/api/connectors', createConnectorRoutes())
     app.route('/api/open-finance', createOpenFinanceRoutes())
+    app.route('/api/openrouter-analytics', createOpenRouterAnalyticsRoutes())
     app.route('/api/preferences', createPreferencesRoutes())
     app.route('/api/market-data', createMarketDataRoutes(ctx))
     app.route('/api/trading/config', createTradingConfigRoutes(ctx))

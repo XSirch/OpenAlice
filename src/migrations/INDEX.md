@@ -31,3 +31,4 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0029_alice_invest_readiness_evidence` | 0.81.0-beta | 2026-07-17 | alice-invest-readiness-evidence.json | Seed the append-only Alice Invest readiness evidence journal. |
 | `0030_alice_invest_signal_ledger` | 0.81.0-beta | 2026-07-16 | alice-invest-signals.json | Seed append-only Alice Invest signal ledger. |
 | `0031_open_finance_config` | 0.81.0-beta | 2026-07-22 | open-finance.json | Seed the Open Finance custody configuration in a disabled state. |
+| `0032_openrouter_analytics_config` | 0.84.0-beta | 2026-07-27 | openrouter-analytics.json | Seed the private OpenRouter Analytics configuration. |

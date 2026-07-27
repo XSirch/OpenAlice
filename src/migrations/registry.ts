@@ -43,6 +43,7 @@ import { migration as migration_0028_external_conversation_bindings } from './00
 import { migration as migration_0029_alice_invest_readiness_evidence } from './0029_alice_invest_readiness_evidence/index.js'
 import { migration as migration_0030_alice_invest_signal_ledger } from './0030_alice_invest_signal_ledger/index.js'
 import { migration as migration_0031_open_finance_config } from './0031_open_finance_config/index.js'
+import { migration as migration_0032_openrouter_analytics_config } from './0032_openrouter_analytics_config/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -69,4 +70,5 @@ export const REGISTRY: Migration[] = [
   migration_0029_alice_invest_readiness_evidence,
   migration_0030_alice_invest_signal_ledger,
   migration_0031_open_finance_config,
+  migration_0032_openrouter_analytics_config,
 ]
