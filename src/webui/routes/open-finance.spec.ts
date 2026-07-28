@@ -62,4 +62,11 @@ describe('open finance fixed-income routes', () => {
     expect(response.headers.get('content-disposition')).toContain('attachment')
     expect(await response.text()).not.toContain('nota-pessoal.csv')
   })
+  it('associates only confirmed cached events to ledger positions without changing the ledger', async () => {
+    const entry = { id: 'a'.repeat(64), sourceHash: 'b'.repeat(64), sourceName: 'nota.csv', sourceRow: 2, market: 'B3' as const, symbol: 'PETR4', side: 'buy' as const, tradeDate: '2026-01-02', quantity: '10', unitPriceBRL: '30', feesBRL: '0', taxesBRL: '0' }
+    const event = { id: 'c'.repeat(64), issuer: 'CVM:9512', instrument: 'PETR4', type: 'dividend' as const, competence: '2026-01-03', revision: '1', status: 'confirmed' as const, cashAmountPerUnitBRL: '1', title: 'Dividend', source: { id: 'cvm' as const, url: 'https://example.test/cvm', license: 'official_public' as const, retrievedAt: '2026-01-03T00:00:00.000Z' } }
+    const app = createOpenFinanceRoutes({ readBrokerageLedger: vi.fn(async () => ({ version: 1 as const, importedSourceHashes: [entry.sourceHash], entries: [entry] })), readCorporateEvents: vi.fn(async () => [event]) })
+    const response = await app.request('/tax/corporate-event-associations')
+    expect(await response.json()).toMatchObject({ associations: [{ positionSymbol: 'PETR4', confidence: 'exact' }] })
+  })
 })

@@ -2041,7 +2041,7 @@
         {
           "id": "AINV-T1230",
           "title": "Associar eventos corporativos às posições e à carteira",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1203", "AINV-T1221"],
           "scope": ["src/domain/alice-invest", "src/webui/routes"],
           "acceptance_criteria": ["Relacionar eventos ao instrumento correto, inclusive códigos antigos quando mapeados", "Exibir confiança e origem; eventos ambíguos exigem revisão humana", "Não alterar preço médio nem custódia sem evento confirmado"],

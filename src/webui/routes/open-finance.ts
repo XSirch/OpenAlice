@@ -15,6 +15,8 @@ import { readBrazilTaxPolicy } from '../../core/alice-invest-tax-policy.js'
 import { assessBrazilTaxEstimateReadiness, brazilTaxAssetClassSchema, taxSourceRequirementSchema } from '../../domain/alice-invest/tax/contracts.js'
 import { estimateBrazilTax } from '../../domain/alice-invest/tax/estimates.js'
 import { buildTaxReport, taxReportCsv, taxReportPdf } from '../../domain/alice-invest/tax/report.js'
+import { readCorporateEvents } from '../../core/corporate-events.js'
+import { associateCorporateEvents } from '../../domain/alice-invest/corporate-events/association.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
@@ -31,6 +33,7 @@ interface OpenFinanceRouteDeps {
   readBrokerageLedger: typeof readBrokerageLedger
   writeBrokerageLedger: typeof writeBrokerageLedger
   readBrazilTaxPolicy: typeof readBrazilTaxPolicy
+  readCorporateEvents: typeof readCorporateEvents
 }
 
 export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps> = {}) {
@@ -44,6 +47,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
   readBrokerageLedger,
   writeBrokerageLedger,
   readBrazilTaxPolicy,
+  readCorporateEvents,
   ...overrides,
   }
   const pendingBrokeragePreviews = new Map<string, { preview: BrokerageImportPreview; expiresAt: number }>()
@@ -184,6 +188,13 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       body.set(pdf)
       return c.body(body, 200, { 'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'no-store' })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
+  })
+  app.get('/tax/corporate-event-associations', async (c) => {
+    try {
+      const [ledger, events] = await Promise.all([deps.readBrokerageLedger(), deps.readCorporateEvents()])
+      const positions = calculateAveragePrices(ledger.entries).map((position) => ({ symbol: position.symbol, quantity: position.quantity }))
+      return c.json({ associations: associateCorporateEvents(events, positions) })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.post('/test', async (c) => {
     try {
