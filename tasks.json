@@ -2025,7 +2025,7 @@
         {
           "id": "AINV-T1223",
           "title": "Exportar relatório tributário auditável para conferência",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1222"],
           "scope": ["src/webui/routes", "ui/src", "docs/alice-invest-tax.md"],
           "acceptance_criteria": ["Gerar CSV/PDF com período, fontes, premissas, operações e avisos", "Mascarar identificadores sensíveis por padrão e nunca incluir credenciais", "Permitir reconciliação por nota/custódia sem modificar os dados de origem"],

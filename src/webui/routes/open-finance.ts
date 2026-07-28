@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { readBrazilTaxPolicy } from '../../core/alice-invest-tax-policy.js'
 import { assessBrazilTaxEstimateReadiness, brazilTaxAssetClassSchema, taxSourceRequirementSchema } from '../../domain/alice-invest/tax/contracts.js'
 import { estimateBrazilTax } from '../../domain/alice-invest/tax/estimates.js'
+import { buildTaxReport, taxReportCsv, taxReportPdf } from '../../domain/alice-invest/tax/report.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
@@ -167,6 +168,21 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       const readiness = assessBrazilTaxEstimateReadiness(await deps.readBrazilTaxPolicy(), brazilTaxAssetClassSchema.parse(policyClass), input.sources)
       if (!readiness.allowed) return c.json({ readiness }, 409)
       return c.json({ estimate: estimateBrazilTax({ ...input, hasRequiredRecords: true }) })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
+  })
+  app.get('/tax/report', async (c) => {
+    try {
+      const format = c.req.query('format') === 'pdf' ? 'pdf' : c.req.query('format') === 'csv' ? 'csv' : null
+      const from = c.req.query('from') ?? ''
+      const to = c.req.query('to') ?? ''
+      if (!format) return c.json({ error: 'format must be csv or pdf.' }, 400)
+      const report = buildTaxReport(await deps.readBrokerageLedger(), { from, to, includeIdentifiers: c.req.query('includeIdentifiers') === '1' })
+      const filename = `alice-invest-tax-report-${from}-${to}.${format}`
+      if (format === 'csv') return c.body(taxReportCsv(report), 200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'no-store' })
+      const pdf = taxReportPdf(report)
+      const body = new Uint8Array(pdf.length)
+      body.set(pdf)
+      return c.body(body, 200, { 'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'no-store' })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
   })
   app.post('/test', async (c) => {

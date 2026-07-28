@@ -53,4 +53,13 @@ describe('open finance fixed-income routes', () => {
     expect(response.status).toBe(409)
     expect((await response.json()).readiness.reasons[0]).toMatch(/not enabled/)
   })
+
+  it('exports an authenticated-route tax report with redacted sources by default', async () => {
+    const entry = { id: 'a'.repeat(64), sourceHash: 'b'.repeat(64), sourceName: 'nota-pessoal.csv', sourceRow: 2, market: 'B3' as const, symbol: 'PETR4', side: 'buy' as const, tradeDate: '2026-01-02', quantity: '10', unitPriceBRL: '30', feesBRL: '0', taxesBRL: '0' }
+    const app = createOpenFinanceRoutes({ readBrokerageLedger: vi.fn(async () => ({ version: 1 as const, importedSourceHashes: [entry.sourceHash], entries: [entry] })) })
+    const response = await app.request('/tax/report?format=csv&from=2026-01-01&to=2026-01-31')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toContain('attachment')
+    expect(await response.text()).not.toContain('nota-pessoal.csv')
+  })
 })
