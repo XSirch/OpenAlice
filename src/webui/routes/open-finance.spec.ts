@@ -29,4 +29,20 @@ describe('open finance fixed-income routes', () => {
     expect(summary.status).toBe(200)
     expect(await summary.json()).toMatchObject({ snapshot: { positions: [] }, fgc: { eligibleAmountBRL: '0.00' }, ladder: { buckets: { up_to_30_days: { entries: [] } } } })
   })
+
+  it('requires explicit confirmation before a brokerage-note preview reaches the ledger', async () => {
+    let persisted = { version: 1 as const, importedSourceHashes: [] as string[], entries: [] as any[] }
+    const app = createOpenFinanceRoutes({
+      readBrokerageLedger: vi.fn(async () => persisted),
+      writeBrokerageLedger: vi.fn(async (next: unknown) => { persisted = next as typeof persisted; return persisted }),
+    })
+    const preview = await app.request('/tax/notes/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceName: 'nota.csv', content: 'Data Negócio;C/V;Código de Negociação;Quantidade;Preço\n02/01/2026;C;PETR4;10;30,00\n' }) })
+    expect(preview.status).toBe(200)
+    expect(persisted.entries).toEqual([])
+    const { previewId } = await preview.json() as { previewId: string }
+    const confirmed = await app.request('/tax/notes/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ previewId }) })
+    expect(confirmed.status).toBe(200)
+    expect(persisted.entries).toHaveLength(1)
+    expect((await app.request('/tax/ledger')).status).toBe(200)
+  })
 })

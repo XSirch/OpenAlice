@@ -51,6 +51,7 @@ import { migration as migration_0036_fgc_coverage_policy } from './0036_fgc_cove
 import { migration as migration_0037_brazil_market_board_cache } from './0037_brazil_market_board_cache/index.js'
 import { migration as migration_0038_alice_invest_tax_policy } from './0038_alice_invest_tax_policy/index.js'
 import { migration as migration_0039_corporate_events_cache } from './0039_corporate_events_cache/index.js'
+import { migration as migration_0040_alice_invest_tax_ledger } from './0040_alice_invest_tax_ledger/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -85,4 +86,5 @@ export const REGISTRY: Migration[] = [
   migration_0037_brazil_market_board_cache,
   migration_0038_alice_invest_tax_policy,
   migration_0039_corporate_events_cache,
+  migration_0040_alice_invest_tax_ledger,
 ]

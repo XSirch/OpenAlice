@@ -8,17 +8,38 @@ import { buildFixedIncomeLadder } from '../../domain/alice-invest/fixed-income/l
 import { reconcilePluggyFixedIncomeCustody } from '../../domain/alice-invest/fixed-income/reconciliation.js'
 import { fetchPluggyCustody } from '../../domain/open-finance/pluggy.js'
 import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
+import { readBrokerageLedger, writeBrokerageLedger } from '../../core/alice-invest-tax-ledger.js'
+import { calculateAveragePrices, confirmBrokerageImport, previewB3BrokerageCsv, type BrokerageImportPreview } from '../../domain/alice-invest/tax/ledger.js'
+import { randomUUID } from 'node:crypto'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
+const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
+const brokerageConfirmSchema = z.object({ previewId: z.string().uuid() })
 
-export function createOpenFinanceRoutes(deps = {
+interface OpenFinanceRouteDeps {
+  readDefinitions: typeof readFixedIncomeCustodyDefinitions
+  writeDefinitions: typeof writeFixedIncomeCustodyDefinitions
+  readFgcPolicy: typeof readFgcCoveragePolicy
+  writeFgcPolicy: typeof writeFgcCoveragePolicy
+  readConfig: typeof readOpenFinanceConfig
+  fetchCustody: typeof fetchPluggyCustody
+  readBrokerageLedger: typeof readBrokerageLedger
+  writeBrokerageLedger: typeof writeBrokerageLedger
+}
+
+export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps> = {}) {
+  const deps: OpenFinanceRouteDeps = {
   readDefinitions: readFixedIncomeCustodyDefinitions,
   writeDefinitions: writeFixedIncomeCustodyDefinitions,
   readFgcPolicy: readFgcCoveragePolicy,
   writeFgcPolicy: writeFgcCoveragePolicy,
   readConfig: readOpenFinanceConfig,
   fetchCustody: fetchPluggyCustody,
-}) {
+  readBrokerageLedger,
+  writeBrokerageLedger,
+  ...overrides,
+  }
+  const pendingBrokeragePreviews = new Map<string, { preview: BrokerageImportPreview; expiresAt: number }>()
   const app = new Hono()
   app.get('/', async (c) => c.json(await readPublicOpenFinanceConfig()))
   app.put('/', async (c) => {
@@ -105,6 +126,33 @@ export function createOpenFinanceRoutes(deps = {
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
     }
+  })
+  /** Preview is memory-only and expires; no financial record is written here. */
+  app.post('/tax/notes/preview', async (c) => {
+    try {
+      const input = brokeragePreviewSchema.parse(await c.req.json())
+      const preview = previewB3BrokerageCsv(input.sourceName, input.content)
+      const previewId = randomUUID()
+      pendingBrokeragePreviews.set(previewId, { preview, expiresAt: Date.now() + 15 * 60_000 })
+      return c.json({ previewId, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), sourceName: preview.sourceName, sourceHash: preview.sourceHash, operations: preview.operations, errors: preview.errors })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
+  })
+  /** Confirmation is an explicit, one-time mutation; expired previews cannot be replayed. */
+  app.post('/tax/notes/confirm', async (c) => {
+    try {
+      const { previewId } = brokerageConfirmSchema.parse(await c.req.json())
+      const pending = pendingBrokeragePreviews.get(previewId)
+      pendingBrokeragePreviews.delete(previewId)
+      if (!pending || pending.expiresAt < Date.now()) return c.json({ error: 'Brokerage-note preview expired or was not found. Generate a new preview.' }, 404)
+      const ledger = await deps.readBrokerageLedger()
+      const next = confirmBrokerageImport(ledger, pending.preview)
+      await deps.writeBrokerageLedger(next)
+      return c.json({ ledger: next, positions: calculateAveragePrices(next.entries) })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
+  })
+  app.get('/tax/ledger', async (c) => {
+    try { const ledger = await deps.readBrokerageLedger(); return c.json({ ledger, positions: calculateAveragePrices(ledger.entries) }) }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.post('/test', async (c) => {
     try {

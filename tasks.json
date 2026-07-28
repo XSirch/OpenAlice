@@ -2005,7 +2005,7 @@
         {
           "id": "AINV-T1221",
           "title": "Importar notas de corretagem e manter razão auditável de preço médio",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1220"],
           "scope": ["src/domain/alice-invest", "src/migrations", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Importar arquivos suportados com confirmação antes de persistir", "Registrar operação, quantidade, preço, taxas, impostos, origem e hash sem duplicar notas", "Calcular preço médio por ativo e mercado com trilha de auditoria"],
