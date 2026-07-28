@@ -2061,7 +2061,7 @@
         {
           "id": "AINV-T1232",
           "title": "Calcular retorno total separando preço, proventos e aportes",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1230", "AINV-T1221"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Separar retorno por preço, proventos, custos e aportes/saques", "Exibir períodos e dados-base usados no cálculo", "Não comparar retorno com benchmark sem declarar metodologia"],

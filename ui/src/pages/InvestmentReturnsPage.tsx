@@ -5,6 +5,7 @@ import { EmptyState, Skeleton } from '../components/StateViews'
 import { contractPrimary } from '../lib/contract-display'
 import { fmt, fmtNum, fmtPctSigned, fmtPnl } from '../lib/format'
 import { displayProviderForUTA, filterAccountTierUTAs } from '../lib/uta-account-filter'
+import type { TotalReturnBreakdown } from '../api/open-finance'
 
 interface ReturnPosition extends Position {
   accountLabel: string
@@ -22,14 +23,16 @@ export function InvestmentReturnsPage() {
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [totalReturn, setTotalReturn] = useState<{ returns: TotalReturnBreakdown[]; disclaimer: string } | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [utasResult, fxResult] = await Promise.all([
+      const [utasResult, fxResult, totalReturnResult] = await Promise.all([
         api.trading.listUTASummaries(),
         api.trading.fxRates(['BRL']).catch(() => ({ rates: [] })),
+        api.openFinance.totalReturn().catch(() => null),
       ])
       const accounts = filterAccountTierUTAs(utasResult.utas)
       const results = await Promise.all(accounts.map(async (account) => {
@@ -42,6 +45,7 @@ export function InvestmentReturnsPage() {
       }))
       setPositions(results.flat())
       setFxRates(fxResult.rates)
+      setTotalReturn(totalReturnResult)
       setLastRefresh(new Date())
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load investment returns.')
@@ -90,11 +94,16 @@ export function InvestmentReturnsPage() {
               })}
             </div>}
             {positions.length > 0 ? <InvestmentReturnsTable positions={positions} fxRates={fxRates} /> : !error && <EmptyState title="No open investments." />}
+            {totalReturn && <TotalReturnTable data={totalReturn} />}
           </div>
         )}
       </div>
     </div>
   )
+}
+
+function TotalReturnTable({ data }: { data: { returns: TotalReturnBreakdown[]; disclaimer: string } }) {
+  return <section><h3 className="mb-1 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">Recorded B3 total return</h3><p className="mb-3 text-[11px] text-muted-foreground">{data.disclaimer}</p>{data.returns.length === 0 ? <p className="text-[12px] text-muted-foreground">Import a confirmed brokerage-note CSV to calculate realized return.</p> : <div className="overflow-x-auto rounded-lg border border-border"><table className="w-full text-[12px]"><thead><tr className="bg-secondary text-left text-muted-foreground"><th className="px-3 py-2">Asset</th><th className="px-3 py-2 text-right">Contributions</th><th className="px-3 py-2 text-right">Withdrawals</th><th className="px-3 py-2 text-right">Price return</th><th className="px-3 py-2 text-right">Dividends</th><th className="px-3 py-2 text-right">Costs</th></tr></thead><tbody>{data.returns.map((row) => <tr className="border-t border-border" key={row.symbol}><td className="px-3 py-2 font-medium">{row.symbol}{row.gaps.length > 0 && <span className="ml-2 text-warning">review</span>}</td><td className="px-3 py-2 text-right">R$ {row.contributionsBRL}</td><td className="px-3 py-2 text-right">R$ {row.withdrawalsBRL}</td><td className="px-3 py-2 text-right">R$ {row.priceReturnBRL}</td><td className="px-3 py-2 text-right">R$ {row.dividendsBRL}</td><td className="px-3 py-2 text-right">R$ {row.costsBRL}</td></tr>)}</tbody></table></div>}</section>
 }
 
 function InvestmentReturnsTable({ positions, fxRates }: { positions: ReturnPosition[]; fxRates: FxRateInfo[] }) {

@@ -17,6 +17,7 @@ import { estimateBrazilTax } from '../../domain/alice-invest/tax/estimates.js'
 import { buildTaxReport, taxReportCsv, taxReportPdf } from '../../domain/alice-invest/tax/report.js'
 import { readCorporateEvents } from '../../core/corporate-events.js'
 import { associateCorporateEvents } from '../../domain/alice-invest/corporate-events/association.js'
+import { calculateTotalReturn } from '../../domain/alice-invest/corporate-events/total-return.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
@@ -196,6 +197,12 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       const associations = associateCorporateEvents(events, positions)
       const byId = new Map(events.map((event) => [event.id, event]))
       return c.json({ associations: associations.map((association) => ({ association, event: byId.get(association.eventId)! })) })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  app.get('/tax/total-return', async (c) => {
+    try {
+      const [ledger, events] = await Promise.all([deps.readBrokerageLedger(), deps.readCorporateEvents()])
+      return c.json({ returns: calculateTotalReturn(ledger.entries, events), disclaimer: 'Retorno realizado e proventos confirmados; não inclui marcação a mercado sem cotação com fonte/data-base.' })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.post('/test', async (c) => {
