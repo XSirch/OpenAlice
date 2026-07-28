@@ -34,4 +34,19 @@ describe('aggregateSymbolSearch limits', () => {
     expect(searchDeps.symbolIndex.search).toHaveBeenCalledWith('EURUSD', 2)
     expect(searchDeps.commodityCatalog.search).toHaveBeenCalledWith('EURUSD', 2)
   })
+
+  it('keeps the Brapi B3 result alongside Yahoo candidates when the vendor is enabled', async () => {
+    const searchDeps = deps()
+    searchDeps.equityVendors = ['yfinance', 'brapi']
+    vi.mocked(searchDeps.equityClient.search).mockImplementation(async ({ provider }) => provider === 'brapi'
+      ? [{ symbol: 'ABEV3', name: 'AMBEV S.A.' }]
+      : [{ symbol: 'ABEV3.SA', name: 'AMBEV S/A ON' }])
+
+    const results = await aggregateSymbolSearch(searchDeps, 'ABEV3', 20)
+
+    expect(results).toEqual(expect.arrayContaining([
+      expect.objectContaining({ symbol: 'ABEV3', sourceId: 'brapi', assetClass: 'equity' }),
+      expect.objectContaining({ symbol: 'ABEV3.SA', sourceId: 'yfinance', assetClass: 'equity' }),
+    ]))
+  })
 })
