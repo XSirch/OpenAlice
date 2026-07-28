@@ -24,7 +24,16 @@ export class BrapiHistoricalDividendsFetcher extends Fetcher {
     return rows.flatMap(({ symbol, data }) => (data.cashDividends ?? []).flatMap((event) => {
       const date = isoDate(event.lastDatePrior ?? event.paymentDate)
       return typeof event.rate === 'number' && date
-        ? [HistoricalDividendsDataSchema.parse({ symbol, ex_dividend_date: date, amount: event.rate })]
+        ? [HistoricalDividendsDataSchema.parse({
+          symbol,
+          // The compatibility model requires an ex-date. BRAPI exposes
+          // `lastDatePrior` instead, so retain its original meaning alongside
+          // the compatibility projection for the Brazil event adapter.
+          ex_dividend_date: date,
+          amount: event.rate,
+          ...(isoDate(event.lastDatePrior) ? { date_com: isoDate(event.lastDatePrior) } : {}),
+          ...(isoDate(event.paymentDate) ? { payment_date: isoDate(event.paymentDate) } : {}),
+        })]
         : []
     }))
   }

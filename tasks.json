@@ -1923,7 +1923,7 @@
         {
           "id": "AINV-T1201",
           "title": "Integrar fundamentos e documentos oficiais da CVM",
-          "status": "in_progress",
+          "status": "implemented",
           "depends_on": ["AINV-T1200"],
           "scope": ["src/domain/market-data", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Importar e normalizar DFP, ITR, composição de capital e metadados de companhias abertas", "Exibir competência do demonstrativo, data de publicação, versão e link de origem", "Manter BRAPI como cotação complementar, sem apresentar fundamentos de fontes diferentes como equivalentes"],
@@ -1943,7 +1943,7 @@
         {
           "id": "AINV-T1203",
           "title": "Criar adaptador de eventos corporativos e proventos brasileiros",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1200"],
           "scope": ["src/domain/market-data", "src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Normalizar provento, data-com, data-ex, pagamento, grupamento, desdobramento, subscrição e fato relevante", "Identificar a fonte/licença de cada evento e nunca inventar evento ausente", "Dedupe por emissor, instrumento, tipo, competência e revisão"],
@@ -1995,7 +1995,7 @@
         {
           "id": "AINV-T1220",
           "title": "Definir escopo tributário, premissas e limites de responsabilidade",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1210"],
           "scope": ["docs/alice-invest-tax.md", "src/domain/alice-invest"],
           "acceptance_criteria": ["Documentar escopo por classe, regras parametrizáveis, fontes necessárias e hipóteses não cobertas", "Rotular toda saída como estimativa para conferência, sem envio de declaração ou pagamento", "Proibir recomendação tributária individual e ações financeiras automáticas"],
@@ -2005,7 +2005,7 @@
         {
           "id": "AINV-T1221",
           "title": "Importar notas de corretagem e manter razão auditável de preço médio",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1220"],
           "scope": ["src/domain/alice-invest", "src/migrations", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Importar arquivos suportados com confirmação antes de persistir", "Registrar operação, quantidade, preço, taxas, impostos, origem e hash sem duplicar notas", "Calcular preço médio por ativo e mercado com trilha de auditoria"],
@@ -2015,7 +2015,7 @@
         {
           "id": "AINV-T1222",
           "title": "Estimar resultado e tributos por classe de ativo sem declarar ou pagar",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1221", "AINV-T1220"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Separar ações/ETFs/FIIs, renda fixa, fundos e cripto por regras e dados disponíveis", "Exibir eventos não apuráveis, prejuízos e premissas em vez de estimar silenciosamente", "Não criar DARF, pagamento, ordem ou integração com órgão fiscal"],
@@ -2025,7 +2025,7 @@
         {
           "id": "AINV-T1223",
           "title": "Exportar relatório tributário auditável para conferência",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1222"],
           "scope": ["src/webui/routes", "ui/src", "docs/alice-invest-tax.md"],
           "acceptance_criteria": ["Gerar CSV/PDF com período, fontes, premissas, operações e avisos", "Mascarar identificadores sensíveis por padrão e nunca incluir credenciais", "Permitir reconciliação por nota/custódia sem modificar os dados de origem"],
@@ -2041,7 +2041,7 @@
         {
           "id": "AINV-T1230",
           "title": "Associar eventos corporativos às posições e à carteira",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1203", "AINV-T1221"],
           "scope": ["src/domain/alice-invest", "src/webui/routes"],
           "acceptance_criteria": ["Relacionar eventos ao instrumento correto, inclusive códigos antigos quando mapeados", "Exibir confiança e origem; eventos ambíguos exigem revisão humana", "Não alterar preço médio nem custódia sem evento confirmado"],
@@ -2051,7 +2051,7 @@
         {
           "id": "AINV-T1231",
           "title": "Criar calendário brasileiro de proventos e eventos relevantes",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1230"],
           "scope": ["ui/src", "src/webui/routes", "src/domain/alice-invest"],
           "acceptance_criteria": ["Mostrar data-com, ex-data, pagamento, tipo, valor e fonte por posição", "Permitir filtros por carteira e janela temporal", "Distinguir evento anunciado, confirmado, revisado e pago"],
@@ -2061,7 +2061,7 @@
         {
           "id": "AINV-T1232",
           "title": "Calcular retorno total separando preço, proventos e aportes",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1230", "AINV-T1221"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Separar retorno por preço, proventos, custos e aportes/saques", "Exibir períodos e dados-base usados no cálculo", "Não comparar retorno com benchmark sem declarar metodologia"],
@@ -2087,7 +2087,7 @@
         {
           "id": "AINV-T1241",
           "title": "Relacionar cenário macro à exposição da carteira",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1240", "AINV-T1212", "AINV-T1232"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Exibir exposição explicável a inflação, juros, câmbio, liquidez e concentração", "Usar linguagem de cenário e sensibilidade, não previsão determinística ou recomendação de ordem", "Listar ativos e premissas que contribuíram para cada indicador"],
@@ -2097,7 +2097,7 @@
         {
           "id": "AINV-T1242",
           "title": "Entregar alertas brasileiros contextualizados e acionáveis",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1211", "AINV-T1231", "AINV-T1241"],
           "scope": ["src/domain/alice-invest", "services/connector", "ui/src"],
           "acceptance_criteria": ["Alertar concentração FGC, vencimento, liquidez, evento societário e dado macro revisado", "Toda notificação mostra fonte, data-base, confiança e link para explicação", "Deduplicar alertas e manter telegram_inbound_enabled/notifications sob kill switches; execução permanece false"],
@@ -2107,7 +2107,7 @@
         {
           "id": "AINV-T1243",
           "title": "Validar experiência Brasil-first e observabilidade do pacote",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1201", "AINV-T1212", "AINV-T1223", "AINV-T1232", "AINV-T1242"],
           "scope": ["docs/alice-invest-validation-report.md", "ui/src", "src/domain/alice-invest"],
           "acceptance_criteria": ["Validar uma carteira brasileira diversificada sem credenciais expostas", "Demonstrar dados-base, cache, falhas e estados vazios em cada painel", "Confirmar global not_ready, sinais B3/cripto research_only e execution_enabled false"],

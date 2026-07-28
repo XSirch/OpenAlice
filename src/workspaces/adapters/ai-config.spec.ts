@@ -302,6 +302,10 @@ describe('codexAdapter AI-config', () => {
   });
 
   it('listOnDisk returns [] when there are no sessions', async () => {
+    // Use the workspace-local CODEX_HOME layout. Without this directory the
+    // adapter correctly scans the user's global Codex session history, which
+    // makes an empty-workspace assertion depend on unrelated local rollouts.
+    await mkdir(join(dir, '.codex'), { recursive: true });
     expect(await codexAdapter.listOnDisk!(dir)).toEqual([]);
   });
 });

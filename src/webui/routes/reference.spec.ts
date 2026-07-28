@@ -125,6 +125,21 @@ describe('reference routes', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ issuer: { cvmCode: '9512' } })
   })
+  it('GET /brazil/corporate-events refreshes only after official issuer resolution and persists sourced events', async () => {
+    const saved: unknown[][] = []
+    const ctx = mkCtx() as EngineContext
+    ctx.equityClient = { getDividends: async () => [{ symbol: 'PETR4', ex_dividend_date: '2026-06-01', amount: 0.5, date_com: '2026-06-01', payment_date: '2026-06-20' }] } as never
+    const app = createReferenceRoutes(ctx, {
+      fetchCvmIssuerMapping: async () => ({ ticker: 'PETR4', cvmCode: '9512', company: 'PETROBRAS', updatedAt: '2026-01-01' }),
+      fetchCvmIpeEvents: async () => [{ cvmCode: '9512', company: 'PETROBRAS', referenceDate: '2026-06-01', filedAt: '2026-06-02', category: 'Fato Relevante', type: 'Comunicado', subject: 'Evento', revision: '1', downloadUrl: 'https://example.test/doc' }],
+      mergeCorporateEvents: async (events) => { saved.push([...events]); return [...events] },
+      readCorporateEvents: async () => saved.flat() as never,
+    })
+    const response = await app.request('/brazil/corporate-events?symbol=PETR4&refresh=1')
+    expect(response.status).toBe(200)
+    const body = await response.json() as { events: Array<{ type: string; source: { id: string } }> }
+    expect(body.events.map((event) => [event.type, event.source.id])).toEqual([['dividend', 'brapi'], ['material_fact', 'cvm']])
+  })
 
   it('GET /term-structure returns the curves', async () => {
     const res = await createReferenceRoutes(mkCtx()).request('/term-structure')

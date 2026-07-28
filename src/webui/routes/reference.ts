@@ -11,16 +11,22 @@
 import { Hono } from 'hono'
 import type { EngineContext } from '../../core/types.js'
 import { readBrazilMacroSnapshots } from '../../core/brazil-macro-snapshots.js'
-import { fetchCvmIssuerMapping, fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
+import { fetchCvmCapitalComposition, fetchCvmIpeEvents, fetchCvmIssuerMapping, fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
+import { mergeCorporateEvents, readCorporateEvents } from '../../core/corporate-events.js'
+import { normalizeBrapiCashDividends, normalizeCvmIpeCorporateEvent } from '../../domain/alice-invest/corporate-events/contracts.js'
 
 interface ReferenceRouteDeps {
   readBrazilMacroSnapshots: typeof readBrazilMacroSnapshots
   fetchCvmStatementLines: typeof fetchCvmStatementLines
+  fetchCvmCapitalComposition: typeof fetchCvmCapitalComposition
   fetchCvmIssuerMapping: typeof fetchCvmIssuerMapping
+  fetchCvmIpeEvents: typeof fetchCvmIpeEvents
+  readCorporateEvents: typeof readCorporateEvents
+  mergeCorporateEvents: typeof mergeCorporateEvents
 }
 
 export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<ReferenceRouteDeps> = {}): Hono {
-  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, fetchCvmIssuerMapping, ...overrides }
+  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, fetchCvmCapitalComposition, fetchCvmIssuerMapping, fetchCvmIpeEvents, readCorporateEvents, mergeCorporateEvents, ...overrides }
   const app = new Hono()
 
   // GET /api/reference/movers → gainers / losers / active board
@@ -134,6 +140,55 @@ export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<Ref
     try {
       const issuer = await deps.fetchCvmIssuerMapping(ticker, year)
       return issuer ? c.json({ issuer }) : c.json({ error: 'No unambiguous official FCA issuer mapping was found.' }, 404)
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    }
+  })
+  app.get('/cvm/capital-composition', async (c) => {
+    const cvmCode = c.req.query('cvmCode')?.trim()
+    const year = Number(c.req.query('year'))
+    if (!cvmCode || !Number.isInteger(year)) return c.json({ error: 'cvmCode and year are required.' }, 400)
+    try { return c.json({ rows: await deps.fetchCvmCapitalComposition(year, cvmCode) }) }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+
+  /**
+   * Source-attributed Brazilian corporate events. `refresh=1` fetches BRAPI's
+   * cash-dividend payload only after an official FCA issuer mapping resolves;
+   * no name or ticker guess is persisted as an issuer.
+   */
+  app.get('/brazil/corporate-events', async (c) => {
+    const symbol = c.req.query('symbol')?.trim().toUpperCase()
+    if (!symbol || !/^[A-Z]{4}\d{1,2}[A-Z]?$/.test(symbol)) return c.json({ error: 'A valid B3 symbol is required.' }, 400)
+    try {
+      if (c.req.query('refresh') === '1') {
+        const issuer = await deps.fetchCvmIssuerMapping(symbol, new Date().getUTCFullYear())
+        if (!issuer) return c.json({ error: 'No unambiguous official FCA issuer mapping was found; no event was persisted.' }, 404)
+        const [rows, ipe] = await Promise.all([
+          ctx.equityClient.getDividends({ symbol, provider: 'brapi' }),
+          deps.fetchCvmIpeEvents(new Date().getUTCFullYear(), issuer.cvmCode),
+        ])
+        const events = normalizeBrapiCashDividends({
+          issuer: `CVM:${issuer.cvmCode}`,
+          instrument: symbol,
+          retrievedAt: new Date().toISOString(),
+          events: rows.map((row) => {
+            const raw = row as unknown as Record<string, unknown>
+            return {
+              rate: typeof raw.amount === 'number' ? raw.amount : undefined,
+              lastDatePrior: typeof raw.date_com === 'string' ? raw.date_com : undefined,
+              paymentDate: typeof raw.payment_date === 'string' ? raw.payment_date : undefined,
+            }
+          }),
+        })
+        const officialEvents = ipe.flatMap((event) => {
+          const normalized = normalizeCvmIpeCorporateEvent({ ...event, issuerCvmCode: issuer.cvmCode, instrument: symbol, retrievedAt: new Date().toISOString() })
+          return normalized ? [normalized] : []
+        })
+        await deps.mergeCorporateEvents([...events, ...officialEvents])
+      }
+      const events = (await deps.readCorporateEvents()).filter((event) => event.instrument === symbol)
+      return c.json({ events })
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
     }

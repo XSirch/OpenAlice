@@ -4,6 +4,7 @@ import { KeyMetricsPanel } from '../../components/market/KeyMetricsPanel'
 import { FinancialStatementsPanel } from '../../components/market/FinancialStatementsPanel'
 import { KlinePanel } from '../../components/market/KlinePanel'
 import { TradeableContractsPanel } from '../../components/market/TradeableContractsPanel'
+import { CvmFundamentalsPanel } from '../../components/market/CvmFundamentalsPanel'
 
 interface Props {
   symbol: string
@@ -34,6 +35,7 @@ export function EquityDetail({ symbol, source, provider }: Props) {
       <TradeableContractsPanel symbol={symbol} assetClass="equity" />
 
       {!klineOnly && <FinancialStatementsPanel symbol={symbol} provider={provider} />}
+      {!klineOnly && <CvmFundamentalsPanel symbol={symbol} />}
     </div>
   )
 }

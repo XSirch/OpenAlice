@@ -11,7 +11,7 @@ import type {
   // Equity
   EquitySearchData, EquityHistoricalData, EquityInfoData, KeyMetricsData,
   IncomeStatementData, BalanceSheetData, CashFlowStatementData, FinancialRatiosData,
-  PriceTargetConsensusData, CalendarEarningsData, CalendarIpoData, CalendarDividendData,
+  PriceTargetConsensusData, CalendarEarningsData, CalendarIpoData, CalendarDividendData, HistoricalDividendsData,
   InsiderTradingData, EquityDiscoveryData, ShareStatisticsData,
   // Crypto
   CryptoSearchData, CryptoHistoricalData,
@@ -45,6 +45,7 @@ export interface EquityClientLike {
   getIncomeStatement(params: Record<string, unknown>): Promise<IncomeStatementData[]>
   getBalanceSheet(params: Record<string, unknown>): Promise<BalanceSheetData[]>
   getCashFlow(params: Record<string, unknown>): Promise<CashFlowStatementData[]>
+  getDividends(params: Record<string, unknown>): Promise<HistoricalDividendsData[]>
   getFinancialRatios(params: Record<string, unknown>): Promise<FinancialRatiosData[]>
   getEstimateConsensus(params: Record<string, unknown>): Promise<PriceTargetConsensusData[]>
   getCalendarEarnings(params?: Record<string, unknown>): Promise<CalendarEarningsData[]>

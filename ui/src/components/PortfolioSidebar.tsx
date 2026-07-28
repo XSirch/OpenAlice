@@ -29,6 +29,7 @@ export function PortfolioSidebar() {
 
   const overviewActive = focused?.kind === 'portfolio'
   const returnsActive = focused?.kind === 'portfolio-returns'
+  const eventsActive = focused?.kind === 'corporate-events'
   const focusedUtaId =
     focused?.kind === 'uta-detail' ? focused.params.id : null
   const lite = !tradingModeLoading && tradingMode === 'lite'
@@ -42,6 +43,7 @@ export function PortfolioSidebar() {
           active={overviewActive}
           onClick={() => openOrFocus({ kind: 'portfolio', params: {} })}
         />
+        <SidebarRow label="Corporate events" active={eventsActive} onClick={() => openOrFocus({ kind: 'corporate-events', params: {} })} />
 
         <SidebarSectionHeader>Analysis</SidebarSectionHeader>
         <SidebarRow

@@ -1,0 +1,16 @@
+import { useEffect, useState } from 'react'
+import { api } from '../../api'
+import type { CvmStatementLine } from '../../api/reference'
+import { fmt } from '../../lib/format'
+
+export function CvmFundamentalsPanel({ symbol }: { symbol: string }) {
+  const [kind, setKind] = useState<'DFP' | 'ITR'>('DFP')
+  const [year, setYear] = useState(new Date().getFullYear() - 1)
+  const [issuer, setIssuer] = useState<{ cvmCode: string; company: string } | null>(null)
+  const [lines, setLines] = useState<CvmStatementLine[]>([])
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { let cancelled = false; void (async () => { try { const result = await api.reference.cvmIssuer({ ticker: symbol.replace(/\.SA$/i, ''), year: new Date().getFullYear() }); if (!cancelled) setIssuer(result.issuer) } catch { if (!cancelled) setIssuer(null) } })(); return () => { cancelled = true } }, [symbol])
+  useEffect(() => { if (!issuer) return; let cancelled = false; void (async () => { setError(null); try { const result = await api.reference.cvmStatements({ cvmCode: issuer.cvmCode, kind, year }); if (!cancelled) setLines(result.lines) } catch (cause) { if (!cancelled) { setLines([]); setError(cause instanceof Error ? cause.message : 'Official CVM filing unavailable.') } } })(); return () => { cancelled = true } }, [issuer, kind, year])
+  const latest = lines.filter((line) => line.referenceDate === lines.at(-1)?.referenceDate).slice(0, 8)
+  return <section className="rounded-md border border-border bg-secondary/30 p-3" aria-label="Official CVM fundamentals"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-[12px] font-semibold text-foreground">Official CVM statements</h3><p className="text-[11px] text-muted-foreground">DFP/ITR filings; BRAPI quotes are shown separately.</p></div><div className="flex gap-2"><select className="input h-7 py-0 text-[11px]" value={kind} onChange={(event) => setKind(event.target.value as 'DFP' | 'ITR')}><option value="DFP">DFP</option><option value="ITR">ITR</option></select><input className="input h-7 w-20 py-0 text-[11px]" type="number" min="2010" max={new Date().getFullYear()} value={year} onChange={(event) => setYear(Number(event.target.value))} /></div></div>{issuer && <p className="mt-2 text-[11px] text-muted-foreground">{issuer.company} · CVM {issuer.cvmCode}</p>}{error ? <p className="mt-2 text-[11px] text-warning">{error}</p> : latest.length === 0 ? <p className="mt-2 text-[11px] text-muted-foreground">No official statement rows returned for this filing.</p> : <div className="mt-2 space-y-1">{latest.map((line) => <div className="flex justify-between gap-3 text-[11px]" key={`${line.statement}-${line.accountCode}`}><span className="truncate text-muted-foreground" title={line.statement}>{line.account}</span><span className="shrink-0 text-foreground">{fmt(line.value, 'BRL')}</span></div>)}<p className="pt-1 text-[10px] text-muted-foreground">Reference {latest[0]?.referenceDate}; filed {latest[0]?.filedAt ?? 'not supplied'}; revision {latest[0]?.revision}. {latest[0]?.sourceUrl && <a className="underline" href={latest[0].sourceUrl} target="_blank" rel="noreferrer">Official source</a>}</p></div>}</section>
+}
