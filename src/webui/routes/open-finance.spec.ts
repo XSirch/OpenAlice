@@ -67,6 +67,6 @@ describe('open finance fixed-income routes', () => {
     const event = { id: 'c'.repeat(64), issuer: 'CVM:9512', instrument: 'PETR4', type: 'dividend' as const, competence: '2026-01-03', revision: '1', status: 'confirmed' as const, cashAmountPerUnitBRL: '1', title: 'Dividend', source: { id: 'cvm' as const, url: 'https://example.test/cvm', license: 'official_public' as const, retrievedAt: '2026-01-03T00:00:00.000Z' } }
     const app = createOpenFinanceRoutes({ readBrokerageLedger: vi.fn(async () => ({ version: 1 as const, importedSourceHashes: [entry.sourceHash], entries: [entry] })), readCorporateEvents: vi.fn(async () => [event]) })
     const response = await app.request('/tax/corporate-event-associations')
-    expect(await response.json()).toMatchObject({ associations: [{ positionSymbol: 'PETR4', confidence: 'exact' }] })
+    expect(await response.json()).toMatchObject({ associations: [{ association: { positionSymbol: 'PETR4', confidence: 'exact' } }] })
   })
 })

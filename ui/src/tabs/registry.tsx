@@ -4,6 +4,7 @@ import type { ViewKind, ViewSpec } from './types'
 
 import { PortfolioPage } from '../pages/PortfolioPage'
 import { InvestmentReturnsPage } from '../pages/InvestmentReturnsPage'
+import { CorporateEventsPage } from '../pages/CorporateEventsPage'
 import { WealthForecastPage } from '../pages/WealthForecastPage'
 import { ModelPortfolioPage } from '../pages/ModelPortfolioPage'
 import { TradingAsGitPage } from '../pages/TradingAsGitPage'
@@ -133,6 +134,11 @@ const portfolioReturnsModule: ViewModule<'portfolio-returns'> = {
       <InvestmentReturnsPage />
     </PageSidebarShell>
   ),
+}
+
+const corporateEventsModule: ViewModule<'corporate-events'> = {
+  kind: 'corporate-events', title: () => 'Corporate events', toUrl: () => '/portfolio/events',
+  Component: () => <PageSidebarShell storageKey="portfolio" titleKey="nav.item.portfolio" defaultWidth={220} sidebar={<PortfolioSidebar />}><CorporateEventsPage /></PageSidebarShell>,
 }
 
 const wealthForecastModule: ViewModule<'wealth-forecast'> = {
@@ -561,6 +567,7 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
 const VIEWS = {
   portfolio: portfolioModule,
   'portfolio-returns': portfolioReturnsModule,
+  'corporate-events': corporateEventsModule,
   'wealth-forecast': wealthForecastModule,
   'model-portfolio': modelPortfolioModule,
   'trading-as-git': tradingAsGitModule,

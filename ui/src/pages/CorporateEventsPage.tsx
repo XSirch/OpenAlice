@@ -1,0 +1,19 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { api } from '../api'
+import type { CorporateEventCalendarItem } from '../api/open-finance'
+import { PageHeader } from '../components/PageHeader'
+import { EmptyState, Skeleton } from '../components/StateViews'
+
+export function CorporateEventsPage() {
+  const [items, setItems] = useState<CorporateEventCalendarItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [showReview, setShowReview] = useState(false)
+  const refresh = useCallback(async () => { setLoading(true); setError(null); try { const result = await api.openFinance.corporateEventAssociations(); setItems(result.associations); setLastUpdated(new Date()) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load corporate events.') } finally { setLoading(false) } }, [])
+  useEffect(() => { void refresh() }, [refresh])
+  const visible = useMemo(() => items.filter((item) => showReview || item.association.confidence !== 'review_required').sort((a, b) => eventDate(a).localeCompare(eventDate(b))), [items, showReview])
+  return <div className="flex min-h-0 flex-1 flex-col"><PageHeader title="Corporate events" description="Confirmed Brazilian events for your recorded positions. Events never change custody or average cost." live={{ lastUpdated }} right={<div className="flex items-center gap-2"><label className="text-[12px] text-muted-foreground"><input type="checkbox" className="mr-1" checked={showReview} onChange={(event) => setShowReview(event.target.checked)} />Show review queue</label><button className="btn-secondary-sm" disabled={loading} onClick={() => void refresh()}>{loading ? 'Loading…' : 'Refresh'}</button></div>} /><div className="flex-1 overflow-y-auto px-4 py-5 md:px-6">{loading && !lastUpdated ? <Skeleton className="h-64 w-full rounded-lg" /> : <div className="space-y-3">{error && <p role="alert" className="text-[12px] text-destructive">{error}</p>}{visible.length === 0 && !error ? <EmptyState title="No confirmed corporate events for recorded positions." /> : visible.map(({ event, association }) => <article key={event.id} className="rounded-lg border border-border bg-secondary p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="font-semibold text-foreground">{event.instrument}</span><span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">{event.type}</span><span className={`text-[10px] uppercase ${association.confidence === 'review_required' ? 'text-warning' : 'text-success'}`}>{association.confidence.replace('_', ' ')}</span></div><p className="mt-1 text-[13px] text-foreground">{event.title}</p><p className="mt-1 text-[11px] text-muted-foreground">Competence {displayDate(event.competence)} · status {event.status}{event.dateCom ? ` · date-com ${displayDate(event.dateCom)}` : ''}{event.exDate ? ` · ex-date ${displayDate(event.exDate)}` : ''}{event.paymentDate ? ` · payment ${displayDate(event.paymentDate)}` : ''}</p></div><div className="text-right text-[12px]"><p className="font-medium text-foreground">{event.cashAmountPerUnitBRL ? `R$ ${event.cashAmountPerUnitBRL}/unit` : 'No cash amount'}</p><a className="text-muted-foreground underline" href={association.sourceUrl} target="_blank" rel="noreferrer">Source</a></div></div>{association.confidence === 'review_required' && <p className="mt-3 text-[12px] text-warning">{association.reason}</p>}</article>)}</div>}</div></div>
+}
+function eventDate(item: CorporateEventCalendarItem): string { return item.event.paymentDate ?? item.event.exDate ?? item.event.dateCom ?? item.event.competence }
+function displayDate(value: string): string { return new Date(`${value}T00:00:00`).toLocaleDateString() }

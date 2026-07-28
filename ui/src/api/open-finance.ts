@@ -44,6 +44,7 @@ export interface FixedIncomeLadder {
   disclaimer: string
 }
 export interface FixedIncomeSummary { snapshot: CustodySnapshot; fgc: FgcExposure; ladder: FixedIncomeLadder }
+export interface CorporateEventCalendarItem { association: { confidence: 'exact' | 'mapped' | 'review_required'; positionSymbol: string | null; reason: string; sourceUrl: string }; event: { id: string; instrument: string; type: string; competence: string; status: string; dateCom?: string; exDate?: string; paymentDate?: string; cashAmountPerUnitBRL?: string; title: string; source: { url: string; retrievedAt: string } } }
 
 export const openFinanceApi = {
   load: (): Promise<OpenFinanceConfig> => fetchJson('/api/open-finance'),
@@ -53,5 +54,6 @@ export const openFinanceApi = {
   fgc: (): Promise<FgcExposure> => fetchJson('/api/open-finance/fixed-income/fgc'),
   fixedIncomeLadder: (): Promise<FixedIncomeLadder> => fetchJson('/api/open-finance/fixed-income/ladder'),
   fixedIncomeSummary: (): Promise<FixedIncomeSummary> => fetchJson('/api/open-finance/fixed-income/summary'),
+  corporateEventAssociations: (): Promise<{ associations: CorporateEventCalendarItem[] }> => fetchJson('/api/open-finance/tax/corporate-event-associations'),
   test: (): Promise<{ ok: boolean; positions: number }> => fetchJson('/api/open-finance/test', { method: 'POST' }),
 }

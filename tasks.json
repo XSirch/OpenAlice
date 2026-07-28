@@ -2051,7 +2051,7 @@
         {
           "id": "AINV-T1231",
           "title": "Criar calendário brasileiro de proventos e eventos relevantes",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1230"],
           "scope": ["ui/src", "src/webui/routes", "src/domain/alice-invest"],
           "acceptance_criteria": ["Mostrar data-com, ex-data, pagamento, tipo, valor e fonte por posição", "Permitir filtros por carteira e janela temporal", "Distinguir evento anunciado, confirmado, revisado e pago"],

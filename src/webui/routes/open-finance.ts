@@ -193,7 +193,9 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
     try {
       const [ledger, events] = await Promise.all([deps.readBrokerageLedger(), deps.readCorporateEvents()])
       const positions = calculateAveragePrices(ledger.entries).map((position) => ({ symbol: position.symbol, quantity: position.quantity }))
-      return c.json({ associations: associateCorporateEvents(events, positions) })
+      const associations = associateCorporateEvents(events, positions)
+      const byId = new Map(events.map((event) => [event.id, event]))
+      return c.json({ associations: associations.map((association) => ({ association, event: byId.get(association.eventId)! })) })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.post('/test', async (c) => {
