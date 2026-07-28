@@ -44,6 +44,20 @@ export interface FixedIncomeLadder {
   disclaimer: string
 }
 export interface FixedIncomeSummary { snapshot: CustodySnapshot; fgc: FgcExposure; ladder: FixedIncomeLadder }
+export interface FixedIncomeCustodyDefinition {
+  source: { provider: 'pluggy'; positionId: string }
+  product: {
+    productType: 'cdb' | 'lci' | 'lca' | 'tesouro_direto' | 'fixed_income_fund' | 'debenture' | 'cri' | 'cra'
+    issuer: { legalName: string; conglomerate?: string }
+    rate: { kind: 'fixed'; annualRatePct: string } | { kind: 'cdi_percentage'; cdiPct: string } | { kind: 'ipca_plus'; spreadPct: string } | { kind: 'other'; label: string; annualRatePct?: string }
+    issueDate: string; maturityDate: string
+    liquidity: { redemption: 'daily' | 'at_maturity' | 'scheduled'; settlementBusinessDays: number; noticeBusinessDays: number }
+    fgc: { status: 'eligible' | 'ineligible' | 'unknown' }
+    fees: { administrationAnnualPct: string; performancePct: string; entryPct: string; exitPct: string }
+    assumptions: string[]
+  }
+}
+export interface FixedIncomeCustodyDefinitions { version: 1; entries: FixedIncomeCustodyDefinition[] }
 export interface MacroExposure {
   dimension: 'interest_rates' | 'inflation' | 'liquidity' | 'concentration' | 'exchange_rate'
   amountBRL: string
@@ -63,6 +77,8 @@ export const openFinanceApi = {
   fgc: (): Promise<FgcExposure> => fetchJson('/api/open-finance/fixed-income/fgc'),
   fixedIncomeLadder: (): Promise<FixedIncomeLadder> => fetchJson('/api/open-finance/fixed-income/ladder'),
   fixedIncomeSummary: (): Promise<FixedIncomeSummary> => fetchJson('/api/open-finance/fixed-income/summary'),
+  fixedIncomeDefinitions: (): Promise<FixedIncomeCustodyDefinitions> => fetchJson('/api/open-finance/fixed-income/definitions'),
+  saveFixedIncomeDefinitions: (input: FixedIncomeCustodyDefinitions): Promise<FixedIncomeCustodyDefinitions> => fetchJson('/api/open-finance/fixed-income/definitions', { method: 'PUT', headers, body: JSON.stringify(input) }),
   macroExposure: (): Promise<{ exposures: MacroExposure[]; disclaimer: string }> => fetchJson('/api/open-finance/fixed-income/macro-exposure'),
   portfolioAlerts: (): Promise<{ alerts: PortfolioAlert[]; delivery: { inbox: boolean; externalNotifications: boolean; reason: string } }> => fetchJson('/api/open-finance/portfolio-alerts'),
   corporateEventAssociations: (): Promise<{ associations: CorporateEventCalendarItem[] }> => fetchJson('/api/open-finance/tax/corporate-event-associations'),
