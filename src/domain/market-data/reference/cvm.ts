@@ -15,6 +15,7 @@ export interface CvmStatementLine {
 }
 
 export interface CvmIssuerMapping { ticker: string; cvmCode: string; company: string; updatedAt: string | null }
+export interface CvmIpeEvent { cvmCode: string; company: string; referenceDate: string; filedAt: string | null; category: string; type: string; subject: string; revision: string; downloadUrl: string | null }
 
 export function cvmArchiveUrl(kind: CvmStatementKind, year: number): string {
   if (!Number.isInteger(year) || year < 2010 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM archive year.')
@@ -24,6 +25,11 @@ export function cvmArchiveUrl(kind: CvmStatementKind, year: number): string {
 export function cvmFcaArchiveUrl(year: number): string {
   if (!Number.isInteger(year) || year < 2010 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM FCA archive year.')
   return `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/FCA/DADOS/fca_cia_aberta_${year}.zip`
+}
+
+export function cvmIpeArchiveUrl(year: number): string {
+  if (!Number.isInteger(year) || year < 2003 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM IPE archive year.')
+  return `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS/ipe_cia_aberta_${year}.zip`
 }
 
 export interface CvmStatementFetchInput { kind: CvmStatementKind; year: number; cvmCode: string }
@@ -64,6 +70,40 @@ export async function fetchCvmIssuerMapping(ticker: string, year: number): Promi
   const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
   const files = archive.files.filter((file) => /(?:^|_)cia_aberta(?:_valor_mobiliario)?_\d{4}\.csv$/i.test(file.path))
   return extractCvmIssuerMapping(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), ticker)
+}
+
+/** Official CVM IPE documents. This returns document metadata, not an inferred
+ * corporate action: consumers may classify only documented categories. */
+export async function fetchCvmIpeEvents(year: number, cvmCode: string): Promise<CvmIpeEvent[]> {
+  const response = await fetch(cvmIpeArchiveUrl(year), { signal: AbortSignal.timeout(30_000) })
+  if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for IPE ${year}.`)
+  const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
+  const files = archive.files.filter((file) => /ipe_cia_aberta_\d{4}\.csv$/i.test(file.path))
+  return extractCvmIpeEvents(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), cvmCode)
+}
+
+export function extractCvmIpeEvents(files: Array<{ path: string; text: string }>, cvmCode: string): CvmIpeEvent[] {
+  const records: CvmIpeEvent[] = []
+  for (const file of files) for (const row of parseSemicolonCsv(file.text)) {
+    if ((row.Codigo_CVM ?? row.CD_CVM) !== cvmCode) continue
+    const referenceDate = iso(row.Data_Referencia ?? row.DT_REFER)
+    const category = row.Categoria?.trim()
+    const type = row.Tipo?.trim()
+    const subject = row.Assunto?.trim()
+    if (!referenceDate || !category || !type || !subject) continue
+    records.push({
+      cvmCode,
+      company: row.Nome_Companhia?.trim() ?? row.DENOM_CIA?.trim() ?? cvmCode,
+      referenceDate,
+      filedAt: iso(row.Data_Entrega ?? row.DT_RECEB),
+      category,
+      type,
+      subject,
+      revision: row.Versao?.trim() || '1',
+      downloadUrl: row.Link_Download?.trim() || null,
+    })
+  }
+  return records.sort((a, b) => a.referenceDate.localeCompare(b.referenceDate) || a.revision.localeCompare(b.revision))
 }
 
 export function extractCvmIssuerMapping(files: Array<{ path: string; text: string }>, ticker: string): CvmIssuerMapping | null {

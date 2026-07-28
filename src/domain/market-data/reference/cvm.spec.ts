@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { cvmArchiveUrl, cvmFcaArchiveUrl, extractCvmIssuerMapping, extractCvmStatementLines, parseCvmIssuerMapping, parseCvmStatementRow } from './cvm.js'
+import { cvmArchiveUrl, cvmFcaArchiveUrl, cvmIpeArchiveUrl, extractCvmIpeEvents, extractCvmIssuerMapping, extractCvmStatementLines, parseCvmIssuerMapping, parseCvmStatementRow } from './cvm.js'
 
 describe('CVM open data', () => {
   it('builds an official annual DFP URL', () => expect(cvmArchiveUrl('DFP', 2025)).toContain('/DFP/DADOS/dfp_cia_aberta_2025.zip'))
   it('builds an official annual FCA URL', () => expect(cvmFcaArchiveUrl(2026)).toContain('/FCA/DADOS/fca_cia_aberta_2026.zip'))
+  it('builds and parses the official IPE document archive without guessing document meaning', () => {
+    expect(cvmIpeArchiveUrl(2026)).toContain('/IPE/DADOS/ipe_cia_aberta_2026.zip')
+    const rows = extractCvmIpeEvents([{ path: 'ipe_cia_aberta_2026.csv', text: 'Codigo_CVM;Nome_Companhia;Data_Referencia;Categoria;Tipo;Assunto;Data_Entrega;Versao;Link_Download\n9512;PETROBRAS;2026-06-01;Fato Relevante;Comunicado;Evento;2026-06-02;2;https://example.test/doc\n' }], '9512')
+    expect(rows).toEqual([expect.objectContaining({ cvmCode: '9512', category: 'Fato Relevante', revision: '2' })])
+  })
   it('parses a Brazilian decimal statement line', () => {
     expect(parseCvmStatementRow({ CD_CVM: '9512', DENOM_CIA: 'PETROLEO BRASILEIRO S.A.', DT_REFER: '2025-12-31', DT_RECEB: '2026-03-01', GRUP_DFP: 'DF Consolidado - Balanço Patrimonial Ativo', CD_CONTA: '1', DS_CONTA: 'Ativo Total', VL_CONTA: '1.234.567,89' })).toMatchObject({ cvmCode: '9512', value: 1234567.89 })
   })

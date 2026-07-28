@@ -37,3 +37,5 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0035_fixed_income_custody` | 0.84.0-beta | 2026-07-27 | fixed-income-custody.json | Seed explicit fixed-income custody classifications without inferring issuer or FGC data. |
 | `0036_fgc_coverage_policy` | 0.84.0-beta | 2026-07-27 | fgc-coverage-policy.json | Seed dated, user-configurable FGC coverage policy defaults. |
 | `0037_brazil_market_board_cache` | 0.84.0-beta | 2026-07-27 | cache/brazil-market-board.json | Reserve durable cache storage for the Brazil market board. |
+| `0038_alice_invest_tax_policy` | 0.84.0-beta | 2026-07-28 | alice-invest-tax-policy.json | Seed fail-closed Brazilian tax-estimation policy and source requirements. |
+| `0039_corporate_events_cache` | 0.84.0-beta | 2026-07-28 | cache/corporate-events.json | Reserve durable source-attributed Brazilian corporate-event cache. |

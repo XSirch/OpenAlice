@@ -1943,7 +1943,7 @@
         {
           "id": "AINV-T1203",
           "title": "Criar adaptador de eventos corporativos e proventos brasileiros",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1200"],
           "scope": ["src/domain/market-data", "src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Normalizar provento, data-com, data-ex, pagamento, grupamento, desdobramento, subscrição e fato relevante", "Identificar a fonte/licença de cada evento e nunca inventar evento ausente", "Dedupe por emissor, instrumento, tipo, competência e revisão"],
@@ -1995,7 +1995,7 @@
         {
           "id": "AINV-T1220",
           "title": "Definir escopo tributário, premissas e limites de responsabilidade",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1210"],
           "scope": ["docs/alice-invest-tax.md", "src/domain/alice-invest"],
           "acceptance_criteria": ["Documentar escopo por classe, regras parametrizáveis, fontes necessárias e hipóteses não cobertas", "Rotular toda saída como estimativa para conferência, sem envio de declaração ou pagamento", "Proibir recomendação tributária individual e ações financeiras automáticas"],
