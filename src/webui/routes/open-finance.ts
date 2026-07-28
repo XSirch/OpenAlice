@@ -11,10 +11,14 @@ import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger
 import { readBrokerageLedger, writeBrokerageLedger } from '../../core/alice-invest-tax-ledger.js'
 import { calculateAveragePrices, confirmBrokerageImport, previewB3BrokerageCsv, type BrokerageImportPreview } from '../../domain/alice-invest/tax/ledger.js'
 import { randomUUID } from 'node:crypto'
+import { readBrazilTaxPolicy } from '../../core/alice-invest-tax-policy.js'
+import { assessBrazilTaxEstimateReadiness, brazilTaxAssetClassSchema, taxSourceRequirementSchema } from '../../domain/alice-invest/tax/contracts.js'
+import { estimateBrazilTax } from '../../domain/alice-invest/tax/estimates.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
 const brokerageConfirmSchema = z.object({ previewId: z.string().uuid() })
+const taxEstimateSchema = z.object({ assetClass: z.enum(['b3_equity_common', 'b3_fii', 'fixed_income', 'fund', 'crypto']), grossSalesBRL: z.string().optional(), netGainBRL: z.string().optional(), calendarDays: z.number().int().nonnegative().optional(), hasDayTrade: z.boolean().optional(), sources: z.array(taxSourceRequirementSchema).max(4) })
 
 interface OpenFinanceRouteDeps {
   readDefinitions: typeof readFixedIncomeCustodyDefinitions
@@ -25,6 +29,7 @@ interface OpenFinanceRouteDeps {
   fetchCustody: typeof fetchPluggyCustody
   readBrokerageLedger: typeof readBrokerageLedger
   writeBrokerageLedger: typeof writeBrokerageLedger
+  readBrazilTaxPolicy: typeof readBrazilTaxPolicy
 }
 
 export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps> = {}) {
@@ -37,6 +42,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
   fetchCustody: fetchPluggyCustody,
   readBrokerageLedger,
   writeBrokerageLedger,
+  readBrazilTaxPolicy,
   ...overrides,
   }
   const pendingBrokeragePreviews = new Map<string, { preview: BrokerageImportPreview; expiresAt: number }>()
@@ -153,6 +159,15 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
   app.get('/tax/ledger', async (c) => {
     try { const ledger = await deps.readBrokerageLedger(); return c.json({ ledger, positions: calculateAveragePrices(ledger.entries) }) }
     catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  app.post('/tax/estimate', async (c) => {
+    try {
+      const input = taxEstimateSchema.parse(await c.req.json())
+      const policyClass = input.assetClass === 'b3_equity_common' ? 'b3_equity' : input.assetClass === 'b3_fii' ? 'b3_fii' : input.assetClass
+      const readiness = assessBrazilTaxEstimateReadiness(await deps.readBrazilTaxPolicy(), brazilTaxAssetClassSchema.parse(policyClass), input.sources)
+      if (!readiness.allowed) return c.json({ readiness }, 409)
+      return c.json({ estimate: estimateBrazilTax({ ...input, hasRequiredRecords: true }) })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400) }
   })
   app.post('/test', async (c) => {
     try {

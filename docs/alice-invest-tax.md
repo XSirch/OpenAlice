@@ -40,3 +40,17 @@ mostrados como lacuna, nunca completados por estimativa silenciosa.
 Antes de disponibilizar uma estimativa, o proprietário deve submetê-la à revisão
 de um contador ou consultor tributário habilitado. Essa revisão é uma condição
 de validação humana, não um sinal para habilitar execução financeira.
+
+## Regras codificadas de forma limitada
+
+O primeiro estimador é uma ferramenta de conferência, bloqueada pela política
+até que exista revisão humana. Ele separa operações comuns de ações B3, FIIs,
+renda fixa, fundos e cripto e devolve `unassessable` quando faltam dados ou a
+classe exige tratamento específico. Não compensa prejuízos anteriores, não
+abate IRRF, nem processa day trade.
+
+As referências de parametrização são a Receita Federal: [operações em bolsa e
+deduções](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/bolsa-de-valores-1),
+[isenção mensal de ações](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/bolsa-de-valores-1/isencoes),
+[FII](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/fundos-de-investimento-no-brasil)
+e [tabelas de renda fixa de 2026](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/tabelas/2026).

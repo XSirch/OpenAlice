@@ -2015,7 +2015,7 @@
         {
           "id": "AINV-T1222",
           "title": "Estimar resultado e tributos por classe de ativo sem declarar ou pagar",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1221", "AINV-T1220"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Separar ações/ETFs/FIIs, renda fixa, fundos e cripto por regras e dados disponíveis", "Exibir eventos não apuráveis, prejuízos e premissas em vez de estimar silenciosamente", "Não criar DARF, pagamento, ordem ou integração com órgão fiscal"],

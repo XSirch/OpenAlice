@@ -21,7 +21,7 @@ export const brazilTaxPolicySchema = z.object({
   version: z.literal(1),
   jurisdiction: z.literal('BR'),
   /** A calculation must never be enabled merely because a provider is connected. */
-  estimatesEnabled: z.literal(false),
+  estimatesEnabled: z.boolean().default(false),
   asOf: dateOnly,
   /** Human verification of rules is required per class before future estimates. */
   reviewedAssetClasses: z.array(brazilTaxAssetClassSchema).max(6).default([]),
@@ -49,7 +49,7 @@ export const defaultBrazilTaxPolicy: BrazilTaxPolicy = {
 }
 
 export interface TaxEstimateReadiness {
-  allowed: false
+  allowed: boolean
   reasons: string[]
   disclaimer: BrazilTaxPolicy['disclaimer']
 }
@@ -63,9 +63,9 @@ export function assessBrazilTaxEstimateReadiness(
   const required = policy.requiredSources[assetClass]
   const missing = required.filter((source) => !suppliedSources.includes(source))
   const reasons = [
-    'Brazilian tax estimation is not enabled in the current policy.',
+    ...(!policy.estimatesEnabled ? ['Brazilian tax estimation is not enabled in the current policy.'] : []),
     ...(!policy.reviewedAssetClasses.includes(assetClass) ? [`${assetClass} has not received the required human tax-rule review.`] : []),
     ...missing.map((source) => `Required source is missing: ${source}.`),
   ]
-  return { allowed: false, reasons, disclaimer: policy.disclaimer }
+  return { allowed: reasons.length === 0, reasons, disclaimer: policy.disclaimer }
 }

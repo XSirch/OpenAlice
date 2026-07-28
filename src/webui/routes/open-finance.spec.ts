@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createOpenFinanceRoutes } from './open-finance.js'
 import type { FixedIncomeCustodyDefinitions } from '../../domain/alice-invest/fixed-income/contracts.js'
 import { defaultFgcCoveragePolicy } from '../../domain/alice-invest/fixed-income/fgc.js'
+import { defaultBrazilTaxPolicy } from '../../domain/alice-invest/tax/contracts.js'
 
 const definitions: FixedIncomeCustodyDefinitions = { version: 1, entries: [] }
 const config = { version: 1 as const, pluggy: { enabled: true, clientId: 'client', clientSecret: 'secret', itemIds: ['00000000-0000-4000-8000-000000000001'] } }
@@ -44,5 +45,12 @@ describe('open finance fixed-income routes', () => {
     expect(confirmed.status).toBe(200)
     expect(persisted.entries).toHaveLength(1)
     expect((await app.request('/tax/ledger')).status).toBe(200)
+  })
+
+  it('keeps tax estimation fail-closed until the policy is enabled and reviewed', async () => {
+    const app = createOpenFinanceRoutes({ readBrazilTaxPolicy: vi.fn(async () => defaultBrazilTaxPolicy) })
+    const response = await app.request('/tax/estimate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetClass: 'b3_equity_common', grossSalesBRL: '30000', netGainBRL: '1000', sources: ['brokerage_note', 'transaction_history'] }) })
+    expect(response.status).toBe(409)
+    expect((await response.json()).readiness.reasons[0]).toMatch(/not enabled/)
   })
 })
