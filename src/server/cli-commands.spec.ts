@@ -30,6 +30,7 @@ import { provenanceShowFactory } from '../tool/provenance-show.js'
 import { conversationToolFactories } from '../tool/conversation.js'
 import { artifactConversationToolFactories } from '../tool/conversation-artifacts.js'
 import { createTradingTools } from '../tool/trading.js'
+import { createAliceInvestCustodyTools } from '../tool/alice-invest-custody.js'
 
 /**
  * Anti-rot: each export's alias map is hand-authored, so guard it against drift —
@@ -50,6 +51,7 @@ describe('CLI_EXPORTS — data export (global tools)', () => {
   tc.register(createSnapshotTools(any), 'snapshot')
   tc.register(createSimulateTools(any), 'simulate')
   tc.register(createEconomyTools(any, any), 'economy')
+  tc.register(createAliceInvestCustodyTools(any), 'alice-invest-custody')
 
   it('every mapped verb resolves to a registered global tool', () => {
     for (const name of mappedToolNames('data')) {
