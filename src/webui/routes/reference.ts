@@ -11,13 +11,14 @@
 import { Hono } from 'hono'
 import type { EngineContext } from '../../core/types.js'
 import { readBrazilMacroSnapshots } from '../../core/brazil-macro-snapshots.js'
-import { fetchCvmIpeEvents, fetchCvmIssuerMapping, fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
+import { fetchCvmCapitalComposition, fetchCvmIpeEvents, fetchCvmIssuerMapping, fetchCvmStatementLines, type CvmStatementFetchInput } from '../../domain/market-data/reference/cvm.js'
 import { mergeCorporateEvents, readCorporateEvents } from '../../core/corporate-events.js'
 import { normalizeBrapiCashDividends, normalizeCvmIpeCorporateEvent } from '../../domain/alice-invest/corporate-events/contracts.js'
 
 interface ReferenceRouteDeps {
   readBrazilMacroSnapshots: typeof readBrazilMacroSnapshots
   fetchCvmStatementLines: typeof fetchCvmStatementLines
+  fetchCvmCapitalComposition: typeof fetchCvmCapitalComposition
   fetchCvmIssuerMapping: typeof fetchCvmIssuerMapping
   fetchCvmIpeEvents: typeof fetchCvmIpeEvents
   readCorporateEvents: typeof readCorporateEvents
@@ -25,7 +26,7 @@ interface ReferenceRouteDeps {
 }
 
 export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<ReferenceRouteDeps> = {}): Hono {
-  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, fetchCvmIssuerMapping, fetchCvmIpeEvents, readCorporateEvents, mergeCorporateEvents, ...overrides }
+  const deps: ReferenceRouteDeps = { readBrazilMacroSnapshots, fetchCvmStatementLines, fetchCvmCapitalComposition, fetchCvmIssuerMapping, fetchCvmIpeEvents, readCorporateEvents, mergeCorporateEvents, ...overrides }
   const app = new Hono()
 
   // GET /api/reference/movers → gainers / losers / active board
@@ -142,6 +143,13 @@ export function createReferenceRoutes(ctx: EngineContext, overrides: Partial<Ref
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
     }
+  })
+  app.get('/cvm/capital-composition', async (c) => {
+    const cvmCode = c.req.query('cvmCode')?.trim()
+    const year = Number(c.req.query('year'))
+    if (!cvmCode || !Number.isInteger(year)) return c.json({ error: 'cvmCode and year are required.' }, 400)
+    try { return c.json({ rows: await deps.fetchCvmCapitalComposition(year, cvmCode) }) }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
 
   /**

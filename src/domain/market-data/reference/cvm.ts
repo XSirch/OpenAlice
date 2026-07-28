@@ -28,6 +28,7 @@ export function cvmFcaArchiveUrl(year: number): string {
   if (!Number.isInteger(year) || year < 2010 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM FCA archive year.')
   return `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/FCA/DADOS/fca_cia_aberta_${year}.zip`
 }
+export interface CvmCapitalComposition { cvmCode: string; company: string; referenceDate: string; commonShares: number | null; preferredShares: number | null; treasuryShares: number | null; sourceUrl?: string }
 
 export function cvmIpeArchiveUrl(year: number): string {
   if (!Number.isInteger(year) || year < 2003 || year > new Date().getUTCFullYear()) throw new Error('Invalid CVM IPE archive year.')
@@ -64,6 +65,17 @@ export function extractCvmStatementLines(files: Array<{ path: string; text: stri
   return lines.sort((a, b) => a.referenceDate.localeCompare(b.referenceDate) || a.statement.localeCompare(b.statement) || a.accountCode.localeCompare(b.accountCode))
 }
 
+export function extractCvmCapitalComposition(files: Array<{ path: string; text: string }>, cvmCode: string): CvmCapitalComposition[] {
+  const rows: CvmCapitalComposition[] = []
+  for (const file of files) for (const row of parseSemicolonCsv(file.text)) {
+    if (row.CD_CVM !== cvmCode) continue
+    const referenceDate = iso(row.DT_REFER)
+    if (!referenceDate || !row.DENOM_CIA) continue
+    rows.push({ cvmCode, company: row.DENOM_CIA, referenceDate, commonShares: quantity(row.QT_ACOES_ORDINARIAS), preferredShares: quantity(row.QT_ACOES_PREFERENCIAIS), treasuryShares: quantity(row.QT_ACOES_TESOURARIA) })
+  }
+  return rows.sort((a, b) => a.referenceDate.localeCompare(b.referenceDate))
+}
+
 /** Read the public FCA archive and resolve one ticker only from a matching
  * official record. Ambiguous mappings are deliberately returned as null. */
 export async function fetchCvmIssuerMapping(ticker: string, year: number): Promise<CvmIssuerMapping | null> {
@@ -72,6 +84,14 @@ export async function fetchCvmIssuerMapping(ticker: string, year: number): Promi
   const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
   const files = archive.files.filter((file) => /(?:^|_)cia_aberta(?:_valor_mobiliario)?_\d{4}\.csv$/i.test(file.path))
   return extractCvmIssuerMapping(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), ticker)
+}
+
+export async function fetchCvmCapitalComposition(year: number, cvmCode: string): Promise<CvmCapitalComposition[]> {
+  const response = await fetch(cvmArchiveUrl('DFP', year), { signal: AbortSignal.timeout(45_000) })
+  if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for DFP ${year}.`)
+  const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
+  const files = archive.files.filter((file) => /composicao_capital_\d{4}\.csv$/i.test(file.path))
+  return extractCvmCapitalComposition(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), cvmCode).map((row) => ({ ...row, sourceUrl: cvmArchiveUrl('DFP', year) }))
 }
 
 /** Official CVM IPE documents. This returns document metadata, not an inferred
@@ -173,6 +193,7 @@ function iso(value: string | undefined): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? '')
   return m ? value! : null
 }
+function quantity(value: string | undefined): number | null { if (!value) return null; const parsed = Number(value.replace(/\./g, '').replace(',', '.')); return Number.isFinite(parsed) ? parsed : null }
 
 /** RFC-4180-style quoted cells with the semicolon delimiter used by CVM. */
 export function parseSemicolonCsv(text: string): Record<string, string>[] {
