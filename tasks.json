@@ -2097,7 +2097,7 @@
         {
           "id": "AINV-T1242",
           "title": "Entregar alertas brasileiros contextualizados e acionáveis",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1211", "AINV-T1231", "AINV-T1241"],
           "scope": ["src/domain/alice-invest", "services/connector", "ui/src"],
           "acceptance_criteria": ["Alertar concentração FGC, vencimento, liquidez, evento societário e dado macro revisado", "Toda notificação mostra fonte, data-base, confiança e link para explicação", "Deduplicar alertas e manter telegram_inbound_enabled/notifications sob kill switches; execução permanece false"],

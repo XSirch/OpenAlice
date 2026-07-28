@@ -19,6 +19,7 @@ import { readCorporateEvents } from '../../core/corporate-events.js'
 import { associateCorporateEvents } from '../../domain/alice-invest/corporate-events/association.js'
 import { calculateTotalReturn } from '../../domain/alice-invest/corporate-events/total-return.js'
 import { calculateBrazilMacroExposure } from '../../domain/alice-invest/macro-exposure.js'
+import { buildPortfolioAlerts } from '../../domain/alice-invest/portfolio-alerts.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
@@ -146,6 +147,20 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
       const [definitions, snapshot] = await Promise.all([deps.readDefinitions(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds)])
       return c.json({ exposures: calculateBrazilMacroExposure(reconcilePluggyFixedIncomeCustody(snapshot, definitions).positions), disclaimer: 'Scenario context based on explicit product metadata, not a forecast or order recommendation.' })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  app.get('/portfolio-alerts', async (c) => {
+    try {
+      const config = await deps.readConfig()
+      if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
+      const [definitions, policy, snapshot, ledger, events] = await Promise.all([
+        deps.readDefinitions(), deps.readFgcPolicy(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds), deps.readBrokerageLedger(), deps.readCorporateEvents(),
+      ])
+      const reconciliation = reconcilePluggyFixedIncomeCustody(snapshot, definitions)
+      const positions = calculateAveragePrices(ledger.entries).map((position) => ({ symbol: position.symbol, quantity: position.quantity }))
+      const associations = associateCorporateEvents(events, positions)
+      const byId = new Map(events.map((event) => [event.id, event]))
+      return c.json({ alerts: buildPortfolioAlerts({ asOf: snapshot.fetchedAt, fgc: calculateFgcExposure(reconciliation.positions, policy), ladder: buildFixedIncomeLadder({ positions: reconciliation.positions, asOf: snapshot.fetchedAt }), macro: calculateBrazilMacroExposure(reconciliation.positions), events: associations.map((association) => ({ association, event: byId.get(association.eventId)! })) }), delivery: { inbox: true, externalNotifications: false, reason: 'External notifications remain behind Alice Invest kill switches.' } })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   /** Preview is memory-only and expires; no financial record is written here. */

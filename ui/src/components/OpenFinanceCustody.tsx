@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import type { CustodySnapshot, FgcExposure, FixedIncomeLadder, MacroExposure } from '../api/open-finance'
+import type { CustodySnapshot, FgcExposure, FixedIncomeLadder, MacroExposure, PortfolioAlert } from '../api/open-finance'
 import { fmt, fmtNum } from '../lib/format'
 
 export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (snapshot: CustodySnapshot | null) => void }) {
@@ -13,6 +13,7 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
   const [fgc, setFgc] = useState<FgcExposure | null>(null)
   const [ladder, setLadder] = useState<FixedIncomeLadder | null>(null)
   const [macroExposure, setMacroExposure] = useState<{ exposures: MacroExposure[]; disclaimer: string } | null>(null)
+  const [portfolioAlerts, setPortfolioAlerts] = useState<{ alerts: PortfolioAlert[]; delivery: { inbox: boolean; externalNotifications: boolean; reason: string } } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const total = useMemo(() => snapshot?.positions.reduce((sum, position) => sum + (position.currency === 'BRL' ? position.value ?? 0 : 0), 0) ?? 0, [snapshot])
@@ -27,7 +28,8 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
         const next = await api.openFinance.fixedIncomeSummary()
         setSnapshot(next.snapshot); onSnapshotChange?.(next.snapshot); setFgc(next.fgc); setLadder(next.ladder)
         setMacroExposure(await api.openFinance.macroExposure().catch(() => null))
-      } else { onSnapshotChange?.(null); setFgc(null); setLadder(null); setMacroExposure(null) }
+        setPortfolioAlerts(await api.openFinance.portfolioAlerts().catch(() => null))
+      } else { onSnapshotChange?.(null); setFgc(null); setLadder(null); setMacroExposure(null); setPortfolioAlerts(null) }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load Open Finance custody.') }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -43,11 +45,12 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
         const next = await api.openFinance.fixedIncomeSummary()
         setSnapshot(next.snapshot); onSnapshotChange?.(next.snapshot); setFgc(next.fgc); setLadder(next.ladder)
         setMacroExposure(await api.openFinance.macroExposure().catch(() => null))
-      } else { setSnapshot(null); setFgc(null); setLadder(null); setMacroExposure(null); onSnapshotChange?.(null) }
+        setPortfolioAlerts(await api.openFinance.portfolioAlerts().catch(() => null))
+      } else { setSnapshot(null); setFgc(null); setLadder(null); setMacroExposure(null); setPortfolioAlerts(null); onSnapshotChange?.(null) }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save Pluggy settings.') }
     finally { setBusy(false) }
   }
-  const refresh = async () => { setBusy(true); setError(null); try { const next = await api.openFinance.fixedIncomeSummary(); setSnapshot(next.snapshot); onSnapshotChange?.(next.snapshot); setFgc(next.fgc); setLadder(next.ladder); setMacroExposure(await api.openFinance.macroExposure().catch(() => null)) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
+  const refresh = async () => { setBusy(true); setError(null); try { const next = await api.openFinance.fixedIncomeSummary(); setSnapshot(next.snapshot); onSnapshotChange?.(next.snapshot); setFgc(next.fgc); setLadder(next.ladder); setMacroExposure(await api.openFinance.macroExposure().catch(() => null)); setPortfolioAlerts(await api.openFinance.portfolioAlerts().catch(() => null)) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to refresh custody.') } finally { setBusy(false) } }
 
   return (
     <section className="border border-border rounded-lg bg-secondary p-5" aria-label="MeuPluggy account settings">
@@ -73,6 +76,7 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
       </div>}
       {ladder && <div className="mt-5 border-t border-border pt-4" aria-label="Fixed income maturity ladder"><h3 className="text-[12px] font-semibold text-foreground">Fixed-income maturity and liquidity</h3><p className="mt-1 text-[11px] text-muted-foreground">{ladder.disclaimer}</p><div className="mt-3 space-y-2">{Object.entries(ladder.buckets).filter(([, bucket]) => bucket.entries.length > 0).map(([bucket, value]) => <div key={bucket} className="rounded border border-border px-3 py-2 text-[12px]"><div className="flex justify-between gap-3"><span className="font-medium text-foreground">{bucket.replaceAll('_', ' ')}</span><span>{fmt(Number(value.currentAmountBRL), 'BRL')}</span></div>{value.entries.map(entry => <div key={entry.id} className="mt-2 text-[11px] text-muted-foreground"><span>{entry.issuer} · {entry.productType} · matures {new Date(`${entry.maturityDate}T00:00:00`).toLocaleDateString()} · {entry.liquidityDays}d liquidity</span><span className="block">Gross {entry.annualGrossRatePct == null ? '—' : `${entry.annualGrossRatePct}%`} · net {entry.annualNetRatePct == null ? '—' : `${entry.annualNetRatePct}%`}</span>{entry.marketValueBRL != null && entry.redemptionAmountBRL != null && <span className="block">Market {fmt(Number(entry.marketValueBRL), 'BRL')} · redemption {fmt(Number(entry.redemptionAmountBRL), 'BRL')}</span>}{entry.gaps.map(gap => <span key={gap} className="block text-warning">{gap}</span>)}</div>)}</div>)}</div></div>}
       {macroExposure && <div className="mt-5 border-t border-border pt-4" aria-label="Brazil portfolio macro exposure"><h3 className="text-[12px] font-semibold text-foreground">Brazil macro exposure</h3><p className="mt-1 text-[11px] text-muted-foreground">{macroExposure.disclaimer}</p><div className="mt-3 grid gap-2 md:grid-cols-2">{macroExposure.exposures.map(exposure => <div key={exposure.dimension} className="rounded border border-border px-3 py-2 text-[12px]"><div className="flex justify-between gap-3"><span className="font-medium text-foreground">{exposure.dimension.replaceAll('_', ' ')}</span><span>{fmt(Number(exposure.amountBRL), 'BRL')}</span></div>{exposure.contributors.slice(0, 3).map(contributor => <div key={`${exposure.dimension}-${contributor.label}`} className="mt-1 text-[11px] text-muted-foreground">{contributor.label}: {fmt(Number(contributor.amountBRL), 'BRL')}</div>)}{exposure.assumptions.map(assumption => <p key={assumption} className="mt-1 text-[11px] text-muted-foreground">{assumption}</p>)}{exposure.gaps.map(gap => <p key={gap} className="mt-1 text-[11px] text-warning">{gap}</p>)}</div>)}</div></div>}
+      {portfolioAlerts && <div className="mt-5 border-t border-border pt-4" aria-label="Portfolio alerts"><h3 className="text-[12px] font-semibold text-foreground">Portfolio alerts</h3><p className="mt-1 text-[11px] text-muted-foreground">{portfolioAlerts.delivery.reason}</p><div className="mt-3 space-y-2">{portfolioAlerts.alerts.length === 0 ? <p className="text-[12px] text-muted-foreground">No active contextual alerts.</p> : portfolioAlerts.alerts.map(alert => <div key={alert.id} className="rounded border border-border px-3 py-2 text-[12px]"><div className="flex justify-between gap-3"><span className={alert.severity === 'warning' ? 'font-medium text-warning' : 'font-medium text-foreground'}>{alert.title}</span><span className="text-[11px] text-muted-foreground">{alert.confidence}</span></div><p className="mt-1 text-[11px] text-muted-foreground">{alert.detail}</p><p className="mt-1 text-[11px] text-muted-foreground">{alert.source.label} · {new Date(alert.asOf).toLocaleString()}</p></div>)}</div></div>}
       {snapshot && <div className="mt-5 border-t border-border pt-4"><div className="mb-3 flex items-center justify-between"><span className="text-[12px] text-muted-foreground">{snapshot.positions.length} positions · refreshed {new Date(snapshot.fetchedAt).toLocaleString()}</span><span className="text-sm font-semibold" title="Sum of net position balances in BRL">{fmt(total, 'BRL')}</span></div><div className="mb-2 grid grid-cols-[1fr_auto_auto] gap-4 text-[10px] uppercase tracking-wide text-muted-foreground"><span>Asset</span><span>Quantity · unit value</span><span className="min-w-20 text-right">Net balance</span></div><div className="space-y-2">{snapshot.positions.map(position => <div key={position.id} className="grid grid-cols-[1fr_auto_auto] gap-4 text-[12px]"><span><span className="font-medium text-foreground">{position.code ?? position.name}</span>{position.code && <span className="ml-2 text-muted-foreground">{position.name}</span>}<span className="ml-2 text-muted-foreground">{position.institution ?? ''}</span>{position.asOf && <span className="block text-[11px] text-muted-foreground">Base date: {new Date(position.asOf).toLocaleDateString()}</span>}</span><span className="text-right text-muted-foreground">{position.quantity == null ? '—' : fmtNum(position.quantity)}{position.unitValue == null ? '' : <span className="block text-[11px]">{fmt(position.unitValue, position.currency)}</span>}</span><span className="min-w-20 text-right text-foreground">{position.value == null ? '—' : fmt(position.value, position.currency)}{position.grossAmount != null && position.grossAmount !== position.value && <span className="block text-[11px] text-muted-foreground">gross {fmt(position.grossAmount, position.currency)}</span>}</span></div>)}</div></div>}
     </section>
   )

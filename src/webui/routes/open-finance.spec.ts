@@ -32,6 +32,9 @@ describe('open finance fixed-income routes', () => {
     const macroExposure = await app.request('/fixed-income/macro-exposure')
     expect(macroExposure.status).toBe(200)
     expect((await macroExposure.json()).exposures.map((exposure: { dimension: string }) => exposure.dimension)).toContain('interest_rates')
+    const alerts = await app.request('/portfolio-alerts')
+    expect(alerts.status).toBe(200)
+    expect((await alerts.json()).delivery.externalNotifications).toBe(false)
   })
 
   it('requires explicit confirmation before a brokerage-note preview reaches the ledger', async () => {
