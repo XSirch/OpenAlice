@@ -225,7 +225,10 @@ export function PortfolioPage() {
       setLastRefresh(new Date())
       return
     }
-    setLoading(true)
+    // A cache hit is still revalidated, but it must not blank the Portfolio
+    // while account/UTA reads are in flight. The timestamp makes the age of
+    // the retained view explicit until the background result arrives.
+    if (!hasFreshPortfolioResult.current) setLoading(true)
     const [result, configResult, aggregateResult] = await Promise.all([
       fetchPortfolioData(),
       api.config.load().catch(() => null),

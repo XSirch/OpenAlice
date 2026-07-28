@@ -77,12 +77,12 @@ async function flush(): Promise<void> {
   if (!cache) return
   const snapshot: SessionsFile = { version: 1, sessions: [...cache.sessions] }
   const path = SESSIONS_FILE()
-  // Every writer uses the same `${path}.tmp`, so merely awaiting a current
-  // write is insufficient: multiple waiters can otherwise resume together and
-  // collide on Windows. Chain the complete write instead.
+  // Give each atomic candidate its own name. Antivirus/indexing can retain a
+  // short-lived handle on a prior .tmp on Windows even after the write chain
+  // advances, so a fixed `${path}.tmp` is still vulnerable to EBUSY.
   const next = writeChain.catch(() => undefined).then(async () => {
     await mkdir(dirname(path), { recursive: true })
-    const tmp = `${path}.tmp`
+    const tmp = `${path}.${randomBytes(8).toString('hex')}.tmp`
     const data = JSON.stringify(snapshot, null, 2) + '\n'
     await writeFile(tmp, data, { mode: 0o600 })
     await rename(tmp, path)
