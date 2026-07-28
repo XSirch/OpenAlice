@@ -12,6 +12,8 @@ export interface CvmStatementLine {
   accountCode: string
   account: string
   value: number
+  revision?: string
+  sourceUrl?: string
 }
 
 export interface CvmIssuerMapping { ticker: string; cvmCode: string; company: string; updatedAt: string | null }
@@ -45,7 +47,7 @@ export async function fetchCvmStatementLines(input: CvmStatementFetchInput): Pro
   if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for ${input.kind} ${input.year}.`)
   const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
   const files = archive.files.filter((file) => /_(BPA|BPP|DRE|DFC|DVA|DMPL)_(con|ind)_\d{4}\.csv$/i.test(file.path))
-  return extractCvmStatementLines(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), input.cvmCode)
+  return extractCvmStatementLines(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), input.cvmCode).map((line) => ({ ...line, sourceUrl: cvmArchiveUrl(input.kind, input.year) }))
 }
 
 /** Parse CSV fixture/archive files without retaining unrelated issuer rows. */
@@ -142,7 +144,7 @@ export function parseCvmStatementRow(row: Record<string, string>): CvmStatementL
   return {
     cvmCode: row.CD_CVM, company: row.DENOM_CIA, referenceDate,
     filedAt: iso(row.DT_RECEB) ?? null, statement: row.GRUP_DFP,
-    accountCode: row.CD_CONTA, account: row.DS_CONTA ?? row.CD_CONTA, value,
+    accountCode: row.CD_CONTA, account: row.DS_CONTA ?? row.CD_CONTA, value, revision: row.VERSAO?.trim() || row.VERSAO_DOCUMENTO?.trim() || '1',
   }
 }
 

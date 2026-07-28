@@ -137,7 +137,7 @@ export interface BrazilMacroSnapshot {
   collectedAt: string
   provider: string
 }
-export interface CvmStatementLine { cvmCode: string; company: string; referenceDate: string; filedAt: string | null; statement: string; accountCode: string; account: string; value: number }
+export interface CvmStatementLine { cvmCode: string; company: string; referenceDate: string; filedAt: string | null; statement: string; accountCode: string; account: string; value: number; revision?: string; sourceUrl?: string }
 export interface CvmIssuerMapping { ticker: string; cvmCode: string; company: string; updatedAt: string | null }
 
 export interface TermPoint {

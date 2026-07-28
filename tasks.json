@@ -1923,7 +1923,7 @@
         {
           "id": "AINV-T1201",
           "title": "Integrar fundamentos e documentos oficiais da CVM",
-          "status": "in_progress",
+          "status": "implemented",
           "depends_on": ["AINV-T1200"],
           "scope": ["src/domain/market-data", "src/webui/routes", "ui/src"],
           "acceptance_criteria": ["Importar e normalizar DFP, ITR, composição de capital e metadados de companhias abertas", "Exibir competência do demonstrativo, data de publicação, versão e link de origem", "Manter BRAPI como cotação complementar, sem apresentar fundamentos de fontes diferentes como equivalentes"],
@@ -2107,7 +2107,7 @@
         {
           "id": "AINV-T1243",
           "title": "Validar experiência Brasil-first e observabilidade do pacote",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1201", "AINV-T1212", "AINV-T1223", "AINV-T1232", "AINV-T1242"],
           "scope": ["docs/alice-invest-validation-report.md", "ui/src", "src/domain/alice-invest"],
           "acceptance_criteria": ["Validar uma carteira brasileira diversificada sem credenciais expostas", "Demonstrar dados-base, cache, falhas e estados vazios em cada painel", "Confirmar global not_ready, sinais B3/cripto research_only e execution_enabled false"],

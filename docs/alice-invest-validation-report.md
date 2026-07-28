@@ -1,5 +1,35 @@
 # Alice Invest validation report
 
+## Brazil-first package rerun — 2026-07-28
+
+- Audited integration commit: `f1619560` plus the CVM-panel and validation
+  changes recorded below. No provider credential, brokerage note, account
+  balance, or external identifier was read or written during the rerun.
+- The Market detail page now keeps official CVM DFP/ITR data distinct from
+  BRAPI quotes. Each displayed filing line carries its reference date, filing
+  date when supplied, revision, and the official CVM archive URL.
+- Portfolio views expose source-attributed macro context and deduplicated
+  contextual alerts. External delivery is deliberately disabled until the
+  existing Alice Invest notification kill switches authorize it; execution
+  remains structurally disabled.
+
+| Command | Result |
+| --- | --- |
+| `pnpm vitest run src/domain/market-data/reference/cvm.spec.ts src/webui/routes/reference.spec.ts` | Passed — 22 tests |
+| `pnpm vitest run src/domain/alice-invest/macro-exposure.spec.ts src/domain/alice-invest/portfolio-alerts.spec.ts src/webui/routes/open-finance.spec.ts` | Passed — 8 tests across focused reruns |
+| `npx tsc --noEmit` | Passed |
+| `cd ui && npx tsc -b` | Passed |
+| `pnpm test` | Passed — 426 files, 3,514 tests; 2 files / 22 tests skipped |
+
+The former empty-workspace Codex session test was made deterministic by using
+the workspace-local `.codex` layout. It no longer scans unrelated global
+rollouts, and both its focused run (88 tests) and the full suite passed.
+
+Remaining acceptance is a human UI walkthrough using a public PETR4/VALE3
+example and a redacted Pluggy snapshot. It is intentionally not fabricated in
+this report. Readiness remains `global=not_ready`, B3/crypto signals remain
+`research_only`, and `execution_enabled=false`.
+
 ## Audit baseline
 
 ## Production Telegram inbound E2E — 2026-07-27
