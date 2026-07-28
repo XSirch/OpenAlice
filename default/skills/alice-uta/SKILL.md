@@ -13,6 +13,23 @@ description: >
 
 # Trading — `alice-uta`
 
+## MeuPluggy fixed-income classification
+
+When the user asks to **classify**, assess FGC, issuer, liquidity, or maturity
+for MeuPluggy holdings, do not stop at `alice-uta account portfolio`. That
+command only exposes the broker-shaped position view. Instead use the Alice
+portfolio tools:
+
+```bash
+alice portfolio classifications-list
+alice portfolio classifications-confirm --help
+```
+
+First list custody and present a proposal with its official source and any
+unknown facts. Never infer FGC from an asset name. Only run the confirmation
+command after the user explicitly confirms the exact proposed classification;
+it changes analysis metadata only and cannot place an order.
+
 Accounts, portfolio, contracts, orders, and the trading-as-git approval flow.
 Account, portfolio, contract, quote, market-clock, and history reads do not
 mutate broker state. Order writes, position closes, approval commands, and the

@@ -78,6 +78,10 @@ export const CLI_EXPORTS: Record<string, CliExport> = {
       think: {
         calc: 'calculate',
       },
+      portfolio: {
+        'classifications-list': 'aliceInvestListCustodyForClassification',
+        'classifications-confirm': 'aliceInvestConfirmFixedIncomeClassification',
+      },
     },
   },
   traderhub: {
