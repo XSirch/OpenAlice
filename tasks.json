@@ -2087,7 +2087,7 @@
         {
           "id": "AINV-T1241",
           "title": "Relacionar cenário macro à exposição da carteira",
-          "status": "pending",
+          "status": "implemented",
           "depends_on": ["AINV-T1240", "AINV-T1212", "AINV-T1232"],
           "scope": ["src/domain/alice-invest", "ui/src"],
           "acceptance_criteria": ["Exibir exposição explicável a inflação, juros, câmbio, liquidez e concentração", "Usar linguagem de cenário e sensibilidade, não previsão determinística ou recomendação de ordem", "Listar ativos e premissas que contribuíram para cada indicador"],

@@ -18,6 +18,7 @@ import { buildTaxReport, taxReportCsv, taxReportPdf } from '../../domain/alice-i
 import { readCorporateEvents } from '../../core/corporate-events.js'
 import { associateCorporateEvents } from '../../domain/alice-invest/corporate-events/association.js'
 import { calculateTotalReturn } from '../../domain/alice-invest/corporate-events/total-return.js'
+import { calculateBrazilMacroExposure } from '../../domain/alice-invest/macro-exposure.js'
 
 const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
@@ -138,6 +139,14 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
     }
+  })
+  app.get('/fixed-income/macro-exposure', async (c) => {
+    try {
+      const config = await deps.readConfig()
+      if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
+      const [definitions, snapshot] = await Promise.all([deps.readDefinitions(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds)])
+      return c.json({ exposures: calculateBrazilMacroExposure(reconcilePluggyFixedIncomeCustody(snapshot, definitions).positions), disclaimer: 'Scenario context based on explicit product metadata, not a forecast or order recommendation.' })
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   /** Preview is memory-only and expires; no financial record is written here. */
   app.post('/tax/notes/preview', async (c) => {
