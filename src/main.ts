@@ -196,7 +196,13 @@ async function main() {
   {
     const executor = getSDKExecutor()
     const routeMap = buildRouteMap()
-    const credentials = buildSDKCredentials(config.marketData.providerKeys, config.marketData.hub)
+    // Provider keys are edited from Settings while Alice stays online. Resolve
+    // them per request rather than capturing the boot-time object, so Brapi
+    // (and every other keyed source) uses a newly saved credential immediately.
+    const credentials = async () => {
+      const marketData = await readMarketDataConfig()
+      return buildSDKCredentials(marketData.providerKeys, marketData.hub)
+    }
     equityClient = new SDKEquityClient(executor, 'equity', providers.equity, credentials, routeMap)
     cryptoClient = new SDKCryptoClient(executor, 'crypto', providers.crypto, credentials, routeMap)
     currencyClient = new SDKCurrencyClient(executor, 'currency', providers.currency, credentials, routeMap)
@@ -222,7 +228,12 @@ async function main() {
   // resolver re-reads per request — is live on the next search, no restart.
   const getEquityVendors = async () => {
     const md = await readMarketDataConfig()
-    return [...new Set([md.providers.equity, ...md.extraVendors])]
+    // A configured Brapi key is an explicit Brazilian-market opt-in. Include
+    // it automatically so searching a B3 ticker does not silently return only
+    // Yahoo candidates while the user believes Brapi is active. It remains a
+    // delayed/research-only source and is never used for execution or signals.
+    const configuredBrapi = Boolean(md.providerKeys.brapi?.trim())
+    return [...new Set([md.providers.equity, ...md.extraVendors, ...(configuredBrapi ? ['brapi'] : [])])]
   }
 
   const marketSearch = { symbolIndex, equityVendors: getEquityVendors, equityClient, cryptoClient, currencyClient, commodityCatalog }

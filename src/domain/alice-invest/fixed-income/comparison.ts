@@ -10,10 +10,10 @@ export function compareFixedIncome(inputs: FixedIncomeProjectionInput[]): FixedI
   const entries = inputs.map((input) => {
     const projection = projectFixedIncome(input)
     const gaps = [
-      ...(input.product.fgc.eligible ? [] : ['FGC eligibility is not available']),
+      ...(input.product.fgc.status === 'eligible' ? [] : ['FGC eligibility is not available']),
       ...(input.product.assumptions.length === 0 ? ['Product-specific assumptions were not supplied'] : []),
     ]
-    return { productType: input.product.productType, issuer: input.product.issuer.legalName, maturityDate: input.product.maturityDate, redemption: input.product.liquidity.redemption, fgcEligible: input.product.fgc.eligible, projectedNetBRL: projection.netBRL, projectedGrossBRL: projection.grossBRL, assumptions: input.product.assumptions, gaps }
+    return { productType: input.product.productType, issuer: input.product.issuer.legalName, maturityDate: input.product.maturityDate, redemption: input.product.liquidity.redemption, fgcEligible: input.product.fgc.status === 'eligible', projectedNetBRL: projection.netBRL, projectedGrossBRL: projection.grossBRL, assumptions: input.product.assumptions, gaps }
   }).sort((a, b) => new Decimal(b.projectedNetBRL).cmp(a.projectedNetBRL))
   return { entries, assumptions: ['Projections use supplied rates, dates and day counts.', 'Taxes and fees can change; verify the offering documents.'], disclaimer: 'This comparison is informational, not an investment recommendation or return guarantee.' }
 }

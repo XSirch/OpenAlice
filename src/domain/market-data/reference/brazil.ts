@@ -7,10 +7,16 @@
  */
 
 import type { IndexClientLike } from '../client/types.js'
-import type { BrazilMarketBoard, MacroPoint, MacroSeriesCard, MacroUnit } from './types.js'
+import type { BrazilMacroCalendarEvent, BrazilMarketBoard, MacroPoint, MacroSeriesCard, MacroUnit, ReferenceSeriesProvenance } from './types.js'
 
 const BCB_SGS = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs'
 const MAX_POINTS = 90
+const COPOM_SOURCE = 'https://www.bcb.gov.br/controleinflacao/copom'
+
+const COPOM_DATES: Record<number, Array<[string, string]>> = {
+  2026: [['2026-01-27', '2026-01-28'], ['2026-03-17', '2026-03-18'], ['2026-04-28', '2026-04-29'], ['2026-06-16', '2026-06-17'], ['2026-08-04', '2026-08-05'], ['2026-09-15', '2026-09-16'], ['2026-11-03', '2026-11-04'], ['2026-12-08', '2026-12-09']],
+  2027: [['2027-01-26', '2027-01-27'], ['2027-03-16', '2027-03-17'], ['2027-04-27', '2027-04-28'], ['2027-06-15', '2027-06-16'], ['2027-08-03', '2027-08-04'], ['2027-09-21', '2027-09-22'], ['2027-10-26', '2027-10-27'], ['2027-12-07', '2027-12-08']],
+}
 
 interface SgsRow { data: string; valor: string }
 
@@ -60,7 +66,7 @@ async function sgsSeries(id: number, lookbackDays: number): Promise<MacroPoint[]
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
-function card(id: string, label: string, unit: MacroUnit, points: MacroPoint[]): MacroSeriesCard {
+function card(id: string, label: string, unit: MacroUnit, points: MacroPoint[], provenance?: Omit<ReferenceSeriesProvenance, 'dataAsOf'>): MacroSeriesCard {
   const recent = points.slice(-MAX_POINTS)
   const latest = recent.at(-1) ?? null
   const previous = recent.at(-2) ?? null
@@ -72,6 +78,7 @@ function card(id: string, label: string, unit: MacroUnit, points: MacroPoint[]):
     latest: latest?.value ?? null,
     latestDate: latest?.date ?? null,
     change: latest && previous ? latest.value - previous.value : null,
+    ...(provenance ? { provenance: { ...provenance, dataAsOf: latest?.date ?? null } } : {}),
   }
 }
 
@@ -95,7 +102,7 @@ function rollingIpca12m(points: MacroPoint[]): MacroPoint[] {
   })
 }
 
-async function b3Indices(indexClient: IndexClientLike): Promise<MacroSeriesCard[]> {
+async function b3Indices(indexClient: IndexClientLike, collectedAt: string): Promise<MacroSeriesCard[]> {
   const start = new Date()
   start.setDate(start.getDate() - 120)
   const rows = await indexClient.getHistorical({
@@ -110,18 +117,19 @@ async function b3Indices(indexClient: IndexClientLike): Promise<MacroSeriesCard[
       : [])
     .sort((a, b) => a.date.localeCompare(b.date))
   return [
-    card('IBOV', 'Ibovespa', 'index', rowsFor('^BVSP')),
-    card('IFIX', 'IFIX', 'index', rowsFor('^IFIX')),
+    card('IBOV', 'Ibovespa', 'index', rowsFor('^BVSP'), { provider: 'Yahoo Finance', sourceId: '^BVSP', classification: 'delayed_market', collectedAt }),
+    card('IFIX', 'IFIX', 'index', rowsFor('^IFIX'), { provider: 'Yahoo Finance', sourceId: '^IFIX', classification: 'delayed_market', collectedAt }),
   ]
 }
 
 export async function fetchBrazilMarketBoard(indexClient: IndexClientLike): Promise<BrazilMarketBoard> {
+  const collectedAt = new Date().toISOString()
   const results = await Promise.allSettled([
     sgsSeries(BCB_SERIES.selic.id, BCB_SERIES.selic.lookbackDays),
     sgsSeries(BCB_SERIES.cdi.id, BCB_SERIES.cdi.lookbackDays),
     sgsSeries(BCB_SERIES.ipca.id, BCB_SERIES.ipca.lookbackDays),
     sgsSeries(BCB_SERIES.usdBrl.id, BCB_SERIES.usdBrl.lookbackDays),
-    b3Indices(indexClient),
+    b3Indices(indexClient, collectedAt),
   ])
   const errors: Record<string, string> = {}
   const value = <T>(result: PromiseSettledResult<T>, key: string, fallback: T): T => {
@@ -138,13 +146,28 @@ export async function fetchBrazilMarketBoard(indexClient: IndexClientLike): Prom
   ]
   return {
     cards: [
-      card('SELIC', BCB_SERIES.selic.label, 'percent', selic),
-      card('CDI', BCB_SERIES.cdi.label, 'percent', annualizeCdi(cdi)),
-      card('IPCA_12M', BCB_SERIES.ipca.label, 'percent', rollingIpca12m(ipca)),
-      card('USDBRL', BCB_SERIES.usdBrl.label, 'brl', usdBrl),
+      card('SELIC', BCB_SERIES.selic.label, 'percent', selic, { provider: 'Banco Central do Brasil', sourceId: 'SGS 432', classification: 'official_reference', collectedAt }),
+      card('CDI', BCB_SERIES.cdi.label, 'percent', annualizeCdi(cdi), { provider: 'Banco Central do Brasil', sourceId: 'SGS 12', classification: 'derived', collectedAt }),
+      card('IPCA_12M', BCB_SERIES.ipca.label, 'percent', rollingIpca12m(ipca), { provider: 'Banco Central do Brasil', sourceId: 'SGS 433', classification: 'derived', collectedAt }),
+      card('USDBRL', BCB_SERIES.usdBrl.label, 'brl', usdBrl, { provider: 'Banco Central do Brasil', sourceId: 'SGS 1', classification: 'official_reference', collectedAt }),
       ...indices,
     ],
+    calendar: buildCopomCalendar(new Date().getUTCFullYear()),
     ...(Object.keys(errors).length ? { errors } : {}),
     meta: { provider: 'Banco Central do Brasil + Yahoo Finance', asOf: new Date().toISOString(), origin: 'local' },
   }
+}
+
+/** Official calendars are published by the BCB annually; unknown years stay
+ * empty instead of fabricating policy dates. */
+export function buildCopomCalendar(year: number): BrazilMacroCalendarEvent[] {
+  return (COPOM_DATES[year] ?? []).map(([startDate, endDate]) => ({
+    id: `copom-${startDate}`,
+    kind: 'copom_meeting',
+    label: 'Copom meeting',
+    startDate,
+    endDate,
+    sourceUrl: COPOM_SOURCE,
+    publishedAt: year === 2026 ? '2025-06-24' : '2026-06-23',
+  }))
 }

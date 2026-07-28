@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LineChart, Line, YAxis, XAxis, Tooltip } from 'recharts'
 import { useReferenceBoard } from '../components/market/useReferenceBoard'
@@ -13,7 +13,7 @@ import {
   type MoversBoard, type MoverRow, type ReferenceMeta, type CalendarBoard,
   type MacroBoard, type MacroSeriesCard, type TermStructureBoard, type TermCurve,
   type GlobalMacroBoard, type GlobalMacroCell, type ShippingBoard, type ShippingCurve,
-  type FedBoard, type BrazilMarketBoard,
+  type FedBoard, type BrazilMarketBoard, type BrazilMacroSnapshot,
 } from '../api/reference'
 import { useWorkspace } from '../tabs/store'
 import type { ViewSpec } from '../tabs/types'
@@ -50,6 +50,7 @@ export function MarketBoardPage({ spec }: PageProps) {
 
 function BrazilBoardView() {
   const { data, updatedAt, loading, error, retry } = useReferenceBoard<BrazilMarketBoard>(referenceApi.brazil, 5 * 60 * 1000)
+  const history = useReferenceBoard<{ entries: BrazilMacroSnapshot[] }>(referenceApi.brazilHistory, 5 * 60 * 1000)
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader
@@ -94,6 +95,8 @@ function BrazilBoardView() {
               </div>
             </section>
             <PortfolioEquityQuotes />
+            <section className="rounded-md border border-border bg-secondary p-4" aria-label="Brazil macro calendar"><h2 className="text-[12px] font-semibold text-foreground">Macro calendar</h2><p className="mt-1 text-[11px] text-muted-foreground">Official Copom meeting dates carried with this Brazil snapshot.</p>{(data.calendar ?? []).filter((event) => event.endDate >= new Date().toISOString().slice(0, 10)).length === 0 && <p className="mt-3 text-[12px] text-muted-foreground">No published future Copom dates are available for this calendar year.</p>}<div className="mt-3 space-y-2 text-[12px]">{(data.calendar ?? []).filter((event) => event.endDate >= new Date().toISOString().slice(0, 10)).map((event) => <div key={event.id} className="flex items-center justify-between gap-4"><div><a className="font-medium text-foreground underline" href={event.sourceUrl} target="_blank" rel="noreferrer">{event.label}</a><span className="ml-2 text-muted-foreground">published {event.publishedAt}</span></div><span className="shrink-0 text-muted-foreground">{new Date(`${event.startDate}T00:00:00`).toLocaleDateString()}–{new Date(`${event.endDate}T00:00:00`).toLocaleDateString()}</span></div>)}</div></section>
+            <BrazilRevisionHistory cards={data.cards} entries={history.data?.entries ?? []} loading={history.loading} />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               Selic, CDI, IPCA e dólar vêm do Banco Central do Brasil. Ibovespa e IFIX são fechamentos atrasados via Yahoo Finance; cada cartão mostra sua própria data-base.
             </p>
@@ -101,6 +104,27 @@ function BrazilBoardView() {
         )}
       </div>
     </div>
+  )
+}
+
+function BrazilRevisionHistory({ cards, entries, loading }: { cards: MacroSeriesCard[]; entries: BrazilMacroSnapshot[]; loading: boolean }) {
+  const rows = useMemo(() => {
+    const labels = new Map(cards.map((card) => [card.provenance?.sourceId ?? card.id, card.label]))
+    return [...labels.entries()].map(([seriesId, label]) => {
+      const observations = entries.filter((entry) => entry.seriesId === seriesId)
+      const revisions = new Set(observations.map((entry) => `${entry.dataAsOf}:${entry.value}`)).size
+      const latest = observations.at(-1)
+      return { seriesId, label, observations: observations.length, revisions, latest }
+    }).filter((row) => row.observations > 0)
+  }, [cards, entries])
+  return (
+    <section className="rounded-md border border-border bg-secondary p-4" aria-label="Brazil macro snapshot history">
+      <h2 className="text-[12px] font-semibold text-foreground">Macro snapshot history</h2>
+      <p className="mt-1 text-[11px] text-muted-foreground">Captured values retain their source, data-base and collection time. Different values for the same data-base are kept as revisions.</p>
+      {loading && <p className="mt-3 text-[12px] text-muted-foreground">Loading persisted history…</p>}
+      {!loading && rows.length === 0 && <p className="mt-3 text-[12px] text-muted-foreground">No persisted snapshots yet. The next successful Brazil board refresh will record them.</p>}
+      {rows.length > 0 && <div className="mt-3 space-y-2 text-[12px]">{rows.map((row) => <div key={row.seriesId} className="flex items-start justify-between gap-4"><div><span className="font-medium text-foreground">{row.label}</span><span className="ml-2 text-muted-foreground">{row.seriesId}</span><span className="block text-[11px] text-muted-foreground">Data-base {row.latest?.dataAsOf} · collected {row.latest ? new Date(row.latest.collectedAt).toLocaleString() : '—'} · {row.latest?.provider}</span></div><span className="shrink-0 text-muted-foreground">{row.observations} snapshots · {row.revisions} values</span></div>)}</div>}
+    </section>
   )
 }
 

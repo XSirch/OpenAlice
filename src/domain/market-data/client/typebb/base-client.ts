@@ -13,12 +13,17 @@
 
 import type { QueryExecutor } from '@traderalice/opentypebb'
 
+/** Credentials can be resolved per request so a key saved in Settings takes
+ * effect immediately. A static object remains supported for tests and callers
+ * whose credentials are intentionally fixed. */
+export type SDKCredentials = Record<string, string> | (() => Record<string, string> | Promise<Record<string, string>>)
+
 export class SDKBaseClient {
   constructor(
     protected executor: QueryExecutor,
     protected routePrefix: string, // 'equity' | 'crypto' | 'currency' | 'news' | 'economy' | 'commodity'
     protected defaultProvider: string | undefined,
-    protected credentials: Record<string, string>,
+    protected credentials: SDKCredentials,
     protected routeMap: Map<string, string>,
   ) {}
 
@@ -40,6 +45,9 @@ export class SDKBaseClient {
     // Remove 'provider' from params — executor takes it as a separate argument
     const { provider: _, ...cleanParams } = params
 
-    return this.executor.execute(provider, model, cleanParams, this.credentials) as Promise<T[]>
+    const credentials = typeof this.credentials === 'function'
+      ? await this.credentials()
+      : this.credentials
+    return this.executor.execute(provider, model, cleanParams, credentials) as Promise<T[]>
   }
 }

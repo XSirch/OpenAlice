@@ -28,10 +28,30 @@ export interface CustodySnapshot {
   fetchedAt: string
 }
 
+export interface FgcExposure {
+  groups: Array<{ conglomerate: string; eligibleAmountBRL: string; estimatedCoveredBeforeAggregateLimitBRL: string; estimatedUncoveredBRL: string }>
+  eligibleAmountBRL: string
+  estimatedCoverageAfterAggregateLimitBRL: string
+  estimatedUncoveredBRL: string
+  remainingAggregateLimitBRL: string
+  policy: { effectiveFrom: string; referenceUrl: string }
+  disclaimer: string
+}
+
+export interface FixedIncomeLadder {
+  asOf: string
+  buckets: Record<string, { currentAmountBRL: string; entries: Array<{ id: string; issuer: string; productType: string; maturityDate: string; redemption: string; liquidityDays: number; currentAmountBRL: string; marketValueBRL: string | null; redemptionAmountBRL: string | null; annualGrossRatePct: string | null; annualNetRatePct: string | null; gaps: string[] }> }>
+  disclaimer: string
+}
+export interface FixedIncomeSummary { snapshot: CustodySnapshot; fgc: FgcExposure; ladder: FixedIncomeLadder }
+
 export const openFinanceApi = {
   load: (): Promise<OpenFinanceConfig> => fetchJson('/api/open-finance'),
   save: (input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<OpenFinanceConfig> =>
     fetchJson('/api/open-finance', { method: 'PUT', headers, body: JSON.stringify(input) }),
   custody: (): Promise<CustodySnapshot> => fetchJson('/api/open-finance/custody'),
+  fgc: (): Promise<FgcExposure> => fetchJson('/api/open-finance/fixed-income/fgc'),
+  fixedIncomeLadder: (): Promise<FixedIncomeLadder> => fetchJson('/api/open-finance/fixed-income/ladder'),
+  fixedIncomeSummary: (): Promise<FixedIncomeSummary> => fetchJson('/api/open-finance/fixed-income/summary'),
   test: (): Promise<{ ok: boolean; positions: number }> => fetchJson('/api/open-finance/test', { method: 'POST' }),
 }

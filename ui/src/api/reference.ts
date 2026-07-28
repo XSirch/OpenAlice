@@ -89,6 +89,14 @@ export interface MacroPoint {
   value: number
 }
 
+export interface ReferenceSeriesProvenance {
+  provider: string
+  sourceId?: string
+  classification: 'official_reference' | 'delayed_market' | 'end_of_day' | 'derived'
+  dataAsOf: string | null
+  collectedAt: string
+}
+
 export interface MacroSeriesCard {
   id: string
   label: string
@@ -97,6 +105,7 @@ export interface MacroSeriesCard {
   latest: number | null
   latestDate: string | null
   change: number | null
+  provenance?: ReferenceSeriesProvenance
 }
 
 export interface MacroBoard {
@@ -106,9 +115,30 @@ export interface MacroBoard {
 
 export interface BrazilMarketBoard {
   cards: MacroSeriesCard[]
+  calendar?: BrazilMacroCalendarEvent[]
   errors?: Record<string, string>
   meta: ReferenceMeta
 }
+
+export interface BrazilMacroCalendarEvent {
+  id: string
+  kind: 'copom_meeting'
+  label: string
+  startDate: string
+  endDate: string
+  sourceUrl: string
+  publishedAt: string
+}
+
+export interface BrazilMacroSnapshot {
+  seriesId: string
+  dataAsOf: string
+  value: number
+  collectedAt: string
+  provider: string
+}
+export interface CvmStatementLine { cvmCode: string; company: string; referenceDate: string; filedAt: string | null; statement: string; accountCode: string; account: string; value: number }
+export interface CvmIssuerMapping { ticker: string; cvmCode: string; company: string; updatedAt: string | null }
 
 export interface TermPoint {
   expiration: string
@@ -196,6 +226,9 @@ export const referenceApi = {
   calendar: () => fetchJson<CalendarBoard>('/api/reference/calendar'),
   macro: () => fetchJson<MacroBoard>('/api/reference/macro'),
   brazil: () => fetchJson<BrazilMarketBoard>('/api/reference/brazil'),
+  brazilHistory: (limit = 500) => fetchJson<{ entries: BrazilMacroSnapshot[] }>(`/api/reference/brazil/history?limit=${limit}`),
+  cvmStatements: (input: { cvmCode: string; kind: 'DFP' | 'ITR'; year: number }) => fetchJson<{ lines: CvmStatementLine[] }>(`/api/reference/cvm/statements?cvmCode=${encodeURIComponent(input.cvmCode)}&kind=${input.kind}&year=${input.year}`),
+  cvmIssuer: (input: { ticker: string; year: number }) => fetchJson<{ issuer: CvmIssuerMapping }>(`/api/reference/cvm/issuer?ticker=${encodeURIComponent(input.ticker)}&year=${input.year}`),
   termStructure: () => fetchJson<TermStructureBoard>('/api/reference/term-structure'),
   valuation: () => fetchJson<ValuationStrip>('/api/reference/valuation'),
   globalMacro: () => fetchJson<GlobalMacroBoard>('/api/reference/global-macro'),
