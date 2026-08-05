@@ -1,3 +1,4 @@
+
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import {
@@ -33,10 +34,7 @@ import { packagedElectronExecutable } from './smoke-packaged-toolchain.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '..')
 const candidateVersion = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version
-const repository =
-  process.env['OPENALICE_DESKTOP_RELEASE_REPOSITORY'] ||
-  process.env['GITHUB_REPOSITORY'] ||
-  'TraderAlice/OpenAlice'
+const repository = process.env['GITHUB_REPOSITORY'] || 'TraderAlice/OpenAlice'
 
 function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))

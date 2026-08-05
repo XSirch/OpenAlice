@@ -36,14 +36,9 @@ describe('Desktop Package Smoke workflow critical path', () => {
     })
   })
 
-  it('runs Windows Broker Pack acceptance independently of desktop packaging', () => {
+  it('runs desktop packaging only on the Linux VPS target', () => {
     const preflight = workflow.jobs.preflight
-    const brokerPacks = workflow.jobs['broker-packs-windows']
     const desktop = workflow.jobs.package
-    const brokerPackSteps = [
-      'Build optional Broker Packs on Windows',
-      'Prove previous-release Broker Pack upgrade on Windows',
-    ]
 
     expect(preflight).toMatchObject({
       name: 'fast preflight',
@@ -58,17 +53,15 @@ describe('Desktop Package Smoke workflow critical path', () => {
     expect(preflightSteps.indexOf('Verify CI workflow contracts')).toBeLessThan(
       preflightSteps.indexOf('Typecheck root workspace'),
     )
-    expect(brokerPacks).toMatchObject({
-      name: 'broker-packs windows-latest',
-      'runs-on': 'windows-latest',
+    expect(workflow.jobs['broker-packs-windows']).toBeUndefined()
+    expect(desktop).toMatchObject({
+      name: 'package ubuntu-latest',
+      'runs-on': 'ubuntu-latest',
     })
-    expect(brokerPacks.needs).toBe('preflight')
-    expect(brokerPacks.steps?.map((step) => step.name)).toEqual(
-      expect.arrayContaining(brokerPackSteps),
-    )
     expect(desktop.needs).toBe('preflight')
-    for (const stepName of brokerPackSteps) {
-      expect(desktop.steps?.map((step) => step.name)).not.toContain(stepName)
+    for (const job of Object.values(workflow.jobs)) {
+      expect(job['runs-on']).not.toContain('windows')
+      expect(job['runs-on']).not.toContain('macos')
     }
   })
 })
