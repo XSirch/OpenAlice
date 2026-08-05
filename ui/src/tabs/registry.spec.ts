@@ -23,6 +23,31 @@ describe('file-viewer URL projection', () => {
       params: { wsId: 'workspace-1', path: 'README.md' },
     })).toBe('/workspaces/workspace-1/view/README.md')
   })
+
+  it('projects AutoQuant artifacts into its Harness route', () => {
+    expect(getView('file-viewer').toUrl({
+      kind: 'file-viewer',
+      params: {
+        wsId: 'aq-1',
+        path: 'reports/strategy.md',
+        source: 'auto-quant',
+      },
+    })).toBe('/auto-quant/workspaces/aq-1/view/reports%2Fstrategy.md')
+  })
+
+  it('projects Tracked artifacts into a provenance-preserving route', () => {
+    expect(getView('file-viewer').toUrl({
+      kind: 'file-viewer',
+      params: {
+        wsId: 'workspace-1',
+        path: 'research/power note.md',
+        source: 'tracked',
+        returnTrackedName: 'stock-vst',
+      },
+    })).toBe(
+      '/tracked/files/workspace-1/research%2Fpower%20note.md?entity=stock-vst',
+    )
+  })
 })
 
 describe('shared product shells', () => {
@@ -48,5 +73,17 @@ describe('shared product shells', () => {
       kind: 'file-viewer',
       params: { wsId: 'workspace-1', path: 'README.md' },
     })).toBeNull()
+  })
+
+  it('assigns every AutoQuant surface to its own shared Harness shell', () => {
+    expect(getViewShell({ kind: 'auto-quant-landing', params: {} })).toBe('auto-quant')
+    expect(getViewShell({
+      kind: 'workspace',
+      params: { wsId: 'aq-1', sessionId: 'codex-1', source: 'auto-quant' },
+    })).toBe('auto-quant')
+    expect(getViewShell({
+      kind: 'file-viewer',
+      params: { wsId: 'aq-1', path: 'README.md', source: 'auto-quant' },
+    })).toBe('auto-quant')
   })
 })

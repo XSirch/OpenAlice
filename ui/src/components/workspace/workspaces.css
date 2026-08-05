@@ -337,6 +337,19 @@
     background: var(--background);
     box-shadow: -18px 0 36px -28px color-mix(in srgb, var(--shadow-color) 65%, transparent);
   }
+
+  /* The Files overlay lives inside `.workspace-view`. When the terminal owns
+   * that view's titlebar, leave the titlebar exposed so its Files toggle can
+   * close the overlay again. */
+  .workspace-page-shell.is-terminal-canvas .workspace-side {
+    inset-block-start: 37px;
+  }
+}
+
+@container (max-width: 520px) {
+  .workspace-page-shell .workspace-side {
+    width: 100%;
+  }
 }
 
 /* Both side panels hidden (or auto-hidden on mobile) — collapse the
@@ -1002,18 +1015,25 @@
   grid-template-columns: 18px 1fr auto;
   gap: 8px;
   align-items: baseline;
+  width: 100%;
   padding: 3px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;
   cursor: default;
 }
-.files-row.files-dir,
-.files-row.files-symlink {
+button.files-row {
   cursor: pointer;
 }
-.files-row.files-dir:hover,
-.files-row.files-symlink:hover {
+button.files-row:hover {
   background: var(--accent);
+}
+button.files-row:focus-visible {
+  background: var(--accent);
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 .files-icon {
@@ -1088,6 +1108,28 @@
   font-variant-numeric: tabular-nums;
 }
 
+.terminal-title-separator {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+
+.terminal-session-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.terminal-header-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
 .terminal-header-action {
   height: 24px;
   padding: 0 8px;
@@ -1102,6 +1144,39 @@
 .terminal-header-action:hover {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+/* A pinned terminal is the Workspace page's primary canvas, not a card inside
+ * another card. Its titlebar absorbs the Workspace actions and its shell runs
+ * edge-to-edge; the remaining borders describe actual pane splits. */
+.workspace-page-shell.is-terminal-canvas .workspace-view {
+  gap: 0;
+}
+
+.workspace-page-shell.is-terminal-canvas .workspace-side > .panel {
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+}
+
+.terminal-shell.is-canvas {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.terminal-shell.is-canvas .terminal-header {
+  padding-block: 6px;
+  background: var(--secondary);
+}
+
+@container (max-width: 680px) {
+  .terminal-shell.is-canvas .terminal-meta {
+    display: none;
+  }
+
+  .terminal-shell.is-canvas .terminal-session-title {
+    flex: 1 1 auto;
+  }
 }
 
 .status-dot {
@@ -1160,6 +1235,7 @@
 
 /* WebPi is deliberately a surface inside the existing terminal slot. */
 .webpi-shell {
+  position: relative;
   width: 100%;
   max-width: 100%;
   height: 100%;
@@ -1325,6 +1401,8 @@
 
 .webpi-error { display: grid; gap: 7px; margin: 20px 0; padding: 13px; border: 1px solid color-mix(in srgb, var(--destructive) 50%, var(--border)); border-radius: 10px; color: var(--destructive); font-size: 12px; }
 .webpi-error button { width: fit-content; color: var(--foreground); text-decoration: underline; }
+.webpi-jump-latest { position: absolute; right: max(18px, calc((100% - 760px) / 2)); bottom: 82px; z-index: 2; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border)); border-radius: 999px; color: var(--foreground); background: color-mix(in srgb, var(--secondary) 92%, transparent); box-shadow: 0 5px 18px color-mix(in srgb, var(--shadow-color) 16%, transparent); font-size: 10px; font-weight: 650; }
+.webpi-jump-latest:hover { border-color: var(--primary); color: var(--primary); }
 .webpi-compaction-status { display: flex; align-items: flex-start; gap: 9px; margin: 0 max(18px, calc((100% - 760px) / 2)) 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--border)); border-radius: 10px; color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--secondary)); }
 .webpi-compaction-status > svg { flex: 0 0 auto; margin-top: 2px; }
 .webpi-compaction-status > div { display: grid; gap: 2px; min-width: 0; }
@@ -1354,6 +1432,7 @@
 @container webpi (max-width: 720px) {
   .webpi-messages, .webpi-composer-wrap { padding-left: 12px; padding-right: 12px; }
   .webpi-compaction-status { margin-left: 12px; margin-right: 12px; }
+  .webpi-jump-latest { right: 12px; }
   .webpi-message.is-user { margin-left: 0; }
   .webpi-tool-step > summary { grid-template-columns: 18px minmax(52px, auto) minmax(0, 1fr) 14px; }
   .webpi-step-size { display: none; }

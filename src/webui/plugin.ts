@@ -26,6 +26,7 @@ import { createTradingProxyRoutes } from './routes/trading-proxy.js'
 import { createTradingConfigRoutes } from './routes/trading-config.js'
 import { createToolsRoutes } from './routes/tools.js'
 import { createAgentStatusRoutes } from './routes/agent-status.js'
+import { createAgentConversationRoutes } from './routes/agent-conversations.js'
 import { createPersonaRoutes } from './routes/persona.js'
 import { createNewsRoutes } from './routes/news.js'
 import { createMarketRoutes } from './routes/market.js'
@@ -80,6 +81,8 @@ export interface WebConfig {
   listen?: boolean
   /** Optional Unix socket / named pipe for workspace CLI shims in app mode. */
   cliSocketPath?: string
+  /** Internal packaged-acceptance seam; normal runtime leaves this undefined. */
+  scheduleScannerIntervalMs?: number
 }
 
 export class WebPlugin implements Plugin {
@@ -300,6 +303,9 @@ export class WebPlugin implements Plugin {
       toolBaseUrl: this.config.toolBaseUrl,
       ...(this.config.cliSocketPath ? { toolSocketPath: this.config.cliSocketPath } : {}),
       mcpBaseUrl: this.config.mcpBaseUrl,
+      ...(this.config.scheduleScannerIntervalMs !== undefined
+        ? { scheduleScannerIntervalMs: this.config.scheduleScannerIntervalMs }
+        : {}),
       inboxStore: ctx.inboxStore,
     })
     this.workspacesIpc = attachWorkspacesIpc(this.workspaceService)
@@ -307,6 +313,7 @@ export class WebPlugin implements Plugin {
     app.route('/api/workspaces', createWorkspaceRoutes(this.workspaceService))
     app.route('/api/agent-runtimes', createAgentRuntimeRoutes(this.workspaceService))
     app.route('/api/headless', createHeadlessRoutes(this.workspaceService))
+    app.route('/api/agent-conversations', createAgentConversationRoutes(this.workspaceService.agentConversationLog))
     app.route('/api/schedule', createScheduleRoutes(this.workspaceService))
     app.route('/api/issues', createIssuesRoutes(this.workspaceService))
     app.route('/api/inquiries', createInquiryRoutes({

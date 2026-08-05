@@ -14,7 +14,7 @@
  * deletion + Workspace pivot turned the pre-0.40 data shapes over completely, so
  * pre-0.40 installs rebuild `data/` rather than migrate. The framework stays for
  * future upgrades. Numbering continues FORWARD from the highest id ever shipped
- * (next: 0026) — never reuse a retired id, since existing installs' journals
+ * (next: 0030) — never reuse a retired id, since existing installs' journals
  * recorded the old ones.
  */
 
@@ -52,6 +52,11 @@ import { migration as migration_0037_brazil_market_board_cache } from './0037_br
 import { migration as migration_0038_alice_invest_tax_policy } from './0038_alice_invest_tax_policy/index.js'
 import { migration as migration_0039_corporate_events_cache } from './0039_corporate_events_cache/index.js'
 import { migration as migration_0040_alice_invest_tax_ledger } from './0040_alice_invest_tax_ledger/index.js'
+import { migration as migration_0041_agent_conversation_log } from './0041_agent_conversation_log/index.js'
+import { migration as migration_0042_repair_snapshot_interval } from './0042_repair_snapshot_interval/index.js'
+import { migration as migration_0043_auto_quant_default_workspace } from './0043_auto_quant_default_workspace/index.js'
+import { migration as migration_0044_session_native_titles } from './0044_session_native_titles/index.js'
+import { migration as migration_0045_retire_workspace_agent_pins } from './0045_retire_workspace_agent_pins/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -87,4 +92,9 @@ export const REGISTRY: Migration[] = [
   migration_0038_alice_invest_tax_policy,
   migration_0039_corporate_events_cache,
   migration_0040_alice_invest_tax_ledger,
+  migration_0041_agent_conversation_log,
+  migration_0042_repair_snapshot_interval,
+  migration_0043_auto_quant_default_workspace,
+  migration_0044_session_native_titles,
+  migration_0045_retire_workspace_agent_pins,
 ]

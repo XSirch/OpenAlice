@@ -86,6 +86,15 @@ describe('createIssue', () => {
     }
   })
 
+  it('defaults scheduled work to one durable new owner', async () => {
+    const scheduled = await createIssue(dir, {
+      id: 'default-owner',
+      title: 'Default scheduled owner',
+      when: { kind: 'every', every: '30m' },
+    })
+    expect(scheduled.ok && scheduled.issue.assignee).toBe('@new')
+  })
+
   it('refuses to overwrite an existing issue (conflict)', async () => {
     await createIssue(dir, { id: 'dup', title: 'first' })
     const res = await createIssue(dir, { id: 'dup', title: 'second' })
@@ -117,12 +126,16 @@ describe('updateIssueFields', () => {
       when: { kind: 'every', every: '15m' },
       what: 'keep the fire prompt',
       agent: 'claude',
+      model: 'claude-opus-4-8',
+      effort: 'high',
     })
     const res = await updateIssueFields(dir, 'task-1', {
       status: 'in_progress',
       priority: 'urgent',
       assignee: '@workspace',
       agent: 'pi',
+      model: 'gemini-3.5-pro',
+      effort: 'medium',
     })
     expect(res.ok).toBe(true)
     if (res.ok) {
@@ -138,6 +151,8 @@ describe('updateIssueFields', () => {
       assignee: '@workspace',
       what: 'keep the fire prompt',
       agent: 'pi',
+      model: 'gemini-3.5-pro',
+      effort: 'medium',
     })
     expect(issue?.when).toEqual({ kind: 'every', every: '15m' })
     expect(issue?.what).toBe('keep the fire prompt')
@@ -158,6 +173,8 @@ describe('updateIssueFields', () => {
       when: { kind: 'every', every: '15m' },
       assignee: '@workspace',
       agent: 'codex',
+      model: 'gpt-5.6',
+      effort: 'high',
     })
     const res = await updateIssueFields(dir, 'owned', {
       assignee: '@resume-kind-owl-abc123',
@@ -166,6 +183,8 @@ describe('updateIssueFields', () => {
     const { issue } = await readBack('owned')
     expect(issue?.assignee).toBe('@resume-kind-owl-abc123')
     expect(issue?.agent).toBeUndefined()
+    expect(issue?.model).toBeUndefined()
+    expect(issue?.effort).toBeUndefined()
     expect(issue?.when).toEqual({ kind: 'every', every: '15m' })
   })
 

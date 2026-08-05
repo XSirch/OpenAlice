@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 
 import { cliBinPath } from '@/core/paths.js';
 import { readCredentials, readIssueDefaultAgent, readWorkspaceDefaultAgent } from '@/core/config.js';
@@ -25,16 +25,14 @@ import {
   rememberRecentChatWorkspace,
 } from '@/core/preferences.js';
 
-import { claudeAdapter } from './adapters/claude.js';
-import { codexAdapter } from './adapters/codex.js';
-import { opencodeAdapter } from './adapters/opencode.js';
+import { createBuiltinAdapterRegistry } from './adapters/index.js';
 import { piAdapter } from './adapters/pi.js';
-import { shellAdapter } from './adapters/shell.js';
 import {
-  AdapterRegistry,
   isAgentRuntime,
   prepareAgentRuntimeWorkspace,
+  type AdapterRegistry,
   type CliAdapter,
+  type HeadlessRunOverrides,
 } from './cli-adapter.js';
 import { loadConfig, type ServerConfig } from './config.js';
 import { ensureAgentCredentialReady } from './agent-credential-readiness.js';
@@ -110,6 +108,10 @@ import { issueRunFailure } from './issues/run-failure.js';
 import type { IInboxStore } from '@/core/inbox-store.js';
 import { toSafeInboxOrigin } from '@/core/workspace-tool-center.js';
 import {
+  AgentConversationLog,
+  type AgentConversationDispatch,
+} from './agent-conversation-log.js';
+import {
   HeadlessTaskRegistry,
   headlessLogPaths,
   type HeadlessTaskInquiry,
@@ -124,8 +126,11 @@ import {
   resolveInjectionModel,
 } from './credential-injection.js';
 import {
+  AUTO_QUANT_WORKSPACE_TEMPLATE,
   ChatWorkspaceResolver,
+  TemplateWorkspaceResolver,
   type ChatWorkspaceResolution,
+  type TemplateWorkspaceResolution,
 } from './chat-workspace-resolver.js';
 
 /** Resolve only the operational facts automation health needs. Product APIs do
@@ -183,9 +188,128 @@ export class IssueRetryError extends Error {
     this.name = 'IssueRetryError';
   }
 }
+
+export type SpawnEnvironmentSource = 'terminal' | 'workspace' | 'tools' | 'adapter';
+
+export interface SpawnEnvironmentDisclosure {
+  readonly key: string;
+  readonly source: SpawnEnvironmentSource;
+  readonly presentation: 'value' | 'configured' | 'redacted' | 'path-count';
+  readonly value?: string;
+  readonly count?: number;
+}
+
+function sensitiveEnvironmentKey(key: string): boolean {
+  return /(?:API_?KEY|(?:^|_)KEY(?:_|$)|AUTH|BEARER|CREDENTIAL|PASSWORD|SECRET|TOKEN)/i.test(key);
+}
+
+function discloseEnvironmentValue(
+  key: string,
+  value: string,
+  source: SpawnEnvironmentSource,
+): SpawnEnvironmentDisclosure {
+  if (sensitiveEnvironmentKey(key)) {
+    return { key, source, presentation: 'redacted' };
+  }
+  if (key === 'PATH') {
+    return {
+      key,
+      source,
+      presentation: 'path-count',
+      count: value.split(delimiter).filter(Boolean).length,
+    };
+  }
+  if (
+    key === 'OPENALICE_TOOL_URL' ||
+    key === 'OPENALICE_TOOL_SOCKET' ||
+    key === 'OPENALICE_MCP_URL'
+  ) {
+    return { key, source, presentation: 'configured' };
+  }
+  // Adapter env may include Workspace-local, user-authored keys (Codex
+  // env.json is intentionally extensible). Only disclose values for the small
+  // set of launcher-owned, non-secret adapter settings we understand.
+  if (
+    source === 'adapter' &&
+    key !== 'CODEX_HOME' &&
+    !key.startsWith('OPENCODE_DISABLE_')
+  ) {
+    return { key, source, presentation: 'configured' };
+  }
+  return { key, source, presentation: 'value', value };
+}
+
+export function launchEnvironmentDisclosure(
+  env: Readonly<Record<string, string>>,
+  adapterEnv: Readonly<Record<string, string>>,
+): readonly SpawnEnvironmentDisclosure[] {
+  const adapterKeys = new Set(Object.keys(adapterEnv));
+  const groups: readonly {
+    source: SpawnEnvironmentSource;
+    keys: readonly string[];
+  }[] = [
+    {
+      source: 'terminal',
+      keys: [
+        'TERM',
+        'COLORTERM',
+        'TERM_PROGRAM',
+        'TERM_PROGRAM_VERSION',
+        'LANG',
+        'LC_CTYPE',
+      ],
+    },
+    {
+      source: 'workspace',
+      keys: [
+        'PWD',
+        'AQ_WS_ID',
+        'AQ_LAUNCHER_REPO_ROOT',
+        'GIT_AUTHOR_NAME',
+        'GIT_AUTHOR_EMAIL',
+        'GIT_COMMITTER_NAME',
+        'GIT_COMMITTER_EMAIL',
+      ],
+    },
+    {
+      source: 'tools',
+      keys: [
+        'PATH',
+        'OPENALICE_TOOL_URL',
+        'OPENALICE_TOOL_SOCKET',
+        'OPENALICE_MCP_URL',
+      ],
+    },
+    {
+      source: 'adapter',
+      keys: Object.keys(adapterEnv).sort(),
+    },
+  ];
+  const seen = new Set<string>();
+  const out: SpawnEnvironmentDisclosure[] = [];
+  for (const group of groups) {
+    for (const key of group.keys) {
+      if (seen.has(key)) continue;
+      const value = env[key];
+      if (value === undefined) continue;
+      seen.add(key);
+      out.push(discloseEnvironmentValue(
+        key,
+        value,
+        adapterKeys.has(key) ? 'adapter' : group.source,
+      ));
+    }
+  }
+  return out;
+}
 import { ScrollbackStore } from './scrollback-store.js';
 import { SessionPool, type SessionFactoryContext } from './session-pool.js';
-import { SessionRegistry, type SessionRecord } from './session-registry.js';
+import {
+  SessionRegistry,
+  sessionPreferredTitle,
+  type SessionRecord,
+} from './session-registry.js';
+import { NativeSessionTitleResolver } from './session-title-resolver.js';
 import { buildCliPath, buildSpawnEnv } from './spawn-env.js';
 import { TemplateRegistry } from './template-registry.js';
 import { TemplateUpgradeManager } from './template-upgrade.js';
@@ -204,6 +328,7 @@ import {
 } from './workspace-runtime-activity.js';
 import { WebPiSessionHost, type WebPiSnapshot } from './webpi-session-host.js';
 import { WorkspaceRegistry, type WorkspaceMeta } from './workspace-registry.js';
+import { readHarnessSource } from './harness-source.js';
 import {
   createManagerWorkspaceMeta,
 } from './manager-workspace.js';
@@ -220,8 +345,11 @@ export interface SpawnPlan {
   /** Adapter-native id used only for backend diagnostics. */
   readonly nativeSessionId: string | null;
   readonly composedCommand: readonly string[];
+  readonly resolvedCommand: readonly string[];
+  readonly launchMode: 'direct' | 'node-shim' | 'bash-shim' | 'cmd-shim';
   readonly spawnCwd: string;
   readonly envPWD: string | null;
+  readonly environment: readonly SpawnEnvironmentDisclosure[];
   readonly transcriptDir: string | null;
   readonly projectKey: string | null;
 }
@@ -251,7 +379,12 @@ export interface WorkspaceService {
   workspaceRuntimeActivity(workspaceId: string): WorkspaceRuntimeActivity;
   /** Resolve the preferred/recent durable Chat Workspace, creating one starter when absent. */
   resolveOrCreateChatWorkspace(preferredWorkspaceId?: string | null): Promise<ChatWorkspaceResolution>;
-  /** Resolve the configured Workspace runtime, then fall back to its first enabled runtime. */
+  /** Resolve the latest durable AutoQuant desk, creating a pinned starter when absent. */
+  resolveOrCreateAutoQuantWorkspace(
+    preferredWorkspaceId?: string | null,
+    sourceVersion?: string,
+  ): Promise<TemplateWorkspaceResolution>;
+  /** Resolve the Workspace default, installation fallback, then first registered runtime. */
   resolveDefaultAgentId(meta: WorkspaceMeta): Promise<string | undefined>;
   resolveAdapter(meta: WorkspaceMeta, agentId?: string): CliAdapter;
   /** Open the same persisted Pi Session through Pi RPC instead of its PTY. */
@@ -264,6 +397,8 @@ export interface WorkspaceService {
       approveProject?: boolean;
     },
   ): Promise<WebPiSnapshot>;
+  /** Best-effort background reconciliation of native runtime Session titles. */
+  refreshSessionTitles?(meta: WorkspaceMeta): Promise<void>;
   publicMeta(w: WorkspaceMeta): Promise<unknown>;
   /**
    * Probe the host PATH for each registered adapter's CLI binary. Keyed by
@@ -308,7 +443,7 @@ export interface WorkspaceService {
     meta: WorkspaceMeta,
     adapter: CliAdapter,
     prompt: string,
-    timeoutMs: number,
+    timeoutMs?: number,
   ): Promise<HeadlessTaskResult>;
   /** Cached install/ready snapshot for global first-run runtime gating. */
   getAgentRuntimeReadiness(): AgentRuntimeReadinessSnapshot;
@@ -335,7 +470,7 @@ export interface WorkspaceService {
     meta: WorkspaceMeta,
     adapter: CliAdapter,
     prompt: string,
-    timeoutMs: number,
+    timeoutMs?: number,
     /** Business source of the dispatch. Its Workspace may differ from `meta`
      * when an Issue explicitly resumes a signed Session across Workspaces. */
     trigger?: HeadlessTaskTrigger,
@@ -344,6 +479,10 @@ export interface WorkspaceService {
     resumeId?: string,
     /** Optional Inbox/Issue reverse link for a user-initiated inquiry. */
     inquiry?: HeadlessTaskInquiry,
+    /** Explicit one-run model/effort; authentication remains Workspace-owned. */
+    overrides?: HeadlessRunOverrides,
+    /** Cross-Agent message metadata for the independent conversation log. */
+    conversation?: AgentConversationDispatch,
   ): Promise<{ taskId: string; resumeId: string }>;
   /** Read-only scheduling projection of every workspace's `.alice/issues/`
    *  directory (scheduled issues only) + each task's last-fired marker and
@@ -373,6 +512,8 @@ export interface WorkspaceService {
   resumeRegistry: ResumeRegistry;
   /** Durable product Session -> business artifact attribution index. */
   provenanceStore: ArtifactProvenanceStore;
+  /** Append-only analysis/audit projection of cross-Agent messages. */
+  agentConversationLog: AgentConversationLog;
   /** True while a headless turn owns this conversation transcript. */
   isResumeActive(resumeId: string): boolean;
   /** Atomically reserve a conversation before crossing an async spawn boundary. */
@@ -397,6 +538,8 @@ export interface CreateWorkspaceServiceOptions {
   readonly toolSocketPath?: string;
   /** Optional MCP protocol URL. Absent when MCP is disabled. */
   readonly mcpBaseUrl?: string;
+  /** Internal test seam. Production omits this and keeps the 60-second scan. */
+  readonly scheduleScannerIntervalMs?: number;
   /** The global inbox store, so `issueDetail` can join the inbox reports an
    *  issue produced (entries stamped `origin.issueId`) in the domain layer —
    *  every surface (HTTP / CLI / MCP) gets the join, not just the route.
@@ -453,6 +596,10 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
   const provenanceStore = await ArtifactProvenanceStore.load(
     join(config.launcherRoot, 'state', 'artifact-provenance.json'),
     launcherLogger.child({ scope: 'provenance-store' }),
+  );
+  const agentConversationLog = new AgentConversationLog(
+    join(config.launcherRoot, 'state', 'agent-conversations.jsonl'),
+    launcherLogger.child({ scope: 'agent-conversation-log' }),
   );
   const issueChangeTracker = await IssueChangeTracker.load(
     join(config.launcherRoot, 'state', 'issue-audit-snapshots.json'),
@@ -611,16 +758,16 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     });
   }
 
-  const adapters = new AdapterRegistry();
-  adapters.register(claudeAdapter, { default: true });
-  adapters.register(codexAdapter);
-  adapters.register(opencodeAdapter);
-  adapters.register(piAdapter);
-  adapters.register(shellAdapter);
-  const managerWorkspace = createManagerWorkspaceMeta(
-    config.launcherRoot,
-    adapters.list().filter(isAgentRuntime).map((adapter) => adapter.id),
-  );
+  const adapters = createBuiltinAdapterRegistry();
+  const sessionTitleResolver = new NativeSessionTitleResolver({
+    sessionRegistry,
+    resumeRegistry,
+    adapters,
+    logger: launcherLogger.child({ scope: 'session-title' }),
+  });
+  const refreshSessionTitles = (meta: WorkspaceMeta): Promise<void> =>
+    sessionTitleResolver.refreshWorkspace(meta);
+  const managerWorkspace = createManagerWorkspaceMeta(config.launcherRoot);
   await mkdir(managerWorkspace.dir, { recursive: true });
   const resolveRuntimeWorkspace = (workspaceId: string): WorkspaceMeta | undefined =>
     workspaceId === managerWorkspace.id ? managerWorkspace : registry.get(workspaceId);
@@ -645,6 +792,11 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     sessionRegistry,
     creator,
   });
+  const autoQuantWorkspaceResolver = new TemplateWorkspaceResolver(
+    { registry, sessionRegistry, creator },
+    AUTO_QUANT_WORKSPACE_TEMPLATE,
+    'auto-quant',
+  );
 
   const transcriptWatcher = new TranscriptWatcher(
     launcherLogger.child({ scope: 'transcript-watch' }),
@@ -660,45 +812,41 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     },
   );
 
-  const resolveAdapter = (wsMeta: WorkspaceMeta, agentId?: string): CliAdapter => {
+  const resolveAdapter = (_wsMeta: WorkspaceMeta, agentId?: string): CliAdapter => {
     if (agentId) {
       const a = adapters.get(agentId);
-      if (a) return a;
-    }
-    const fromWorkspace = wsMeta.agents.find((id) => {
-      const a = adapters.get(id);
-      return a ? isAgentRuntime(a) : false;
-    });
-    if (fromWorkspace) {
-      const a = adapters.get(fromWorkspace);
       if (a) return a;
     }
     return adapters.resolve(null);
   };
 
-  const firstWorkspaceRuntime = (wsMeta: WorkspaceMeta): string | undefined =>
-    wsMeta.agents.find((id) => {
-      const adapter = adapters.get(id);
-      return adapter ? isAgentRuntime(adapter) : false;
-    });
+  const firstRegisteredRuntime = (): string | undefined =>
+    adapters.list().find(isAgentRuntime)?.id;
 
-  const validRuntimeForWorkspace = (wsMeta: WorkspaceMeta, agentId: string | null): string | undefined => {
-    if (!agentId || !wsMeta.agents.includes(agentId)) return undefined;
+  const validRegisteredRuntime = (agentId: string | null): string | undefined => {
+    if (!agentId) return undefined;
     const adapter = adapters.get(agentId);
     return adapter && isAgentRuntime(adapter) ? agentId : undefined;
   };
 
+  /** Default for fresh interactive Sessions without an explicit runtime. */
+  const resolveDefaultAgentId = async (wsMeta: WorkspaceMeta): Promise<string | undefined> => {
+    const metadata = await readWorkspaceMetadata(wsMeta.dir);
+    const workspaceDefault = metadata.ok
+      ? validRegisteredRuntime(metadata.metadata.defaultAgent ?? null)
+      : undefined;
+    return workspaceDefault ??
+      validRegisteredRuntime(await readWorkspaceDefaultAgent().catch(() => null)) ??
+      firstRegisteredRuntime();
+  };
+
   /**
    * Default for scheduled issues with no frontmatter `agent`: issue-specific
-   * setting first, then the interactive workspace default for backwards
-   * continuity, then the workspace's first enabled runtime.
+   * setting first, then the target Workspace Session default, installation
+   * fallback, and finally the first registered runtime.
    */
-  const resolveDefaultAgentId = async (wsMeta: WorkspaceMeta): Promise<string | undefined> =>
-    validRuntimeForWorkspace(wsMeta, await readWorkspaceDefaultAgent().catch(() => null)) ??
-    firstWorkspaceRuntime(wsMeta);
-
   const resolveIssueDefaultAgentId = async (wsMeta: WorkspaceMeta): Promise<string | undefined> =>
-    validRuntimeForWorkspace(wsMeta, await readIssueDefaultAgent().catch(() => null)) ??
+    validRegisteredRuntime(await readIssueDefaultAgent().catch(() => null)) ??
     await resolveDefaultAgentId(wsMeta);
 
   /**
@@ -727,8 +875,11 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     extraEnv?: Record<string, string>,
   ): {
     command: readonly string[];
+    resolvedCommand: readonly string[];
+    launchMode: SpawnPlan['launchMode'];
     cwd: string;
     env: Record<string, string>;
+    environment: readonly SpawnEnvironmentDisclosure[];
     transcriptDir: string | null;
   } => {
     const baseEnv = buildSpawnEnv(process.env, {
@@ -780,28 +931,33 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     // fresh spawn's resume to its assigned `{ sessionId }`, so a resume check
     // would wrongly drop pi's seed — the adapters self-gate where it matters).
     //
-    // SECURITY (win32): opencode/pi install as `.cmd` npm shims, so they spawn via
-    // `cmd.exe /d /c <shim> …` (resolveLaunchCommand → viaShell). A user prompt
-    // with cmd metacharacters (& | < > ^ %) would be re-parsed by cmd.exe
-    // (BatBadBut / CVE-2024-27980); the headless path refuses shim agents on win32
-    // for exactly this. We compose WITH the seed, then if the RESOLVED binary
-    // needs the shell wrap, DROP the seed and recompose unseeded (the TUI still
-    // opens, just not pre-filled). Native-exe agents (claude/codex) and all of
-    // macOS/Linux resolve viaShell:false, so this is a no-op there. Resolve the
-    // COMPOSED argv0 (the adapter's real binary), not config.command — codex/
-    // opencode/pi ignore the base and hardcode their own binary.
+    // SECURITY (win32): verified npm JS entrypoints and extensionless sibling
+    // shims run without cmd.exe, so their prompt remains a literal argv item.
+    // A batch-only fallback still resolves viaShell:true; drop a user seed in
+    // that legacy case because cmd would re-parse & | < > ^ %. The TUI still
+    // opens, just not pre-filled. Resolve the COMPOSED argv0 (the adapter's real
+    // binary), not config.command — codex/opencode/pi ignore the base.
     const compose = (withSeed: boolean): readonly string[] =>
       adapter.composeCommand(
         config.command,
         withSeed && initialPrompt ? { ...baseCtx, initialPrompt } : baseCtx,
       );
     let command = compose(true);
-    if (initialPrompt && resolveLaunchCommand(command, { env }).viaShell) {
+    if (initialPrompt && resolveLaunchCommand(command, { env, cwd: ws.dir }).viaShell) {
       launcherLogger.warn('spawn.seed_dropped_win32_shim', { wsId: ws.id, agent: adapter.id });
       command = compose(false);
     }
+    const resolved = resolveLaunchCommand(command, { env, cwd: ws.dir });
     const transcriptDir = adapter.transcriptDir ? adapter.transcriptDir(ws.dir) : null;
-    return { command, cwd: ws.dir, env, transcriptDir };
+    return {
+      command,
+      resolvedCommand: resolved.argv,
+      launchMode: resolved.mode,
+      cwd: ws.dir,
+      env,
+      environment: launchEnvironmentDisclosure(env, adapterEnv),
+      transcriptDir,
+    };
   };
 
   const getRuntimeAdapters = () => adapters.list().filter(isAgentRuntime);
@@ -813,7 +969,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     adapter: CliAdapter,
     availability?: AgentAvailability,
   ): AgentRuntimeReadinessSource => {
-    if (adapter.id === 'claude' || adapter.id === 'codex') return 'global-login';
+    if (adapter.capabilities.aiProvider?.credentialSource === 'runtime-or-workspace') {
+      return 'global-login';
+    }
     const binaryPath = availability?.path ?? '';
     if (
       adapter.id === 'pi' &&
@@ -828,6 +986,11 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     preferredWorkspaceId?: string | null,
   ): Promise<ChatWorkspaceResolution> =>
     chatWorkspaceResolver.resolveOrCreate(preferredWorkspaceId);
+  const resolveOrCreateAutoQuantWorkspaceMethod = (
+    preferredWorkspaceId?: string | null,
+    sourceVersion?: string,
+  ): Promise<TemplateWorkspaceResolution> =>
+    autoQuantWorkspaceResolver.resolveOrCreate(preferredWorkspaceId, sourceVersion);
 
   let runtimeReadinessWorkspaceInFlight: Promise<WorkspaceMeta> | null = null;
 
@@ -875,13 +1038,13 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
   ): Promise<boolean> => {
     if (!adapter.writeAiConfig) return false;
     const credentials = await readCredentials();
-    const [, credential] = compatibleCredentials(credentials, adapter.id)[0] ?? [];
+    const [, credential] = compatibleCredentials(credentials, adapter)[0] ?? [];
     if (!credential) return false;
 
     const model = resolveInjectionModel(credential);
     const workspaceCredential = credentialToWorkspaceAiCred(
       credential,
-      adapter.id,
+      adapter,
       model ? { model } : {},
     );
     if (!workspaceCredential) return false;
@@ -943,6 +1106,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
   const syntheticRuntimeReadinessFailure = (message: string): HeadlessTaskResult => ({
     command: [],
     cwd: config.launcherRoot,
+    processStarted: false,
+    launchErrorCode: 'spawn_failed',
+    error: message,
     exitCode: -1,
     signal: null,
     killed: false,
@@ -1094,13 +1260,24 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     adapter: CliAdapter,
     resume: SessionFactoryContext['resume'],
   ): SpawnPlan => {
-    const { command, cwd, env, transcriptDir } = composeSpawnInputs(ws, adapter, resume);
+    const {
+      command,
+      resolvedCommand,
+      launchMode,
+      cwd,
+      env,
+      environment,
+      transcriptDir,
+    } = composeSpawnInputs(ws, adapter, resume);
     return {
       resumeMode: resume === undefined ? 'fresh' : resume === 'last' ? 'last' : 'by-id',
       nativeSessionId: resume && resume !== 'last' ? resume.sessionId : null,
       composedCommand: command,
+      resolvedCommand,
+      launchMode,
       spawnCwd: cwd,
       envPWD: env['PWD'] ?? null,
+      environment,
       transcriptDir,
       projectKey: transcriptDir ? basename(transcriptDir) : null,
     };
@@ -1159,7 +1336,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     ws: WorkspaceMeta,
     adapter: CliAdapter,
     prompt: string,
-    timeoutMs: number,
+    timeoutMs?: number,
     // Dispatch-path extras: a taskId keys the on-disk task log; onSessionId
     // fires when the adapter's stdout scanner captures the agent's own session
     // id (recorded WHILE running, so the panel can offer "open as session").
@@ -1168,6 +1345,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       resumeId?: string;
       resume?: SessionFactoryContext['resume'];
       onSessionId?: (id: string) => void;
+      overrides?: HeadlessRunOverrides;
     } = {},
   ): Promise<HeadlessTaskResult> => {
     const operationLease = workspaceOperationGuard.acquire(ws.id, 'headless-run');
@@ -1222,6 +1400,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
         config.command,
         { cwd, env, ...(opts.resume !== undefined ? { resume: opts.resume } : {}) },
         prompt,
+        opts.overrides,
       );
       const logPaths = opts.taskId ? headlessLogPaths(headlessLogsDir, opts.taskId) : null;
       const activityLease = headlessActivity.begin({
@@ -1234,8 +1413,13 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
           command,
           cwd,
           env,
-          timeoutMs,
-          logger: launcherLogger.child({ scope: 'headless', wsId: ws.id, agent: adapter.id }),
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+          logger: launcherLogger.child({
+            scope: 'headless',
+            wsId: ws.id,
+            agent: adapter.id,
+            ...(opts.taskId ? { taskId: opts.taskId } : {}),
+          }),
           ...(logPaths
             ? { stdoutFile: logPaths.stdout, stderrFile: logPaths.stderr, structuredFile: logPaths.structured }
             : {}),
@@ -1278,12 +1462,14 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     ws: WorkspaceMeta,
     adapter: CliAdapter,
     prompt: string,
-    timeoutMs: number,
+    timeoutMs?: number,
     // Composite Issue source when dispatched by ScheduleScanner. Manual and
     // external runs leave it undefined.
     trigger?: HeadlessTaskTrigger,
     resumeId?: string,
     inquiry?: HeadlessTaskInquiry,
+    overrides?: HeadlessRunOverrides,
+    conversation?: AgentConversationDispatch,
   ): Promise<{ taskId: string; resumeId: string }> => {
     if (catalog.get(ws.id)?.lifecycle !== 'active') {
       throw new Error(`workspace is not active: ${ws.id}`);
@@ -1345,6 +1531,8 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       rec = await headlessTasks.create({
         wsId: ws.id,
         agent: adapter.id,
+        ...(overrides?.model ? { model: overrides.model } : {}),
+        ...(overrides?.reasoningEffort ? { effort: overrides.reasoningEffort } : {}),
         prompt,
         startedAt: Date.now(),
         resumeId: identity.resumeId,
@@ -1358,6 +1546,17 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
         agent: adapter.id,
         latestTaskId: rec.taskId,
       });
+      if (conversation) {
+        await agentConversationLog.recordDispatch({
+          taskId: rec.taskId,
+          ...(rec.parentTaskId ? { parentTaskId: rec.parentTaskId } : {}),
+          resumeId: rec.resumeId,
+          workspaceId: ws.id,
+          agent: adapter.id,
+          startedAt: rec.startedAt,
+          conversation,
+        });
+      }
     } catch (err) {
       if (resumeId) activeResumeIds.delete(resumeId);
       throw err;
@@ -1371,6 +1570,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       taskId: rec.taskId,
       resumeId: rec.resumeId,
       ...(nativeResume ? { resume: nativeResume } : {}),
+      ...(overrides ? { overrides } : {}),
       onSessionId: (id) => {
         void Promise.all([
           headlessTasks.setAgentSessionId(rec.taskId, id),
@@ -1388,9 +1588,12 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
           status,
           finishedAt: Date.now(),
           durationMs: r.durationMs,
+          processStarted: r.processStarted,
+          ...(r.launchErrorCode ? { launchErrorCode: r.launchErrorCode } : {}),
           exitCode: r.exitCode,
           signal: r.signal,
           killed: r.killed,
+          ...(r.error ? { error: r.error } : {}),
           output: {
             hasAssistantReply: r.structured.assistantText !== null,
             ...(r.structured.assistantText
@@ -1401,6 +1604,16 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
             toolFailures: r.structured.metrics.toolFailures,
           },
         });
+        if (conversation) {
+          await agentConversationLog.recordCompletion({
+            taskId: rec.taskId,
+            status,
+            finishedAt: rec.finishedAt ?? Date.now(),
+            assistantText: r.structured.assistantText,
+            durationMs: r.durationMs,
+            ...(status !== 'done' && r.stderrTail ? { error: r.stderrTail.slice(-1000) } : {}),
+          });
+        }
         await completeIssueCommentInquiry({
           task: rec,
           status,
@@ -1461,6 +1674,15 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
           finishedAt: Date.now(),
           error: message,
         });
+        if (conversation) {
+          await agentConversationLog.recordCompletion({
+            taskId: rec.taskId,
+            status: 'failed',
+            finishedAt: rec.finishedAt ?? Date.now(),
+            assistantText: null,
+            error: message,
+          });
+        }
         await completeIssueCommentInquiry({
           task: rec,
           status: 'failed',
@@ -1558,6 +1780,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     observeIssues: (workspace, issues) => observeIssueRecords(workspace, issues),
     markers: scheduleMarkers,
     logger: launcherLogger.child({ scope: 'schedule' }),
+    ...(opts.scheduleScannerIntervalMs !== undefined
+      ? { intervalMs: opts.scheduleScannerIntervalMs }
+      : {}),
   });
   // Read-only aggregation for the Schedules dashboard (GET /api/schedule).
   // Walks each workspace's live declaration + the scanner's marker; the route
@@ -1798,6 +2023,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     const ws = registry.get(wsId);
     if (!ws) return null;
     await sessionRegistry.ensureLoaded(wsId);
+    void refreshSessionTitles(ws);
     return buildWorkspaceSessionDirectory({
       workspace: { id: ws.id, tag: ws.tag },
       identities: resumeRegistry.list({ wsId, limit }),
@@ -2093,7 +2319,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
 
   const publicMeta = async (w: WorkspaceMeta): Promise<unknown> => {
     const metadata = await readWorkspaceMetadata(w.dir);
+    const harnessSource = await readHarnessSource(w.dir);
     await sessionRegistry.ensureLoaded(w.id).catch(() => undefined);
+    void refreshSessionTitles(w);
     const sessions = sessionRegistry.listFor(w.id).map((r) => {
       const terminal = pool.get(r.id);
       const browser = webPi.get(r.id);
@@ -2109,7 +2337,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
         resumeId: r.resumeId,
         pid: terminal?.pid ?? browser?.pid ?? null,
         startedAt: terminal?.startedAt ?? browser?.startedAt ?? null,
-        title: r.title ?? null,
+        title: sessionPreferredTitle(r) ?? null,
         sourceRunId: r.sourceRunId ?? null,
       };
     });
@@ -2144,6 +2372,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       ...w,
       ...(metadata.ok ? metadata.metadata : {}),
       ...(!metadata.ok && metadata.reason === 'invalid' ? { metadataError: metadata.error } : {}),
+      ...(harnessSource ? { harnessSource } : {}),
       sessions,
       agentOverride,
       ...(currentVersion !== undefined ? { currentVersion } : {}),
@@ -2181,9 +2410,11 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     transcriptWatcher,
     workspaceRuntimeActivity: workspaceRuntimeActivityMethod,
     resolveOrCreateChatWorkspace: resolveOrCreateChatWorkspaceMethod,
+    resolveOrCreateAutoQuantWorkspace: resolveOrCreateAutoQuantWorkspaceMethod,
     resolveDefaultAgentId,
     resolveAdapter,
     startWebPiSession,
+    refreshSessionTitles,
     publicMeta,
     detectAgents,
     getAgentRuntimeReadiness: getAgentRuntimeReadinessMethod,
@@ -2202,6 +2433,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     headlessTasks,
     resumeRegistry,
     provenanceStore,
+    agentConversationLog,
     isResumeActive: (resumeId) => activeResumeIds.has(resumeId),
     claimResume,
     releaseResume: (resumeId) => activeResumeIds.delete(resumeId),

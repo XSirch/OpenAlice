@@ -5,6 +5,8 @@ on:
     branches: [master, dev]
   pull_request:
     branches: [dev, master]
+  # Scheduled workflows run from the default branch, while checkout below
+  # points the jobs at the current dev branch.
   schedule:
     - cron: "0 19 * * *"
   workflow_dispatch:
@@ -13,56 +15,128 @@ permissions:
   contents: read
   pull-requests: read
 
+# Agent-driven iterations often supersede an earlier commit before its Windows
+# job finishes. Keep only the latest PR/dev run while never cancelling a master
+# or scheduled validation.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' }}
 
 jobs:
-  build-and-test:
+
+  build:
+    # A dev push is the already-tested result of merging a PR. It gets the
+    # focused post-merge smoke below instead of repeating the whole PR suite.
     if: github.event_name != 'push' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
+
       - run: pnpm install --frozen-lockfile
+
       - run: pnpm build
+
+  test:
+    # Build and Vitest do not consume each other's output. Keep them on
+    # separate runners so either failure becomes actionable immediately.
+    if: github.event_name != 'push' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       - run: pnpm test
 
+  # Preserve the established check name for branch protection and external
+  # consumers while the two independent validations report failures earlier.
+  build-and-test:
+    if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/master')
+    needs: [build, test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require successful build and test lanes
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          if [[ "$BUILD_RESULT" != "success" || "$TEST_RESULT" != "success" ]]; then
+            echo "Build result: $BUILD_RESULT"
+            echo "Test result: $TEST_RESULT"
+            exit 1
+          fi
+
+  # Boots the real `pnpm dev` stack and asserts UTA/Alice/Vite all spawn on
+  # the Linux environment used by this fork's VPS deployments.
   dev-smoke:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'schedule' && 'dev' || '' }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
+
+      # Skip the Electron desktop shell — the smoke only needs UTA/Alice/UI.
       - run: pnpm install --frozen-lockfile --filter='!@traderalice/desktop'
+
+      # Exercises duplicate-start rejection, graceful takeover, crash-stale
+      # reclamation, heartbeat renewal, and forced recovery with real child
+      # processes before the heavier full-stack boot smoke.
       - run: pnpm test:guardian-recovery
         timeout-minutes: 3
+
       - run: pnpm test:smoke
         timeout-minutes: 8
 
+  # Merging a green PR changes the commit SHA but normally not its tested tree.
+  # Keep a cheap real-process integration check on dev without repeating the
+  # complete PR suite.
   post-merge-dev-smoke:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
+
       - run: pnpm install --frozen-lockfile --filter='!@traderalice/desktop'
+
       - run: pnpm test:guardian-recovery
         timeout-minutes: 3
+
       - run: pnpm test:smoke
         timeout-minutes: 8

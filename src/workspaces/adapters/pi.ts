@@ -1,15 +1,23 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { mkdir, readFile, readdir, realpath, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 
 import { runtimeProfileFromEnv } from '@/core/runtime-profile.js';
 import { resolveBashPath } from '@/core/shell-resolver.js';
 
-import type { CliAdapter, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
+import type {
+  CliAdapter,
+  HeadlessRunOverrides,
+  SpawnContext,
+  WorkspaceAiCred,
+} from '../cli-adapter.js';
 import type { HeadlessOutputEvent } from '../headless-output.js';
 import {
   migrateLegacyPiAgentDir,
   PI_BINDING_STATE_PATH,
+  PI_PROJECT_SETTINGS_PATH,
+  PI_PROVIDER_PREFIX,
   readPiWorkspaceConfig,
   resolvePiAgentDir,
   syncPiWorkspaceTheme,
@@ -20,6 +28,61 @@ import {
 const PI_TRUST_FILENAME = 'trust.json';
 
 let piTrustWriteQueue: Promise<void> = Promise.resolve();
+
+export async function readPiSessionTitleFile(path: string): Promise<string | null> {
+  let title: string | undefined;
+  try {
+    const lines = createInterface({
+      input: createReadStream(path, { encoding: 'utf8' }),
+      crlfDelay: Infinity,
+    });
+    for await (const line of lines) {
+      let entry: Record<string, unknown>;
+      try {
+        entry = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (entry['type'] === 'session_info') {
+        title = typeof entry['name'] === 'string' ? entry['name'].trim() || undefined : undefined;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return title ?? null;
+}
+
+function piSessionDir(cwd: string): string {
+  const configured = process.env['PI_CODING_AGENT_SESSION_DIR']?.trim();
+  if (configured) {
+    return resolve(configured.replace(/^~(?=$|[/\\])/, process.env['HOME']?.trim() || ''));
+  }
+  const safeCwd = resolve(cwd).replace(/^[/\\]/, '').replace(/[/\\:]/g, '-');
+  return join(resolvePiAgentDir(process.env), 'sessions', `--${safeCwd}--`);
+}
+
+function piRunModel(cwd: string, model: string): string {
+  try {
+    const settings = JSON.parse(
+      readFileSync(join(cwd, PI_PROJECT_SETTINGS_PATH), 'utf8'),
+    ) as Record<string, unknown>;
+    const provider = settings['defaultProvider'];
+    const registeredModel = settings['defaultModel'];
+    if (
+      typeof provider === 'string' &&
+      provider.startsWith(PI_PROVIDER_PREFIX) &&
+      registeredModel !== model
+    ) {
+      throw new Error(
+        `Pi model override "${model}" is not registered by this Workspace provider; save that model in Workspace AI settings first`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Pi model override')) throw err;
+  }
+  return model;
+}
 
 function piCommandHead(env: Readonly<Record<string, string | undefined>>): readonly string[] {
   const profile = runtimeProfileFromEnv(env);
@@ -187,6 +250,21 @@ export const piAdapter: CliAdapter = {
     // immune to pi's lazy transcript write.
     assignsSessionId: true,
     headless: true,
+    aiProvider: {
+      credentialSource: 'workspace-required',
+      wirePreference: ['google-generative-ai', 'openai-chat', 'anthropic', 'openai-responses'],
+      defaultWire: 'openai-chat',
+      vendorPolicies: {
+        minimax: {
+          wirePreference: ['anthropic'],
+          legacyRequestedWireFallbacks: { 'openai-chat': 'anthropic' },
+        },
+      },
+      modelRegistration: {
+        contextWindow: true,
+        reasoning: true,
+      },
+    },
   },
 
   lifecycle: {
@@ -225,6 +303,19 @@ export const piAdapter: CliAdapter = {
     return [...head, '--session-id', ctx.resume.sessionId, ...seed];
   },
 
+  async readSessionTitle(cwd: string, sessionId: string): Promise<string | null> {
+    let files: string[];
+    try {
+      files = await readdir(piSessionDir(cwd));
+    } catch {
+      return null;
+    }
+    const filename = files.find((name) => name.endsWith(`_${sessionId}.jsonl`));
+    return filename
+      ? readPiSessionTitleFile(join(piSessionDir(cwd), filename))
+      : null;
+  },
+
   // WebPi is a second VIEW over the same Pi session, not another runtime.
   // RPC stays completely separate from the TUI argv above: selecting WebPi
   // cannot change ordinary Pi startup, trust prompts, input handling, or PTY
@@ -254,10 +345,19 @@ export const piAdapter: CliAdapter = {
   // REJECTS a `--` end-of-options terminator ("Unknown option: --", verified
   // 0.78.1), so the prompt is a bare trailing positional — a prompt literally
   // starting with `-`/`--` is unprotected on pi (rare for task prompts).
-  composeHeadlessCommand(_base: readonly string[], _ctx: SpawnContext, prompt: string): readonly string[] {
+  composeHeadlessCommand(
+    _base: readonly string[],
+    _ctx: SpawnContext,
+    prompt: string,
+    overrides?: HeadlessRunOverrides,
+  ): readonly string[] {
     return [
       ...piCommandHead(_ctx.env),
       ...piHeadlessApproveArgs(_ctx.env),
+      ...(overrides?.model ? ['--model', piRunModel(_ctx.cwd, overrides.model)] : []),
+      ...(overrides?.reasoningEffort
+        ? ['--thinking', overrides.reasoningEffort === 'none' ? 'off' : overrides.reasoningEffort]
+        : []),
       ...(_ctx.resume === 'last'
         ? ['--continue']
         : _ctx.resume

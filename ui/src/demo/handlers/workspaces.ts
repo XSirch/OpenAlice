@@ -1,6 +1,11 @@
 import { http, HttpResponse } from 'msw'
-import { demoChatWorkspace, demoWorkspaces, demoTemplates } from '../fixtures/workspaces'
-import { demoWorkspaceFiles } from '../fixtures/inbox'
+import {
+  DEMO_AUTO_QUANT_WORKSPACE_ID,
+  demoChatWorkspace,
+  demoWorkspaces,
+  demoTemplates,
+} from '../fixtures/workspaces'
+import { demoWorkspaceFilePaths, demoWorkspaceFiles } from '../fixtures/inbox'
 import {
   createDemoWebPiSnapshot,
   demoWebPiFollowUp,
@@ -14,6 +19,7 @@ import type {
   DepartedWorkspace,
   SessionRecord,
   WebPiSnapshot,
+  Workspace,
   WorkspaceMetadataPatch,
 } from '../../components/workspace/api'
 
@@ -34,6 +40,20 @@ const demoManagerSession = {
 
 let demoManagerMessages: unknown[] = []
 let demoQuickChatSequence = 0
+let demoWorkspaceCreateSequence = 0
+let demoAutoQuantDefaultWorkspaceId: string | null = DEMO_AUTO_QUANT_WORKSPACE_ID
+const demoCreatedWorkspaceIds = new Set<string>()
+const DEMO_WORKSPACE_TAG_RE = /^[a-z0-9][a-z0-9_-]{0,32}$/
+
+export function resetDemoWorkspaceCreateState(): void {
+  for (const id of demoCreatedWorkspaceIds) {
+    const index = demoWorkspaces.findIndex((workspace) => workspace.id === id)
+    if (index >= 0) demoWorkspaces.splice(index, 1)
+  }
+  demoCreatedWorkspaceIds.clear()
+  demoWorkspaceCreateSequence = 0
+  demoAutoQuantDefaultWorkspaceId = DEMO_AUTO_QUANT_WORKSPACE_ID
+}
 
 function webPiKey(wsId: string, sessionId: string): string {
   return `${wsId}::${sessionId}`
@@ -56,7 +76,9 @@ export function resetDemoWorkspaceWebPiState(): void {
     const workspace = demoWorkspaces[index]!
     demoWorkspaces[index] = {
       ...workspace,
-      sessions: workspace.sessions.filter((session) => !session.id.startsWith('demo-quick-chat-')),
+      sessions: workspace.sessions.filter((session) =>
+        !session.id.startsWith('demo-quick-chat-')
+        && !session.id.startsWith('run-demo-resume-')),
     }
   }
 }
@@ -85,6 +107,50 @@ function ensureDemoWebPiSession(wsId: string, sessionId: string): WebPiSnapshot 
     startedAt: record.startedAt ?? Date.now(),
     messages: [],
   })
+}
+
+const DEMO_FILE_MTIME = new Date().toISOString()
+
+function demoDirectoryListing(workspaceId: string, requestedPath: string) {
+  const segments = requestedPath.split('/').filter((segment) => segment !== '' && segment !== '.')
+  if (segments.includes('..')) return null
+
+  const path = segments.join('/')
+  const prefix = path ? `${path}/` : ''
+  const entries = new Map<string, {
+    name: string
+    kind: 'file' | 'dir'
+    sizeBytes: number | null
+    mtime: string
+  }>()
+
+  for (const filePath of demoWorkspaceFilePaths[workspaceId] ?? []) {
+    if (!filePath.startsWith(prefix)) continue
+    const remainder = filePath.slice(prefix.length)
+    if (!remainder) continue
+    const slash = remainder.indexOf('/')
+    const name = slash === -1 ? remainder : remainder.slice(0, slash)
+    if (entries.has(name)) continue
+
+    const kind = slash === -1 ? 'file' as const : 'dir' as const
+    entries.set(name, {
+      name,
+      kind,
+      sizeBytes: kind === 'file'
+        ? new TextEncoder().encode(demoWorkspaceFiles[filePath] ?? '').byteLength
+        : null,
+      mtime: DEMO_FILE_MTIME,
+    })
+  }
+
+  return {
+    path,
+    entries: [...entries.values()].sort((a, b) => {
+      if (a.kind === 'dir' && b.kind !== 'dir') return -1
+      if (a.kind !== 'dir' && b.kind === 'dir') return 1
+      return a.name.localeCompare(b.name)
+    }),
+  }
 }
 
 function appendDemoWebPiMessages(
@@ -253,6 +319,40 @@ const demoTemplateUpgradePlan = (workspaceId: string) => ({
 })
 
 export const workspacesHandlers = [
+  http.get('/api/workspaces/auto-quant/default-workspace', () => {
+    const workspace = demoAutoQuantDefaultWorkspaceId
+      ? demoWorkspaces.find((candidate) =>
+          candidate.id === demoAutoQuantDefaultWorkspaceId
+          && candidate.template === 'auto-quant-v2')
+      : undefined
+    return HttpResponse.json({
+      defaultWorkspaceId: workspace?.id ?? null,
+      configuredWorkspaceId: demoAutoQuantDefaultWorkspaceId,
+      ready: workspace !== undefined,
+    })
+  }),
+  http.put('/api/workspaces/auto-quant/default-workspace', async ({ request }) => {
+    const body = (await request.json().catch(() => null)) as { workspaceId?: unknown } | null
+    const workspace = typeof body?.workspaceId === 'string'
+      ? demoWorkspaces.find((candidate) =>
+          candidate.id === body.workspaceId
+          && candidate.template === 'auto-quant-v2')
+      : undefined
+    if (!workspace) {
+      return HttpResponse.json({ error: 'workspace_not_found' }, { status: 404 })
+    }
+    demoAutoQuantDefaultWorkspaceId = workspace.id
+    return HttpResponse.json({ defaultWorkspaceId: workspace.id, ready: true })
+  }),
+  http.post('/api/workspaces/auto-quant/initialize', () => {
+    const workspace = demoWorkspaces.find((candidate) =>
+      candidate.template === 'auto-quant-v2')
+    if (!workspace) {
+      return HttpResponse.json({ error: 'workspace_not_found' }, { status: 404 })
+    }
+    demoAutoQuantDefaultWorkspaceId = workspace.id
+    return HttpResponse.json({ workspace })
+  }),
   http.put('/api/workspaces/terminal-view-attributes', () =>
     HttpResponse.json({ ok: true, changed: true })),
   http.get('/api/workspaces', () => HttpResponse.json({ workspaces: demoWorkspaces })),
@@ -291,12 +391,85 @@ export const workspacesHandlers = [
     Object.assign(workspace, { lifecycle: 'purged', purgedAt: new Date().toISOString() })
     return HttpResponse.json({ ok: true })
   }),
-  http.post('/api/workspaces', () =>
-    HttpResponse.json(
-      { ok: false, status: 400, error: { error: 'bootstrap_failed', message: 'Demo mode — workspace creation is disabled.' } },
-      { status: 400 },
-    ),
-  ),
+  http.post('/api/workspaces', async ({ request }) => {
+    const body = await request.json().catch(() => ({})) as {
+      tag?: unknown
+      template?: unknown
+      sourceVersion?: unknown
+    }
+    if (typeof body.tag !== 'string') {
+      return HttpResponse.json({ error: 'tag_required', message: 'Workspace tag is required.' }, { status: 400 })
+    }
+    const tag = body.tag.trim()
+    if (!DEMO_WORKSPACE_TAG_RE.test(tag)) {
+      return HttpResponse.json({
+        error: 'invalid_tag',
+        message: 'Use a-z, 0-9, "-", or "_"; start with a letter or number; maximum 33 characters.',
+      }, { status: 400 })
+    }
+    if (demoWorkspaces.some((workspace) => workspace.tag === tag)) {
+      return HttpResponse.json({
+        error: 'tag_in_use',
+        message: `A Workspace with tag "${tag}" already exists.`,
+      }, { status: 409 })
+    }
+
+    const templateName = typeof body.template === 'string' && body.template.length > 0
+      ? body.template
+      : demoTemplates[0]?.name
+    if (!templateName) {
+      return HttpResponse.json({
+        error: 'no_templates_configured',
+        message: 'No Workspace templates are available.',
+      }, { status: 500 })
+    }
+    const template = demoTemplates.find((candidate) => candidate.name === templateName)
+    if (!template) {
+      return HttpResponse.json({
+        error: 'unknown_template',
+        message: `Unknown Workspace template: ${templateName}`,
+      }, { status: 400 })
+    }
+    const sourceVersion = typeof body.sourceVersion === 'string'
+      ? body.sourceVersion
+      : template.source?.defaultVersion
+    const source = template.source?.versions.find((candidate) => candidate.version === sourceVersion)
+    if (template.source && !source) {
+      return HttpResponse.json({
+        error: 'unknown_source_version',
+        message: `Unknown source version: ${String(sourceVersion)}`,
+      }, { status: 400 })
+    }
+
+    demoWorkspaceCreateSequence += 1
+    const workspace: Workspace = {
+      id: `demo-created-ws-${demoWorkspaceCreateSequence}`,
+      tag,
+      dir: `/demo/workspaces/${tag}`,
+      createdAt: new Date().toISOString(),
+      template: template.name,
+      ...(source && template.source
+        ? {
+            harnessSource: {
+              schemaVersion: 1 as const,
+              template: template.name,
+              repository: template.source.repository,
+              version: source.version,
+              commit: source.commit,
+            },
+          }
+        : {}),
+      ...(template.version
+        ? { spawnedFromVersion: template.version, currentVersion: template.version }
+        : {}),
+      upgradeAvailable: null,
+      sessions: [],
+      agentOverride: { claude: false, codex: false, opencode: false, pi: false },
+    }
+    demoWorkspaces.push(workspace)
+    demoCreatedWorkspaceIds.add(workspace.id)
+    return HttpResponse.json({ workspace }, { status: 201 })
+  }),
   http.get('/api/workspaces/:id/offboarding', ({ params }) => {
     const workspace = demoWorkspaces.find((candidate) => candidate.id === String(params.id))
     if (!workspace) return HttpResponse.json({ error: 'not_found' }, { status: 404 })
@@ -495,7 +668,11 @@ export const workspacesHandlers = [
   http.patch('/api/workspaces/:id/metadata', async ({ params, request }) => {
     const workspace = demoWorkspaces.find((w) => w.id === String(params.id))
     if (!workspace) return HttpResponse.json({ error: 'not_found' }, { status: 404 })
-    const mutableWorkspace = workspace as { displayName?: string; description?: string }
+    const mutableWorkspace = workspace as {
+      displayName?: string
+      description?: string
+      defaultAgent?: string
+    }
 
     const body = (await request.json().catch(() => ({}))) as WorkspaceMetadataPatch
     if ('displayName' in body) {
@@ -512,6 +689,13 @@ export const workspacesHandlers = [
         mutableWorkspace.description = body.description.trim()
       }
     }
+    if ('defaultAgent' in body) {
+      if (body.defaultAgent == null || body.defaultAgent.trim() === '') {
+        delete mutableWorkspace.defaultAgent
+      } else {
+        mutableWorkspace.defaultAgent = body.defaultAgent.trim()
+      }
+    }
     return HttpResponse.json({ workspace })
   }),
 
@@ -526,13 +710,74 @@ export const workspacesHandlers = [
       // probe, so present everything as installed (a clean showcase, not a
       // "go install things" prompt).
       agents: [
-        { id: 'claude', displayName: 'Claude Code', installed: true, binPath: '/usr/local/bin/claude', capabilities: { parallelPerCwd: true, resumeLast: false, resumeById: true, transcriptDiscovery: 'fs-watch' } },
-        { id: 'codex', displayName: 'Codex', installed: true, binPath: '/usr/local/bin/codex', capabilities: { parallelPerCwd: true, resumeLast: true, resumeById: true, transcriptDiscovery: 'subprocess' } },
-        { id: 'opencode', displayName: 'opencode', installed: true, binPath: '/usr/local/bin/opencode', capabilities: { parallelPerCwd: true, resumeLast: true, resumeById: true, transcriptDiscovery: 'subprocess' } },
-        { id: 'pi', displayName: 'Pi', installed: true, binPath: '/usr/local/bin/pi', capabilities: { parallelPerCwd: true, resumeLast: true, resumeById: true, transcriptDiscovery: 'none' } },
+        { id: 'claude', displayName: 'Claude Code', installed: true, binPath: '/usr/local/bin/claude', capabilities: { parallelPerCwd: true, resumeLast: false, resumeById: true, transcriptDiscovery: 'fs-watch', aiProvider: { credentialSource: 'runtime-or-workspace', wirePreference: ['anthropic'], defaultWire: 'anthropic' } } },
+        { id: 'codex', displayName: 'Codex', installed: true, binPath: '/usr/local/bin/codex', capabilities: { parallelPerCwd: true, resumeLast: true, resumeById: true, transcriptDiscovery: 'subprocess', aiProvider: { credentialSource: 'runtime-or-workspace', wirePreference: ['openai-responses'], defaultWire: 'openai-responses' } } },
+        { id: 'opencode', displayName: 'opencode', installed: true, binPath: '/usr/local/bin/opencode', capabilities: { parallelPerCwd: true, resumeLast: true, resumeById: true, transcriptDiscovery: 'subprocess', aiProvider: { credentialSource: 'workspace-required', wirePreference: ['google-generative-ai', 'openai-chat', 'anthropic', 'openai-responses'], defaultWire: 'openai-chat', vendorPolicies: { minimax: { wirePreference: ['anthropic'], legacyRequestedWireFallbacks: { 'openai-chat': 'anthropic' } } }, modelRegistration: { contextWindow: true, reasoning: true, effortVariants: true } } } },
+        { id: 'pi', displayName: 'Pi', installed: true, binPath: '/usr/local/bin/pi', capabilities: { parallelPerCwd: true, resumeLast: true, resumeById: true, transcriptDiscovery: 'none', aiProvider: { credentialSource: 'workspace-required', wirePreference: ['google-generative-ai', 'openai-chat', 'anthropic', 'openai-responses'], defaultWire: 'openai-chat', vendorPolicies: { minimax: { wirePreference: ['anthropic'], legacyRequestedWireFallbacks: { 'openai-chat': 'anthropic' } } }, modelRegistration: { contextWindow: true, reasoning: true } } } },
       ],
     }),
   ),
+  http.get('/api/workspaces/:id/launch-plan', ({ params, request }) => {
+    const wsId = String(params.id)
+    const workspace = demoWorkspaces.find((candidate) => candidate.id === wsId)
+    const url = new URL(request.url)
+    const agent = url.searchParams.get('agent') ?? ''
+    const displayName = {
+      claude: 'Claude Code',
+      codex: 'Codex',
+      opencode: 'opencode',
+      pi: 'Pi',
+      shell: 'Shell',
+    }[agent] ?? agent
+    const commands: Record<string, readonly string[]> = {
+      claude: ['claude', '--settings', '.claude/openalice-autotrust.json'],
+      codex: ['codex', '--sandbox', 'danger-full-access', '--ask-for-approval', 'never'],
+      opencode: ['opencode'],
+      pi: ['pi', '--session-id', 'demo-fresh-session'],
+      shell: ['/bin/zsh', '--login'],
+    }
+    const command = commands[agent] ?? [agent]
+    const capabilities = agent === 'shell'
+      ? { parallelPerCwd: true, resumeLast: false, resumeById: false, transcriptDiscovery: 'none' as const }
+      : {
+          parallelPerCwd: true,
+          resumeLast: agent !== 'claude',
+          resumeById: true,
+          transcriptDiscovery: agent === 'claude' ? 'fs-watch' as const : agent === 'pi' ? 'none' as const : 'subprocess' as const,
+          headless: true,
+        }
+    const cwd = workspace?.dir ?? `/demo/workspaces/${wsId}`
+    return HttpResponse.json({
+      workspace: { id: wsId, tag: workspace?.tag ?? wsId, dir: cwd },
+      agent: {
+        id: agent,
+        displayName,
+        kind: agent === 'shell' ? 'utility' : 'agent',
+        installed: true,
+        binPath: agent === 'shell' ? '/bin/zsh' : `/usr/local/bin/${agent}`,
+        capabilities,
+      },
+      launch: {
+        intent: 'fresh',
+        mode: 'direct',
+        composedCommand: command,
+        resolvedCommand: command,
+        cwd,
+        envPWD: cwd,
+        environment: [
+          { key: 'TERM', source: 'terminal', presentation: 'value', value: 'xterm-256color' },
+          { key: 'TERM_PROGRAM', source: 'terminal', presentation: 'value', value: 'openalice-workspaces' },
+          { key: 'PWD', source: 'workspace', presentation: 'value', value: cwd },
+          { key: 'AQ_WS_ID', source: 'workspace', presentation: 'value', value: wsId },
+          { key: 'PATH', source: 'tools', presentation: 'path-count', count: 12 },
+          { key: 'OPENALICE_TOOL_SOCKET', source: 'tools', presentation: 'configured' },
+        ],
+        transcriptDir: agent === 'shell' || agent === 'pi'
+          ? null
+          : `/demo/transcripts/${agent}/${wsId}`,
+      },
+    })
+  }),
   http.get('/api/workspaces/agent-runtime-readiness', () =>
     HttpResponse.json(demoAgentRuntimeReadiness),
   ),
@@ -568,9 +813,17 @@ export const workspacesHandlers = [
   http.get('/api/workspaces/:id/git/status', () =>
     HttpResponse.json({ branch: 'main', clean: true, files: [] }),
   ),
-  http.get('/api/workspaces/:id/files', () =>
-    HttpResponse.json({ path: '/', entries: [] }),
-  ),
+  http.get('/api/workspaces/:id/files', ({ params, request }) => {
+    const path = new URL(request.url).searchParams.get('path') ?? ''
+    const listing = demoDirectoryListing(String(params.id), path)
+    if (!listing) {
+      return HttpResponse.json(
+        { error: 'invalid_path', message: `refused to escape workspace: ${path}` },
+        { status: 400 },
+      )
+    }
+    return HttpResponse.json(listing)
+  }),
   http.get('/api/workspaces/:id/file', ({ request }) => {
     const url = new URL(request.url)
     const path = url.searchParams.get('path') ?? ''
@@ -596,7 +849,7 @@ export const workspacesHandlers = [
     const workspace = demoWorkspaces.find((candidate) =>
       candidate.sessions.some((session) => session.resumeId === resumeId),
     ) ?? (resumeId === 'resume-demo-thesis-owner'
-      ? demoWorkspaces.find((candidate) => candidate.id === 'demo-ws-auto-quant')
+      ? demoWorkspaces.find((candidate) => candidate.id === DEMO_AUTO_QUANT_WORKSPACE_ID)
       : undefined)
     if (!workspace) return HttpResponse.json({ error: 'not_found' }, { status: 404 })
     const session = workspace.sessions.find((candidate) => candidate.resumeId === resumeId)
@@ -611,7 +864,7 @@ export const workspacesHandlers = [
   }),
   http.get('/api/workspaces/:id/resumes', ({ params }) => {
     const wsId = String(params.id)
-    if (wsId === 'demo-ws-auto-quant') {
+    if (wsId === DEMO_AUTO_QUANT_WORKSPACE_ID) {
       return HttpResponse.json({
         workspace: { id: wsId, tag: 'auto-quant' },
         sessions: [{
@@ -646,13 +899,14 @@ export const workspacesHandlers = [
       })),
     })
   }),
-  http.post('/api/workspaces/:id/resumes/:resumeId/session', ({ params }) => {
+  http.post('/api/workspaces/:id/resumes/:resumeId/session', async ({ params, request }) => {
     const wsId = String(params.id)
     const resumeId = String(params.resumeId)
     const workspace = demoWorkspaces.find((candidate) => candidate.id === wsId)
     if (!workspace) return HttpResponse.json({ error: 'workspace_not_found' }, { status: 404 })
     const existing = workspace.sessions.find((session) => session.resumeId === resumeId)
     if (existing) return HttpResponse.json({ session: existing, created: false })
+    const body = await request.json().catch(() => ({})) as { title?: unknown }
     const now = new Date().toISOString()
     const session = {
       id: `run-${resumeId}`,
@@ -665,7 +919,9 @@ export const workspacesHandlers = [
       state: 'running' as const,
       pid: 0,
       startedAt: Date.now(),
-      title: 'Compute a quant snapshot of NVDA and push a report to the inbox.',
+      title: typeof body.title === 'string' && body.title.trim()
+        ? body.title.trim()
+        : 'Resumed demo run',
       sourceRunId: 'demo-headless-1',
     }
     ;(workspace.sessions as Array<typeof session>).push(session)
@@ -681,20 +937,23 @@ export const workspacesHandlers = [
       prompt?: unknown
       agent?: unknown
       targetWsId?: unknown
+      template?: unknown
     } | null
     const explicit = typeof body?.targetWsId === 'string'
       ? demoWorkspaces.find((workspace) => workspace.id === body.targetWsId)
       : undefined
-    const fallback = demoWorkspaces.find((workspace) => workspace.id === demoChatWorkspace.id)
+    const fallback = body?.template === 'auto-quant-v2'
+      ? demoWorkspaces.find((workspace) => workspace.template === 'auto-quant-v2')
+      : demoWorkspaces.find((workspace) => workspace.id === demoChatWorkspace.id)
     const ws = explicit ?? fallback
     if (!ws) return HttpResponse.json({ error: 'workspace_not_found' }, { status: 404 })
 
     const prompt = typeof body?.prompt === 'string' && body.prompt.trim()
       ? body.prompt.trim()
       : 'Show me how this Workspace is doing.'
-    const agent = typeof body?.agent === 'string' && ws.agents.includes(body.agent)
+    const agent = typeof body?.agent === 'string'
       ? body.agent
-      : 'pi'
+      : ws.defaultAgent ?? 'pi'
     const startedAt = Date.now()
     const now = new Date(startedAt).toISOString()
     const sessionId = `demo-quick-chat-${++demoQuickChatSequence}`
@@ -719,7 +978,6 @@ export const workspacesHandlers = [
     }
     const updatedWorkspace = {
       ...ws,
-      agents: ws.agents.includes(agent) ? ws.agents : [...ws.agents, agent],
       sessions: [...ws.sessions, record],
     }
     const workspaceIndex = demoWorkspaces.findIndex((workspace) => workspace.id === ws.id)
@@ -893,6 +1151,8 @@ export const workspacesHandlers = [
       wireShape: configured ? config?.wireShape ?? null : null,
       reasoning: configured ? config?.reasoning ?? null : null,
       reasoningEffort: configured ? config?.reasoningEffort ?? null : null,
+      reasoningMode: null,
+      reasoningDefaultEnabled: null,
     })
   }),
   http.put('/api/workspaces/:id/agent-config/:agent', async ({ params, request }) => {

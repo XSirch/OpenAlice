@@ -1,6 +1,31 @@
 import { fetchJson } from './client'
+import type { ModelReasoningEffort } from './types'
 
 export type HeadlessTaskStatus = 'running' | 'done' | 'failed' | 'interrupted'
+export type HeadlessLaunchErrorCode =
+  | 'unsupported_windows_batch_shim'
+  | 'executable_not_found'
+  | 'spawn_failed'
+
+export type HeadlessInquirySubject =
+  | { kind: 'inbox'; entryId: string }
+  | {
+      kind: 'issue'
+      workspaceId: string
+      issueId: string
+      relation: 'creator' | 'owner' | 'run'
+      runId?: string
+      commentId?: string
+    }
+
+export interface HeadlessTaskInquiry {
+  subject: HeadlessInquirySubject
+  question: string
+  resolution: {
+    mode: 'exact' | 'reconstructed'
+    reason?: string
+  }
+}
 
 export interface HeadlessTaskRecord {
   taskId: string
@@ -12,12 +37,19 @@ export interface HeadlessTaskRecord {
   /** Business source; independent from wsId when a cross-Workspace signed
    * Session executes an Issue owned by another Workspace. */
   trigger?: { kind: 'issue'; workspaceId: string; issueId: string }
+  /** Product object that requested a follow-up run. */
+  inquiry?: HeadlessTaskInquiry
   agent: string
+  model?: string
+  effort?: ModelReasoningEffort
   prompt: string
   status: HeadlessTaskStatus
   startedAt: number
   finishedAt?: number
   durationMs?: number
+  /** False means the Agent process never reached Node's spawn event. */
+  processStarted?: boolean
+  launchErrorCode?: HeadlessLaunchErrorCode
   exitCode?: number | null
   signal?: string | null
   killed?: boolean

@@ -5,6 +5,7 @@ import { ConfigSection, Field, SettingsScrollArea, inputClass } from '../compone
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
 import { PageHeader } from '../components/PageHeader'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // ==================== Config Section ====================
 
@@ -29,7 +30,12 @@ function CollectorSettings() {
     <div className="mx-auto w-full max-w-[880px]">
       <div className="mb-4 flex items-center justify-end gap-3">
         <SaveIndicator status={status} onRetry={retry} />
-        <Toggle size="sm" checked={enabled} onChange={(v) => updateConfigImmediate({ enabled: v })} />
+        <Toggle
+          ariaLabel="News collection"
+          size="sm"
+          checked={enabled}
+          onChange={(v) => updateConfigImmediate({ enabled: v })}
+        />
       </div>
 
       <div className={`${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -73,7 +79,16 @@ function CollectorSettings() {
 
 // ==================== Feeds Section ====================
 
-function FeedsSection({
+export function isValidFeedUrl(value: string): boolean {
+  try {
+    new URL(value.trim())
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function FeedsSection({
   feeds,
   onChange,
 }: {
@@ -84,8 +99,14 @@ function FeedsSection({
   const [newUrl, setNewUrl] = useState('')
   const [newSource, setNewSource] = useState('')
   const [newDescription, setNewDescription] = useState('')
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    feed: NewsCollectorFeed
+    index: number
+  } | null>(null)
 
   const activeCount = useMemo(() => feeds.filter((f) => f.enabled !== false).length, [feeds])
+  const feedUrlValid = isValidFeedUrl(newUrl)
+  const showFeedUrlError = newUrl.trim().length > 0 && !feedUrlValid
 
   const removeFeed = (index: number) => onChange(feeds.filter((_, i) => i !== index))
 
@@ -94,7 +115,7 @@ function FeedsSection({
   }
 
   const addFeed = () => {
-    if (!newName.trim() || !newUrl.trim() || !newSource.trim()) return
+    if (!newName.trim() || !feedUrlValid || !newSource.trim()) return
     const entry: NewsCollectorFeed = {
       name: newName.trim(),
       url: newUrl.trim(),
@@ -129,6 +150,7 @@ function FeedsSection({
                 className={`flex items-center gap-3 border border-border/60 rounded-lg px-3 py-2.5 ${isEnabled ? '' : 'opacity-50'}`}
               >
                 <Toggle
+                  ariaLabel={feed.name}
                   size="sm"
                   checked={isEnabled}
                   onChange={(v) => setEnabled(i, v)}
@@ -147,9 +169,11 @@ function FeedsSection({
                   </div>
                 </div>
                 <button
-                  onClick={() => removeFeed(i)}
-                  className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-1"
-                  title="Remove feed"
+                  type="button"
+                  onClick={() => setPendingRemoval({ feed, index: i })}
+                  aria-label={`Remove ${feed.name}`}
+                  className="oa-icon-action shrink-0 p-1 text-muted-foreground transition-colors hover:text-destructive"
+                  title={`Remove ${feed.name}`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -174,19 +198,52 @@ function FeedsSection({
           </Field>
         </div>
         <Field label="Feed URL">
-          <input className={inputClass} value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://example.com/rss.xml" />
+          <input
+            className={inputClass}
+            type="url"
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            placeholder="https://example.com/rss.xml"
+            aria-invalid={showFeedUrlError}
+            aria-describedby={showFeedUrlError ? 'news-feed-url-error' : undefined}
+          />
+          {showFeedUrlError && (
+            <p id="news-feed-url-error" role="alert" className="mt-1 text-[12px] text-destructive">
+              Enter a valid URL, for example https://example.com/rss.xml.
+            </p>
+          )}
         </Field>
         <Field label="Description (optional)">
           <input className={inputClass} value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Short description shown in the feed list" />
         </Field>
         <button
           onClick={addFeed}
-          disabled={!newName.trim() || !newUrl.trim() || !newSource.trim()}
+          disabled={!newName.trim() || !feedUrlValid || !newSource.trim()}
           className="btn-secondary"
         >
           Add Feed
         </button>
       </div>
+
+      {pendingRemoval && (
+        <ConfirmDialog
+          title={`Remove ${pendingRemoval.feed.name}?`}
+          message={(
+            <>
+              OpenAlice will stop collecting new articles from{' '}
+              <strong>{pendingRemoval.feed.name}</strong> and remove it from your saved News Sources.
+              Existing articles remain available until the configured retention period expires.
+            </>
+          )}
+          confirmLabel="Remove feed"
+          workingLabel="Removing…"
+          onConfirm={() => {
+            removeFeed(pendingRemoval.index)
+            setPendingRemoval(null)
+          }}
+          onClose={() => setPendingRemoval(null)}
+        />
+      )}
     </ConfigSection>
   )
 }

@@ -22,6 +22,7 @@ import { connectorsApi } from './connectors'
 import { openFinanceApi } from './open-finance'
 import { portfolioCacheApi } from './portfolio-cache'
 import { referenceApi } from './reference'
+import { agentConversationsApi } from './agentConversations'
 export const api = {
   config: configApi,
   schedule: scheduleApi,
@@ -43,6 +44,7 @@ export const api = {
   openFinance: openFinanceApi,
   portfolioCache: portfolioCacheApi,
   reference: referenceApi,
+  agentConversations: agentConversationsApi,
 }
 
 // Re-export all types for convenience
@@ -96,3 +98,9 @@ export type {
   ConnectorSettingsSnapshot,
 } from './connectors'
 export type { ToolCallQueryResult } from './agentStatus'
+export type {
+  AgentConversationQueryResult,
+  AgentConversationRecord,
+  AgentConversationSource,
+  AgentConversationTarget,
+} from './agentConversations'

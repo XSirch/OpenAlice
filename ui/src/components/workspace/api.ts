@@ -15,6 +15,8 @@ export interface Workspace {
   readonly description?: string;
   /** Validation/read error for `.alice/workspace.json`, when present. */
   readonly metadataError?: string;
+  /** Workspace-local runtime used for fresh Sessions when no launch overrides it. */
+  readonly defaultAgent?: string;
   readonly dir: string;
   readonly createdAt: string;
   readonly template?: string;
@@ -31,8 +33,14 @@ export interface Workspace {
    * Opens the reviewed three-way Template Upgrade flow.
    */
   readonly upgradeAvailable?: { from: string; to: string } | null;
-  /** Adapter ids enabled for this workspace. Default runtime lives in user config. */
-  readonly agents: readonly string[];
+  /** Exact external Harness source selected when this Workspace was created. */
+  readonly harnessSource?: {
+    readonly schemaVersion: 1;
+    readonly template: string;
+    readonly repository: string;
+    readonly version: string;
+    readonly commit: string;
+  };
   /**
    * Single ordered list of all session records (running + paused) the
    * launcher tracks for this workspace. Source of truth for sidebar + main
@@ -61,7 +69,7 @@ export interface CreateError {
     | 'insufficient_storage'
     | 'bootstrap_failed'
     | 'unknown_template'
-    | 'unknown_agent'
+    | 'unknown_source_version'
     | 'no_templates_configured';
   readonly message?: string;
   readonly stderr?: string;
@@ -314,20 +322,18 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   return body.workspaces;
 }
 
-/**
- * Create a workspace. `agents` is optional and normally omitted — the backend
- * owns the "every registered adapter, template-headed" policy (see
- * `WorkspaceCreator.create`). Pass an explicit set only to pin a subset.
- */
+/** Create a Workspace from a template, optionally pinned to a source version. */
 export async function createWorkspace(
   tag: string,
   template: string,
-  agents?: readonly string[],
+  sourceVersion?: string,
 ): Promise<CreateResult> {
+  const body: Record<string, unknown> = { tag, template };
+  if (sourceVersion !== undefined) body['sourceVersion'] = sourceVersion;
   const res = await fetch('/api/workspaces', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(agents && agents.length > 0 ? { tag, template, agents } : { tag, template }),
+    body: JSON.stringify(body),
   });
   if (res.ok) {
     const body = (await res.json()) as { workspace: Workspace };
@@ -358,6 +364,14 @@ export interface TemplateInfo {
   readonly version: string;
   /** True if the template ships a README.md (showcase detail page can load it). */
   readonly hasReadme: boolean;
+  readonly source?: {
+    readonly repository: string;
+    readonly defaultVersion: string;
+    readonly versions: readonly {
+      readonly version: string;
+      readonly commit: string;
+    }[];
+  };
 }
 
 export async function listTemplates(): Promise<TemplateInfo[]> {
@@ -400,6 +414,24 @@ export interface AgentCapabilities {
   readonly resumeLast: boolean;
   readonly resumeById: boolean;
   readonly transcriptDiscovery: 'fs-watch' | 'subprocess' | 'none';
+  readonly assignsSessionId?: boolean;
+  readonly headless?: boolean;
+  readonly aiProvider?: AgentProviderCapabilities;
+}
+
+export interface AgentProviderCapabilities {
+  readonly credentialSource: 'runtime-or-workspace' | 'workspace-required';
+  readonly wirePreference: readonly WireShape[];
+  readonly defaultWire?: WireShape;
+  readonly vendorPolicies?: Readonly<Record<string, {
+    readonly wirePreference: readonly WireShape[];
+    readonly legacyRequestedWireFallbacks?: Readonly<Partial<Record<WireShape, WireShape>>>;
+  }>>;
+  readonly modelRegistration?: {
+    readonly contextWindow?: boolean;
+    readonly reasoning?: boolean;
+    readonly effortVariants?: boolean;
+  };
 }
 
 export interface AgentInfo {
@@ -467,6 +499,55 @@ export async function listAgents(): Promise<AgentInfo[]> {
   if (!res.ok) throw new Error(`list agents failed: ${res.status}`);
   const body = (await res.json()) as { agents: AgentInfo[] };
   return body.agents;
+}
+
+export type WorkspaceLaunchMode = 'direct' | 'node-shim' | 'bash-shim' | 'cmd-shim';
+export type WorkspaceLaunchEnvironmentSource = 'terminal' | 'workspace' | 'tools' | 'adapter';
+
+export interface WorkspaceLaunchEnvironmentEntry {
+  readonly key: string;
+  readonly source: WorkspaceLaunchEnvironmentSource;
+  readonly presentation: 'value' | 'configured' | 'redacted' | 'path-count';
+  readonly value?: string;
+  readonly count?: number;
+}
+
+export interface WorkspaceLaunchPlan {
+  readonly workspace: {
+    readonly id: string;
+    readonly tag: string;
+    readonly dir: string;
+  };
+  readonly agent: AgentInfo & {
+    readonly kind: 'agent' | 'utility';
+    readonly installed: boolean;
+    readonly binPath: string | null;
+  };
+  readonly launch: {
+    readonly intent: 'fresh';
+    readonly mode: WorkspaceLaunchMode;
+    readonly composedCommand: readonly string[];
+    readonly resolvedCommand: readonly string[];
+    readonly cwd: string;
+    readonly envPWD: string | null;
+    readonly environment: readonly WorkspaceLaunchEnvironmentEntry[];
+    readonly transcriptDir: string | null;
+  };
+}
+
+export async function getWorkspaceLaunchPlan(
+  id: string,
+  agent: string,
+): Promise<WorkspaceLaunchPlan> {
+  const query = new URLSearchParams({ agent });
+  const res = await fetch(
+    `/api/workspaces/${encodeURIComponent(id)}/launch-plan?${query.toString()}`,
+  );
+  if (!res.ok) {
+    const parsed = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
+    throw new Error(parsed?.message ?? parsed?.error ?? `load launch plan failed: ${res.status}`);
+  }
+  return (await res.json()) as WorkspaceLaunchPlan;
 }
 
 export async function getAgentRuntimeReadiness(): Promise<AgentRuntimeReadinessSnapshot> {
@@ -570,7 +651,7 @@ export interface SessionRecord {
   readonly surface?: 'terminal' | 'webpi';
   readonly pid: number | null;
   readonly startedAt: number | null;
-  /** First message (seeded sessions) — the sidebar title; null → fall back to `name`. */
+  /** Resolved native/fallback sidebar title; null for an unseeded, unnamed Session. */
   readonly title: string | null;
   /** Headless run this stable Alice Session was materialized from. */
   readonly sourceRunId?: string | null;
@@ -723,6 +804,51 @@ export interface QuickChatResult {
   readonly session: SpawnedSession;
 }
 
+export interface AutoQuantDefaultWorkspaceStatus {
+  readonly defaultWorkspaceId: string | null
+  readonly configuredWorkspaceId: string | null
+  readonly ready: boolean
+}
+
+export async function getAutoQuantDefaultWorkspace(): Promise<AutoQuantDefaultWorkspaceStatus> {
+  const res = await fetch('/api/workspaces/auto-quant/default-workspace')
+  const body = (await res.json().catch(() => null)) as
+    | (AutoQuantDefaultWorkspaceStatus & { message?: string })
+    | null
+  if (!res.ok || !body) {
+    throw new Error(body?.message ?? `AutoQuant preference load failed: ${res.status}`)
+  }
+  return body
+}
+
+export async function setAutoQuantDefaultWorkspace(
+  workspaceId: string,
+): Promise<{ defaultWorkspaceId: string; ready: true }> {
+  const res = await fetch('/api/workspaces/auto-quant/default-workspace', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  })
+  const body = (await res.json().catch(() => null)) as
+    | { defaultWorkspaceId?: string; ready?: boolean; message?: string; error?: string }
+    | null
+  if (!res.ok || body?.ready !== true || typeof body.defaultWorkspaceId !== 'string') {
+    throw new Error(body?.message ?? body?.error ?? `AutoQuant preference save failed: ${res.status}`)
+  }
+  return { defaultWorkspaceId: body.defaultWorkspaceId, ready: true }
+}
+
+export async function initializeAutoQuantWorkspace(): Promise<Workspace> {
+  const res = await fetch('/api/workspaces/auto-quant/initialize', { method: 'POST' })
+  const body = (await res.json().catch(() => null)) as
+    | { workspace?: Workspace; message?: string; error?: string }
+    | null
+  if (!res.ok || !body?.workspace) {
+    throw new Error(body?.message ?? body?.error ?? `AutoQuant initialization failed: ${res.status}`)
+  }
+  return body.workspace
+}
+
 export const MANAGER_WORKSPACE_ID = 'workspace-manager'
 
 export interface ManagerWorkspaceSnapshot {
@@ -784,11 +910,13 @@ export async function quickChat(
   agent?: string,
   credentialSlug?: string,
   targetWsId?: string,
+  template?: 'chat' | 'auto-quant-v2',
 ): Promise<QuickChatResult> {
   const body: Record<string, unknown> = { prompt };
   if (agent !== undefined) body['agent'] = agent;
   if (credentialSlug !== undefined) body['credentialSlug'] = credentialSlug;
   if (targetWsId !== undefined) body['targetWsId'] = targetWsId;
+  if (template !== undefined) body['template'] = template;
   const res = await fetch('/api/workspaces/quick-chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -997,7 +1125,11 @@ export async function purgeDepartedWorkspace(id: string): Promise<void> {
   }
 }
 
-export type WorkspaceMetadataPatch = { displayName?: string | null; description?: string | null };
+export type WorkspaceMetadataPatch = {
+  displayName?: string | null;
+  description?: string | null;
+  defaultAgent?: string | null;
+};
 
 export async function updateWorkspaceMetadata(
   id: string,
@@ -1165,8 +1297,7 @@ export type AgentCredentialSource =
   | 'workspace-config'
   | 'launcher-vault'
   | 'missing'
-  | 'unknown-agent'
-  | 'disabled-agent';
+  | 'unknown-agent';
 
 export interface AgentCredentialReadiness {
   readonly agent: string;
@@ -1240,6 +1371,8 @@ export interface WorkspaceCredentialDetection {
   readonly reasoning?: boolean | null;
   readonly reasoningEffort?: ModelReasoningEffort | null;
   readonly reasoningMode?: ModelReasoningMode | null;
+  /** Registered thinking-switch default when the model has no native effort tier. */
+  readonly reasoningDefaultEnabled?: boolean | null;
   readonly interactiveSetupStatus?:
     | 'ready'
     | 'runtime-onboarding-required'

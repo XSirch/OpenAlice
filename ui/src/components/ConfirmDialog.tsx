@@ -8,6 +8,10 @@ interface ConfirmDialogProps {
   message: React.ReactNode
   /** Confirm button label. Defaults to 'Delete' for the destructive case. */
   confirmLabel?: string
+  /** Cancel button label. Defaults to 'Cancel'. */
+  cancelLabel?: string
+  /** Confirm button label while the async action runs. Defaults to 'Working…'. */
+  workingLabel?: string
   /** Visual treatment of the confirm button. Defaults to 'danger'. */
   variant?: 'danger' | 'primary'
   /** Called on user confirm. May be async — the button shows a busy state until it resolves. */
@@ -31,6 +35,8 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Delete',
+  cancelLabel = 'Cancel',
+  workingLabel = 'Working…',
   variant = 'danger',
   onConfirm,
   onClose,
@@ -49,7 +55,11 @@ export function ConfirmDialog({
   const confirmClass = variant === 'danger' ? 'btn-danger' : 'btn-primary'
 
   return (
-    <Dialog onClose={busy ? () => {} : onClose} width="w-[440px]">
+    <Dialog
+      ariaLabel={title}
+      onClose={busy ? () => {} : onClose}
+      width="w-[440px]"
+    >
       <div className="px-5 py-4 border-b border-border">
         <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
       </div>
@@ -59,11 +69,12 @@ export function ConfirmDialog({
       <div className="px-5 py-3 border-t border-border flex justify-end gap-2">
         <button
           type="button"
+          autoFocus
           onClick={onClose}
           disabled={busy}
           className="btn-secondary"
         >
-          Cancel
+          {cancelLabel}
         </button>
         <button
           type="button"
@@ -71,7 +82,7 @@ export function ConfirmDialog({
           disabled={busy}
           className={confirmClass}
         >
-          {busy ? 'Working…' : confirmLabel}
+          {busy ? workingLabel : confirmLabel}
         </button>
       </div>
     </Dialog>

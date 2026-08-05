@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { api, type Position, type WalletCommitLog, type EquityCurvePoint, type UTASnapshotSummary } from '../api'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
@@ -179,6 +180,7 @@ export function PortfolioPage() {
   const [selectedSnapshot, setSelectedSnapshot] = useState<UTASnapshotSummary | null>(null)
   const [snapshotEnabled, setSnapshotEnabled] = useState(true)
   const [snapshotEvery, setSnapshotEvery] = useState('15m')
+  const [snapshotConfigLoaded, setSnapshotConfigLoaded] = useState(false)
   // Aggregate curve (all UTAs, full per-account breakdown) — shared between
   // hero today-PnL delta and per-account sparklines. Distinct from
   // curvePoints which follows the user's chart-account selection.
@@ -189,7 +191,11 @@ export function PortfolioPage() {
   const saveSnapshotConfig = useCallback(async (d: Record<string, unknown>) => {
     await api.config.updateSection('snapshot', d)
   }, [])
-  const { status: snapshotSaveStatus } = useAutoSave({ data: snapshotConfig, save: saveSnapshotConfig })
+  const { status: snapshotSaveStatus } = useAutoSave({
+    data: snapshotConfig,
+    save: saveSnapshotConfig,
+    enabled: snapshotConfigLoaded,
+  })
 
   // Fetch curve data for the user's chart-pane selection (single account
   // or 'all'). Distinct from aggregate-curve — that one is always fetched
@@ -241,6 +247,7 @@ export function PortfolioPage() {
       setSnapshotEnabled(configResult.snapshot.enabled)
       setSnapshotEvery(configResult.snapshot.every)
     }
+    setSnapshotConfigLoaded(true)
 
     // Default to first account on initial load
     const effectiveId = curveAccountId || result.accounts[0]?.id || 'all'
@@ -764,7 +771,7 @@ function AccountStrip({ sources, perAccountCurve }: {
 
 // ==================== Positions Table ====================
 
-interface PositionWithAccount extends Position {
+export interface PositionWithAccount extends Position {
   accountLabel: string
   accountProvider: string
 }
@@ -785,16 +792,116 @@ function contractDisplay(p: Position): { name: string; tag: string } {
   return { name: contractPrimary(p.contract), tag: p.contract.secType || 'UNK' }
 }
 
-function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount[]; fxRates: FxRateInfo[] }) {
+function PositionDetail({
+  label,
+  value,
+  valueClassName = 'text-foreground',
+}: {
+  label: string
+  value: string
+  valueClassName?: string
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className={`mt-0.5 truncate text-[12px] tabular-nums ${valueClassName}`} title={value}>{value}</dd>
+    </div>
+  )
+}
+
+export function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount[]; fxRates: FxRateInfo[] }) {
   const rateMap = Object.fromEntries(fxRates.map(r => [r.currency, r.rate]))
   const hasNonUsd = positions.some(p => p.currency && p.currency !== 'USD')
+  const rows = positions.map((position, index) => {
+    const display = contractDisplay(position)
+    const currency = position.currency ?? 'USD'
+    const fxRate = currency === 'USD' ? 1 : (rateMap[currency] ?? 1)
+    const unrealizedPnl = Number(position.unrealizedPnL)
+    const cost = Number(position.avgCost) * Number(position.quantity)
+    const pnlPercent = cost > 0 ? (unrealizedPnl / cost) * 100 : 0
+
+    return {
+      key: `${position.accountProvider}:${position.accountLabel}:${position.contract.aliceId ?? display.name}:${index}`,
+      position,
+      display,
+      currency,
+      usdValue: Number(position.marketValue) * fxRate,
+      unrealizedPnl,
+      pnlPercent,
+      isShort: position.side === 'short',
+    }
+  })
 
   return (
     <div>
       <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
         Positions
       </h3>
-      <div className="border border-border rounded-lg overflow-x-auto">
+      <div
+        data-testid="portfolio-positions-mobile"
+        className="overflow-hidden rounded-lg border border-border md:hidden"
+      >
+        {rows.map(({ key, position, display, currency, usdValue, unrealizedPnl, pnlPercent, isShort }) => {
+          const pnlTone = unrealizedPnl >= 0 ? 'text-success' : 'text-destructive'
+          return (
+            <details key={key} className="group border-t border-border first:border-t-0">
+              <summary
+                aria-label={`${display.name} in ${position.accountLabel}, market value ${fmt(Number(position.marketValue), position.currency)}, PnL ${fmtPctSigned(pnlPercent)}, ${fmtPnl(unrealizedPnl, position.currency)}. Expand for position details.`}
+                className="list-none px-3 py-3 outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate font-medium text-foreground" title={display.name}>{display.name}</span>
+                      <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-[9px] tracking-tight text-muted-foreground">
+                        {display.tag}
+                      </span>
+                      {isShort && (
+                        <span className="shrink-0 rounded bg-destructive/15 px-1 py-0.5 text-[9px] font-medium text-destructive">
+                          SHORT
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 truncate text-[10px] text-muted-foreground">
+                      {position.accountLabel} · {currency}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-semibold tabular-nums text-foreground">
+                      {fmt(Number(position.marketValue), position.currency)}
+                    </div>
+                    <div className={`mt-0.5 text-[11px] tabular-nums ${pnlTone}`}>
+                      {fmtPctSigned(pnlPercent)} · {fmtPnl(unrealizedPnl, position.currency)}
+                    </div>
+                  </div>
+                  <ChevronDown
+                    size={14}
+                    aria-hidden="true"
+                    className="mt-1 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                  />
+                </div>
+              </summary>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border bg-secondary/35 px-3 py-3">
+                <PositionDetail label="Quantity" value={fmtNum(Number(position.quantity))} />
+                <PositionDetail label="Average cost" value={fmt(Number(position.avgCost), position.currency)} />
+                <PositionDetail label="Current price" value={fmt(Number(position.marketPrice), position.currency)} />
+                <PositionDetail
+                  label="Unrealized PnL"
+                  value={fmtPnl(unrealizedPnl, position.currency)}
+                  valueClassName={pnlTone}
+                />
+                {hasNonUsd && currency !== 'USD' && (
+                  <PositionDetail label="USD value" value={fmt(usdValue)} />
+                )}
+              </dl>
+            </details>
+          )
+        })}
+      </div>
+      <div
+        data-testid="portfolio-positions-desktop"
+        className="hidden overflow-x-auto rounded-lg border border-border md:block"
+      >
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-secondary text-muted-foreground text-left">
@@ -810,15 +917,9 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
             </tr>
           </thead>
           <tbody>
-            {positions.map((p, i) => {
-              const display = contractDisplay(p)
-              const ccy = p.currency ?? 'USD'
-              const fxRate = ccy === 'USD' ? 1 : (rateMap[ccy] ?? 1)
-              const usdValue = Number(p.marketValue) * fxRate
-              const isShort = p.side === 'short'
-
+            {rows.map(({ key, position: p, display, currency: ccy, usdValue, unrealizedPnl, pnlPercent, isShort }) => {
               return (
-                <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
+                <tr key={key} className="border-t border-border hover:bg-muted/30 transition-colors">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-foreground">{display.name}</span>
@@ -839,15 +940,11 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
                       {ccy === 'USD' ? '—' : fmt(usdValue)}
                     </td>
                   )}
-                  <td className={`px-3 py-2 text-right font-medium ${Number(p.unrealizedPnL) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                    {fmtPnl(Number(p.unrealizedPnL), p.currency)}
+                  <td className={`px-3 py-2 text-right font-medium ${unrealizedPnl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {fmtPnl(unrealizedPnl, p.currency)}
                   </td>
-                  <td className={`px-3 py-2 text-right ${Number(p.unrealizedPnL) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                    {(() => {
-                      const cost = Number(p.avgCost) * Number(p.quantity)
-                      const pct = cost > 0 ? (Number(p.unrealizedPnL) / cost) * 100 : 0
-                      return fmtPctSigned(pct)
-                    })()}
+                  <td className={`px-3 py-2 text-right ${unrealizedPnl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {fmtPctSigned(pnlPercent)}
                   </td>
                 </tr>
               )
@@ -961,7 +1058,16 @@ const INTERVAL_PRESETS = [
   { label: '1h', value: '1h' },
 ]
 
-function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, saveStatus }: {
+export function isValidSnapshotInterval(value: string): boolean {
+  const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(value.trim())
+  if (!match) return false
+  const hours = Number(match[1] ?? 0)
+  const minutes = Number(match[2] ?? 0)
+  const seconds = Number(match[3] ?? 0)
+  return hours > 0 || minutes > 0 || seconds > 0
+}
+
+export function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, saveStatus }: {
   enabled: boolean
   every: string
   onEnabledChange: (v: boolean) => void
@@ -970,6 +1076,13 @@ function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, save
 }) {
   const isPreset = INTERVAL_PRESETS.some(p => p.value === every)
   const [showCustom, setShowCustom] = useState(!isPreset)
+  const [customEvery, setCustomEvery] = useState(every)
+  const customEveryValid = isValidSnapshotInterval(customEvery)
+
+  useEffect(() => {
+    setCustomEvery(every)
+    if (!isPreset) setShowCustom(true)
+  }, [every, isPreset])
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-secondary/45 px-3 py-2.5 text-[12px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
@@ -999,13 +1112,30 @@ function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, save
           compact
         />
         {showCustom && (
-          <input
-            aria-label="Custom portfolio snapshot interval"
-            className="w-16 rounded-md border border-border bg-background px-1.5 py-1 text-center text-[12px] text-foreground outline-none focus:border-accent"
-            value={every}
-            onChange={(e) => onEveryChange(e.target.value)}
-            placeholder="e.g. 2h"
-          />
+          <div className="relative">
+            <input
+              aria-label="Custom portfolio snapshot interval"
+              aria-invalid={!customEveryValid}
+              aria-describedby={!customEveryValid ? 'snapshot-interval-error' : undefined}
+              className="w-20 rounded-md border border-border bg-background px-1.5 py-1 text-center text-[12px] text-foreground outline-none focus:border-primary"
+              value={customEvery}
+              onChange={(e) => {
+                const next = e.target.value
+                setCustomEvery(next)
+                if (isValidSnapshotInterval(next)) onEveryChange(next.trim())
+              }}
+              placeholder="e.g. 2h"
+            />
+            {!customEveryValid && (
+              <p
+                id="snapshot-interval-error"
+                role="alert"
+                className="absolute right-0 top-full z-10 mt-1 w-max max-w-64 rounded-md border border-destructive/30 bg-background px-2 py-1 text-[11px] text-destructive shadow-md"
+              >
+                Use a positive duration such as 15m, 1h, or 2h15m.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
