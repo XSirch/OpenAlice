@@ -246,6 +246,7 @@ jobs:
       - name: Prove previous desktop release state upgrades to the candidate
         run: >-
           pnpm electron:smoke:upgrade --
+          --from v0.89.0-beta
           --candidate-package-root dist/electron-app
           --receipt "${{ runner.temp }}/openalice-desktop-upgrade.json"
         timeout-minutes: 15
