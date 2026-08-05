@@ -6,6 +6,10 @@ import YAML from 'yaml'
 interface WorkflowStep {
   name?: string
   run?: string
+  uses?: string
+  with?: {
+    'node-version'?: string | number
+  }
 }
 
 interface WorkflowJob {
@@ -24,6 +28,17 @@ function commands(job: WorkflowJob): string[] {
 }
 
 describe('CI workflow fast failure lanes', () => {
+  it('pins every CI lane to the supported Node runtime', () => {
+    const setupSteps = Object.values(workflow.jobs).flatMap((job) =>
+      job.steps?.filter((step) => step.uses?.startsWith('actions/setup-node@')) ?? [],
+    )
+
+    expect(setupSteps.length).toBeGreaterThan(0)
+    for (const step of setupSteps) {
+      expect(String(step.with?.['node-version'])).toBe('22.19.0')
+    }
+  })
+
   it('runs build and unit tests independently', () => {
     const build = workflow.jobs.build
     const test = workflow.jobs.test

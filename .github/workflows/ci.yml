@@ -39,7 +39,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -61,7 +61,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -101,7 +101,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
 
       # Skip the Electron desktop shell — the smoke only needs UTA/Alice/UI.
@@ -130,7 +130,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile --filter='!@traderalice/desktop'
