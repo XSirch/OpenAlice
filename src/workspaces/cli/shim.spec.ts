@@ -74,6 +74,9 @@ describe('CLI launchers and payload', () => {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({
         description: 'test manifest',
+        groupDescriptions: {
+          market: 'Discover symbols and bar sources',
+        },
         groups: {
           market: {
             search: {
@@ -101,7 +104,52 @@ describe('CLI launchers and payload', () => {
       expect(stdout).toContain('[openalice-cli-debug] socket.response')
       expect(stdout).toContain('OpenAlice CLI')
       expect(stdout).toContain('market')
+      expect(stdout).toContain('Discover symbols and bar sources')
+      expect(stdout).not.toContain('MCP-only tool')
       expect(seen).toEqual(['/cli/ws1/data/manifest'])
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('shows a group purpose before its verb help', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'openalice-cli-shim-group-help-'))
+    const socketPath = process.platform === 'win32'
+      ? `\\\\.\\pipe\\openalice-cli-shim-group-help-${process.pid}-${Date.now()}`
+      : join(dir, 'tools.sock')
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        description: 'Workspace collaboration',
+        groupDescriptions: {
+          inbox: 'Deliver reports to the human Inbox',
+        },
+        groups: {
+          inbox: {
+            push: {
+              tool: 'inbox_push',
+              description: 'Push one delivery',
+              schema: { type: 'object', properties: {} },
+            },
+          },
+        },
+      }))
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(socketPath, resolve)
+    })
+    try {
+      const { stdout } = await runCli('alice-workspace', ['inbox'], {
+        ...process.env,
+        AQ_WS_ID: 'ws1',
+        OPENALICE_TOOL_SOCKET: socketPath,
+        OPENALICE_TOOL_URL: '/cli',
+      })
+      expect(stdout).toContain('alice-workspace inbox <verb>')
+      expect(stdout).toContain('Deliver reports to the human Inbox')
+      expect(stdout).toContain('push')
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()))
       await rm(dir, { recursive: true, force: true })
@@ -155,6 +203,7 @@ describe('CLI launchers and payload', () => {
                 issueId: { type: 'string' },
                 accountId: { type: 'string' },
                 await: { type: 'boolean' },
+                reconstruct: { type: 'boolean' },
                 taskId: { type: 'array', items: { type: 'string' } },
                 docs: { type: 'array', items: { type: 'object' } },
                 metadataFilter: { type: 'object' },
@@ -193,6 +242,8 @@ describe('CLI launchers and payload', () => {
       expect(help.stdout).toContain('--issue-id')
       expect(help.stdout).toContain('--await')
       expect(help.stdout).not.toContain('--await <boolean>')
+      expect(help.stdout).toContain('--reconstruct')
+      expect(help.stdout).not.toContain('--reconstruct <boolean>')
       expect(help.stdout).toContain('--task-id <value> (repeatable)')
       expect(help.stdout).not.toContain('--task-id <array>')
       expect(help.stdout).not.toContain('--issueId')
@@ -202,7 +253,8 @@ describe('CLI launchers and payload', () => {
       expect(help.stdout).not.toContain('--metadata-filter')
 
       await runCli('alice-workspace', [
-        'provenance', 'show', '--issue-id', 'audit', '--account-id', 'alpaca-paper', '--await',
+        'provenance', 'show', '--issue-id', 'audit', '--account-id', 'alpaca-paper',
+        '--await', '--reconstruct',
         '--task-id', 'run-a', '--task-id', 'run-b',
         '--doc', 'research/a.md', '--meta', 'ticker=AAPL',
       ], env)
@@ -212,6 +264,7 @@ describe('CLI launchers and payload', () => {
           issueId: 'audit',
           accountId: 'alpaca-paper',
           await: true,
+          reconstruct: true,
           taskId: ['run-a', 'run-b'],
           docs: [{ path: 'research/a.md' }],
           metadataFilter: { ticker: 'AAPL' },

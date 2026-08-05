@@ -14,7 +14,7 @@
  * helper: it carries each vendor's endpoint + model suggestions + request shape.
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Preset, type WireShape } from '../api'
 import type {
@@ -26,6 +26,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PageLoading, Skeleton } from '../components/StateViews'
 import { SettingsScrollArea, inputClass } from '../components/form'
 import { CredentialModal } from '../components/credentials/CredentialModal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   AGENT_LABELS,
   WIRE_SHAPE_GUIDANCE,
@@ -38,6 +39,7 @@ import {
   vendorPreset,
 } from '../lib/presetHelpers'
 import { notifyWorkspaceDefaultsChanged } from '../lib/workspaceAiEvents'
+import { listAgents, type AgentInfo } from '../components/workspace/api'
 
 function credentialLabel(cred: Pick<CredentialSummary, 'slug' | 'vendor' | 'label'>): string {
   return cred.label?.trim() || cred.slug
@@ -92,7 +94,9 @@ const AGENT_RUNTIMES: RuntimeInfo[] = [
 
 export function AIProviderPage() {
   const { t } = useTranslation()
+  const [agents, setAgents] = useState<AgentInfo[]>([])
   const [credentials, setCredentials] = useState<CredentialSummary[] | null>(null)
+  const [credentialsLoadError, setCredentialsLoadError] = useState(false)
   const [presets, setPresets] = useState<Preset[]>([])
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; cred: CredentialSummary } | null>(null)
   const [analyticsConfigured, setAnalyticsConfigured] = useState(false)
@@ -100,14 +104,25 @@ export function AIProviderPage() {
   const [analyticsSaving, setAnalyticsSaving] = useState(false)
   const [usageRows, setUsageRows] = useState<Array<{ model: string; total_usage: number | string; tokens_total: number | string; request_count: number | string }> | null>(null)
   const [usageError, setUsageError] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<CredentialSummary | null>(null)
 
-  const reload = () => api.config.getCredentials().then(({ credentials: c }) => setCredentials(c)).catch(() => setCredentials([]))
+  const reload = useCallback(async () => {
+    setCredentials(null)
+    setCredentialsLoadError(false)
+    try {
+      const { credentials: next } = await api.config.getCredentials()
+      setCredentials(next)
+    } catch {
+      setCredentialsLoadError(true)
+    }
+  }, [])
 
   useEffect(() => {
     void reload()
     api.config.getPresets().then(({ presets: p }) => setPresets(p)).catch(() => {})
-    fetch('/api/openrouter-analytics').then((r) => r.json()).then((v) => setAnalyticsConfigured(v.configured === true)).catch(() => {})
-  }, [])
+      fetch('/api/openrouter-analytics').then((r) => r.json()).then((v) => setAnalyticsConfigured(v.configured === true)).catch(() => {})
+      void listAgents().then(setAgents).catch(() => setAgents([]))
+    }, [reload])
 
   const apiKeyPresets = useMemo(() => presets.filter(isApiKeyPreset), [presets])
   const loadUsage = async () => {
@@ -119,12 +134,14 @@ export function AIProviderPage() {
     } catch (error) { setUsageError(error instanceof Error ? error.message : 'Could not load OpenRouter usage') }
   }
 
-  const handleDelete = async (slug: string) => {
+  const handleDelete = async (slug: string): Promise<boolean> => {
     try {
       await api.config.deleteCredential(slug)
       await reload()
+      return true
     } catch (err) {
       alert(err instanceof Error ? err.message : t('aiProvider.deleteFailed'))
+      return false
     }
   }
   const saveAnalyticsKey = async () => {
@@ -144,7 +161,21 @@ export function AIProviderPage() {
     return (
       <div className="flex flex-col flex-1 min-h-0">
         <PageHeader title={t('aiProvider.title')} description={t('aiProvider.description')} />
-        <PageLoading />
+        {credentialsLoadError ? (
+          <div className="flex flex-1 items-center justify-center px-6 py-12">
+            <div role="alert" className="max-w-md text-center">
+              <h2 className="text-sm font-semibold text-foreground">{t('aiProvider.loadErrorTitle')}</h2>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                {t('aiProvider.loadErrorDescription')}
+              </p>
+              <button type="button" className="btn-secondary-sm mt-4" onClick={() => void reload()}>
+                {t('common.retry')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <PageLoading />
+        )}
       </div>
     )
   }
@@ -185,7 +216,7 @@ export function AIProviderPage() {
 
             <div className="space-y-2.5">
               {credentials.map((cred) => {
-                const compatibleAgents = compatibleAgentIds(cred.wires)
+                const compatibleAgents = compatibleAgentIds(cred.wires, agents)
                 return (
                   <div key={cred.slug} className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-background px-4 py-3 sm:flex-row sm:items-center">
                     <div className="flex-1 min-w-0">
@@ -210,13 +241,27 @@ export function AIProviderPage() {
                     </div>
                     <div className="flex shrink-0 gap-2 self-end sm:self-auto">
                       <button
+                        type="button"
                         onClick={() => setModal({ mode: 'edit', cred })}
+                        title={t('aiProvider.editCredentialAria', {
+                          credential: credentialLabel(cred),
+                        })}
+                        aria-label={t('aiProvider.editCredentialAria', {
+                          credential: credentialLabel(cred),
+                        })}
                         className="text-[11px] px-2 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {t('common.edit')}
                       </button>
                       <button
-                        onClick={() => handleDelete(cred.slug)}
+                        type="button"
+                        onClick={() => setPendingDelete(cred)}
+                        title={t('aiProvider.deleteCredentialAria', {
+                          credential: credentialLabel(cred),
+                        })}
+                        aria-label={t('aiProvider.deleteCredentialAria', {
+                          credential: credentialLabel(cred),
+                        })}
                         className="text-[11px] px-2 py-1 rounded-md border border-border text-muted-foreground hover:text-destructive transition-colors"
                       >
                         {t('common.delete')}
@@ -238,7 +283,7 @@ export function AIProviderPage() {
           </section>
 
           {/* ============== Default workspace credentials ============== */}
-          <WorkspaceDefaultsSection credentials={credentials} presets={presets} />
+          <WorkspaceDefaultsSection credentials={credentials} presets={presets} agents={agents} />
         </div>
 
         {/* Runtime descriptions are reference material, not a prerequisite for
@@ -285,8 +330,27 @@ export function AIProviderPage() {
           mode={modal.mode}
           cred={modal.mode === 'edit' ? modal.cred : undefined}
           presets={apiKeyPresets}
+          agents={agents}
           onClose={() => setModal(null)}
           onSaved={async () => { await reload(); setModal(null) }}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={t('aiProvider.deleteConfirmTitle', {
+            credential: credentialLabel(pendingDelete),
+          })}
+          message={t('aiProvider.deleteConfirmMessage', {
+            slug: pendingDelete.slug,
+          })}
+          confirmLabel={t('common.delete')}
+          cancelLabel={t('common.cancel')}
+          onConfirm={async () => {
+            if (await handleDelete(pendingDelete.slug)) {
+              setPendingDelete(null)
+            }
+          }}
+          onClose={() => setPendingDelete(null)}
         />
       )}
     </div>
@@ -312,7 +376,15 @@ const ADVANCED_DEFAULT_AGENTS = [
   { id: 'codex', name: 'Codex' },
 ] as const
 
-function WorkspaceDefaultsSection({ credentials, presets }: { credentials: CredentialSummary[]; presets: Preset[] }) {
+function WorkspaceDefaultsSection({
+  credentials,
+  presets,
+  agents,
+}: {
+  credentials: CredentialSummary[]
+  presets: Preset[]
+  agents: readonly AgentInfo[]
+}) {
   const { t } = useTranslation()
   const [data, setData] = useState<WorkspaceCredentialDefaultsResponse | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -364,7 +436,7 @@ function WorkspaceDefaultsSection({ credentials, presets }: { credentials: Crede
     const nextDefaults = { ...data.defaults }
     if (slug) {
       const cred = credentials.find((candidate) => candidate.slug === slug)
-      const wireShape = cred ? agentWireShapes(cred.wires, agentId, cred.vendor)[0] : undefined
+      const wireShape = cred ? agentWireShapes(cred.wires, agents, agentId, cred.vendor)[0] : undefined
       nextDefaults[agentId] = { credentialSlug: slug, ...(wireShape ? { wireShape } : {}) }
     } else {
       delete nextDefaults[agentId]
@@ -411,7 +483,7 @@ function WorkspaceDefaultsSection({ credentials, presets }: { credentials: Crede
     const current = data?.defaults[agent.id]?.credentialSlug ?? ''
     const selectedCredential = credentials.find((candidate) => candidate.slug === current)
     const wireShapes = selectedCredential
-      ? agentWireShapes(selectedCredential.wires, agent.id, selectedCredential.vendor)
+      ? agentWireShapes(selectedCredential.wires, agents, agent.id, selectedCredential.vendor)
       : []
     const configuredWire = data?.defaults[agent.id]?.wireShape
     const selectedWire = configuredWire && wireShapes.includes(configuredWire)

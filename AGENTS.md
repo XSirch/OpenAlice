@@ -9,6 +9,10 @@ Keep this file short. It contains rules that apply to every task. Detailed
 architecture and operating procedures live in the owner guides linked below.
 Current code, tests, rendered behavior, and GitHub state override stale prose.
 
+Durable subsystem truth lives under [[docs/README.md]]. Active multi-step
+implementation work lives under [[PLANS.md]]. Keep both indexes current when a
+change introduces a new owner guide or execution plan.
+
 ## Start Here
 
 ```bash
@@ -43,8 +47,9 @@ Before changing files:
   or satellite repositories. Do not grow a parallel workflow engine in `src/`.
 - UTA is optional for non-trading use. Startup, onboarding, and Chat must remain
   usable in lite/read-only mode when no broker carrier is available.
-- Chat workspaces are durable and reusable by default. Auto-Quant workspaces are
-  isolated/ephemeral by design; do not apply one lifecycle policy to both.
+- Chat and AutoQuant V2 workspaces are durable and reusable by default.
+  AutoQuant's internal projects and experiments remain owned by its Coding
+  Agent; do not reproduce that lifecycle in Alice.
 - `OPENALICE_HOME` is the user-state root. Changes to persisted state must use
   the migration framework; never hide one-off cleanup in startup code.
 - Secrets never belong in tracked files, logs, fixtures, PR bodies, or agent
@@ -78,18 +83,27 @@ Choose delivery authority before implementation:
 | Mode | Trigger | Delivery to `dev` |
 |---|---|---|
 | Serial / interactive | Default: the user is actively requesting and steering concrete work | After proportional local verification, open and merge the PR without waiting for pending remote CI; delete the feature branch and return to updated `dev` unless the user says to pause |
-| Parallel / contribution | Explicit `/goal` or direct request to autonomously find and contribute improvements | Leave each PR open for later review, return to `dev`, and continue from a fresh branch |
+| Autonomous / topic contribution | Explicit `/goal` or direct request to autonomously find and contribute improvements | Keep one community-facing Draft PR for the active topic, add related work as atomic commits, and leave the topic unmerged for later acceptance |
 
-A later interactive message does not retroactively authorize merging a parallel
-PR queue. Parallel work is already non-blocking because opening a PR does not
-pause the next contribution. In serial work the PR exists to durably integrate
-each completed increment into `dev`, so pending CI must not turn it into a
-synchronous lock. Before publishing the next serial increment, inspect the
-previous increment's PR checks and post-merge `dev` run. A known failure blocks
-further stacking until repaired; a still-pending run does not by itself block
-serial work. `master` promotions, releases, explicit review pauses, and
-untrusted contributions keep their full synchronous gates. Detailed branch,
-PR, promotion, hotfix, and external-contribution procedures live in
+Internal agent decomposition must not become one GitHub PR per finding. Define a
+coherent topic and acceptance boundary, keep a single integrator responsible for
+its branch, and accumulate independently reviewable commits in that Draft PR.
+Finish or freeze the active topic before opening another by default. Split only
+for a genuinely different topic, a material risk/release boundary, or explicit
+maintainer direction.
+
+Label the topic PR with `workflow:parallel`, exactly one `theme:*`, and at least
+one `area:*`; add another area only when the topic intentionally crosses owner
+boundaries. Add `review:deep` for trading writes, persisted configuration,
+credentials, destructive actions, security boundaries, or substantial
+cross-surface structure. A later interactive message does not retroactively
+authorize merging an autonomous topic PR. Related work may continue while its
+latest CI is pending, but a known failure must be repaired before adding more
+scope. In serial work, pending CI likewise must not become a synchronous lock;
+inspect the previous PR checks and post-merge `dev` run before publishing the
+next increment. `master` promotions, releases, explicit review pauses, and
+untrusted contributions keep their full synchronous gates. Detailed topic,
+branch, PR, promotion, hotfix, and external-contribution procedures live in
 [[docs/development-workflow.md]]
 ([Development workflow](docs/development-workflow.md)).
 
@@ -165,6 +179,26 @@ Handle in-scope findings in the current PR instead of filing an issue for work
 the same change already owns. Product-roadmap ideas still belong to the user's
 planning surface rather than being silently converted into engineering tasks.
 
+## Implementation Plans
+
+Use `plans/<topic>.md` for substantial work that spans multiple surfaces,
+increments, or sessions. [[PLANS.md]] is the compact index and lifecycle
+contract.
+
+- A plan records scope, decisions, ordered work, verification, and live
+  progress. It is not an owner guide and must link to the relevant `docs/`
+  contract instead of copying it.
+- Update the plan in the same change as meaningful progress, newly discovered
+  constraints, scope changes, or completion. Checkboxes must reflect repository
+  truth rather than intent.
+- Keep one canonical plan per initiative. Extend or supersede it explicitly
+  instead of creating parallel TODO notes.
+- Active plans stay in `plans/`; completed plans remain as a concise execution
+  record and move to the Completed section of [[PLANS.md]].
+- GitHub issues remain the external defect/deferred-work surface. Reference
+  related issues and PRs from the plan; do not use a plan to hide actionable
+  deferred findings from the issue tracker.
+
 ## Owner Guides
 
 Read the relevant guide before editing its subsystem:
@@ -176,10 +210,16 @@ Read the relevant guide before editing its subsystem:
   delivery modes, promotions, external contributions, and risk gates.
 - [[docs/managed-workspace-runtime.md]] — [Managed Workspace runtime](docs/managed-workspace-runtime.md): Electron
   packaging, managed Pi, PortableGit/Bash, runtime profiles, and Workspace PATH.
+- [[docs/model-semantics-and-runtime-injection.md]] — [Model semantics and runtime injection](docs/model-semantics-and-runtime-injection.md):
+  credential access, model/effort semantics, Workspace-local defaults, and
+  one-run native CLI overrides.
 - [[docs/broker-packs.md]] — [Broker Packs](docs/broker-packs.md): optional broker SDK
   packaging, UI installation, activation, runtime loading, and release assets.
 - [[docs/cli-installer.md]] — [CLI installer](docs/cli-installer.md): consent, installed layout,
   atomic updates, PATH integration, installer tests, and release checks.
+- [[docs/cli-supervisor.md]] — [Shell CLI Supervisor](docs/cli-supervisor.md): top-level
+  Runtime lifecycle, status/JSON presentation, browser opening, completion,
+  compatibility aliases, and Supervisor TUI boundary.
 - [[docs/local-runtime.md]] — [Local Runtime and CLI bootstrap](docs/local-runtime.md): source-backed
   localhost startup, dependency bootstrap, Runtime ownership, and the headless bundle boundary.
 - [[docs/data-locations.md]] — [Data locations](docs/data-locations.md): complete-home selection,

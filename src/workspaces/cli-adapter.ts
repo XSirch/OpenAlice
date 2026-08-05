@@ -61,11 +61,51 @@ export interface SpawnContext {
   readonly approveProject?: boolean;
 }
 
+/** Explicit selection for one headless turn. Authentication, provider routing,
+ * and every omitted field remain inherited from the Workspace/native runtime. */
+export interface HeadlessRunOverrides {
+  readonly model?: string
+  readonly reasoningEffort?: ModelReasoningEffort
+}
+
 export interface AgentRuntimeWorkspaceContext {
   readonly wsId: string;
   readonly cwd: string;
   /** Absolute path to the launcher repo, so adapters can compose tool paths. */
   readonly launcherRepoRoot: string;
+}
+
+export interface AgentProviderVendorPolicy {
+  /** Vendor-specific narrowing of the runtime's normal wire preference. */
+  readonly wirePreference: readonly WireShape[];
+  /**
+   * Narrow compatibility repair for a previously valid saved selection.
+   * The target still has to be present (or provider-inferable) on the credential.
+   */
+  readonly legacyRequestedWireFallbacks?: Readonly<Partial<Record<WireShape, WireShape>>>;
+}
+
+export interface AgentProviderCapabilities {
+  /**
+   * Whether the runtime can start from its own native/global login, or needs a
+   * concrete Workspace provider binding before OpenAlice launches it.
+   */
+  readonly credentialSource: 'runtime-or-workspace' | 'workspace-required';
+  /** Wire protocols this runtime can consume, in native preference order. */
+  readonly wirePreference: readonly WireShape[];
+  /** Protocol preselected for a blank manual binding form. */
+  readonly defaultWire?: WireShape;
+  /** Provider-specific compatibility constraints and legacy repairs. */
+  readonly vendorPolicies?: Readonly<Record<string, AgentProviderVendorPolicy>>;
+  /**
+   * Custom-model facts this runtime registers in provider metadata. Runtimes
+   * that only select a model id leave this absent and preserve native fallback.
+   */
+  readonly modelRegistration?: {
+    readonly contextWindow?: boolean;
+    readonly reasoning?: boolean;
+    readonly effortVariants?: boolean;
+  };
 }
 
 /**
@@ -88,7 +128,8 @@ export interface AgentRuntimeLifecycle {
  * Per-workspace AI-provider override (endpoint / key / model). The launcher
  * owns the *contract* — one shape, dispatched uniformly across CLIs — while
  * each adapter owns the *format* (claude → `.claude/settings.local.json`,
- * codex → `.codex/config.toml` + `.codex/env.json`). Superset shape: `authMode`
+ * codex native login → `.codex/config.toml`, custom provider → an isolated
+ * `.codex/openalice-home/`). Superset shape: `authMode`
  * is claude-only (which header carries the key), `wireApi` is codex-only
  * (Responses vs Chat Completions). Fields are optional/nullable so the same
  * shape serves both the write-input (absent ⇒ unset) and the read-output
@@ -192,6 +233,12 @@ export interface CliAdapter {
      * set this; `shell` does not (no agent-turn concept).
      */
     readonly headless?: boolean;
+    /**
+     * Native AI-provider projection contract. Shared credential/model logic
+     * consumes this declaration instead of branching on adapter ids. Omit for
+     * utility adapters that cannot accept a Workspace AI binding.
+     */
+    readonly aiProvider?: AgentProviderCapabilities;
   };
 
   /** Runtime-specific hooks executed through the shared launcher lifecycle. */
@@ -244,7 +291,12 @@ export interface CliAdapter {
    *   opencode: [opencode, run, --format, json, <prompt>]
    *   pi:       [pi, -p, --mode, json, <prompt>]
    */
-  composeHeadlessCommand?(base: readonly string[], ctx: SpawnContext, prompt: string): readonly string[];
+  composeHeadlessCommand?(
+    base: readonly string[],
+    ctx: SpawnContext,
+    prompt: string,
+    overrides?: HeadlessRunOverrides,
+  ): readonly string[];
 
   /**
    * Extract the agent's OWN session id from one line of headless stdout.
@@ -308,7 +360,7 @@ export interface CliAdapter {
    * Read/write the workspace's per-CLI AI-provider override. The launcher
    * dispatches uniformly; each adapter renders the shared `WorkspaceAiCred`
    * into (and parses it out of) its own native config files. An empty cred
-   * resets — the adapter deletes its config so the CLI falls back to global.
+   * resets only OpenAlice-owned values so the CLI falls back to native/global.
    * Absent on adapters with no configurable provider (shell).
    */
   writeAiConfig?(cwd: string, cred: WorkspaceAiCred): Promise<void>;
@@ -321,6 +373,13 @@ export interface CliAdapter {
 
   /** Subprocess discovery (capabilities.transcriptDiscovery === 'subprocess'). */
   listOnDisk?(cwd: string): Promise<readonly OnDiskSession[]>;
+
+  /**
+   * Read the runtime's current human-facing title for one native Session.
+   * This is best-effort presentation metadata: callers keep the launch prompt
+   * as a fallback when the runtime has not named the Session yet.
+   */
+  readSessionTitle?(cwd: string, sessionId: string): Promise<string | null>;
 }
 
 /** Execute the common pre-use lifecycle without coupling callers to an

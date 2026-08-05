@@ -9,7 +9,11 @@ vi.mock('../api', () => ({
   api: { trading: { installBrokerPack } },
 }))
 
-import { KeylessDataSourcesRow, MissingBrokerPacksNotice } from './TradingPage'
+import {
+  ExternalOrderMonitoringRow,
+  KeylessDataSourcesRow,
+  MissingBrokerPacksNotice,
+} from './TradingPage'
 
 const missingCcxt: BrokerPackStatus = {
   engine: 'ccxt',
@@ -41,12 +45,28 @@ describe('MissingBrokerPacksNotice', () => {
       onInstalled={vi.fn()}
     />)
 
-    expect(screen.getByText('Optional broker support is missing')).toBeTruthy()
+    expect(screen.getByText('Broker support needs attention')).toBeTruthy()
     expect(screen.getByText('Required by Main OKX')).toBeTruthy()
     expect(screen.getByText('API version mismatch')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Repair' })).toBeTruthy()
     expect(screen.queryByText('ALPACA')).toBeNull()
     expect(screen.queryByText('IBKR')).toBeNull()
+  })
+
+  it('offers an in-place update while a compatible previous Pack remains installed', () => {
+    render(<MissingBrokerPacksNotice
+      packs={[{
+        ...missingCcxt,
+        installed: true,
+        source: 'downloaded',
+        version: '0.84.0-beta',
+        updateAvailable: true,
+      }]}
+      onInstalled={vi.fn()}
+    />)
+
+    expect(screen.getByText('Installed support is from OpenAlice 0.84.0-beta')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Update' })).toBeTruthy()
   })
 
   it('installs from the notice and reports a failed repair in place', async () => {
@@ -94,5 +114,39 @@ describe('KeylessDataSourcesRow', () => {
     await waitFor(() => expect(installBrokerPack).toHaveBeenCalledWith('ccxt'))
     expect(onPackInstalled).toHaveBeenCalledWith(expect.objectContaining({ engine: 'ccxt', installed: true }))
     expect(screen.getByText('Installed — choose the feeds you want')).toBeTruthy()
+  })
+})
+
+describe('ExternalOrderMonitoringRow', () => {
+  it('names and describes the cadence picker, then announces a saved change', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PUT') return new Response(null, { status: 204 })
+      return new Response(JSON.stringify({
+        trading: { observeExternalOrdersEvery: '15m', keylessDataSources: [] },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<ExternalOrderMonitoringRow />)
+
+    const select = await screen.findByRole('combobox', { name: 'External order monitoring' })
+    const describedBy = select.getAttribute('aria-describedby')?.split(' ') ?? []
+
+    expect(select.id).not.toBe('')
+    expect(document.querySelector(`label[for="${select.id}"]`)?.textContent).toContain(
+      'External order monitoring',
+    )
+    expect(describedBy.some((id) =>
+      document.getElementById(id)?.textContent?.includes('orders placed outside Alice'),
+    )).toBe(true)
+
+    fireEvent.change(select, { target: { value: '5m' } })
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(
+      'Saved — restarting UTA to apply',
+    ))
+    expect(fetchMock).toHaveBeenCalledWith('/api/config/trading', expect.objectContaining({
+      method: 'PUT',
+    }))
   })
 })

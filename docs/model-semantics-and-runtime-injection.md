@@ -99,6 +99,47 @@ resolved value:
 - Claude Code: project `effortLevel` (only values Claude can persist);
 - Codex: project `model_reasoning_effort`.
 
+### Persistent defaults and one-run overrides
+
+Workspace defaults and headless run selection are different configuration
+layers. A Workspace-local file expresses the durable preference; an explicit
+CLI argument selects one Issue run and wins without rewriting that file:
+
+Fresh Session runtime selection follows the same ownership rule. The optional
+`.alice/workspace.json` `defaultAgent` is the durable default for one Workspace.
+It wins over the legacy installation-wide `workspaceDefaultAgent`; an explicit
+Quick Chat, sidebar, CLI, or API runtime choice wins for that one Session without
+rewriting either default. If neither default resolves to a registered agent
+runtime, Alice falls back to the first registered runtime.
+
+| Runtime | Workspace-local preference | One-run headless override |
+|---|---|---|
+| Claude Code | `.claude/settings.local.json`: `model`, `effortLevel` | `--model`, `--effort` |
+| Codex | `.codex/config.toml`: `model`, `model_reasoning_effort` | `--model`, `-c model_reasoning_effort=...` |
+| opencode | `opencode.json` provider/model binding | `--model`, `--variant` |
+| Pi | project settings plus registered provider | `--model`, `--thinking` |
+
+An Issue may request only agent/model/effort. Endpoint, provider, key, auth, and
+wire shape always come from the selected Workspace/native login. Dispatch
+records the requested model/effort for provenance and translates them into CLI
+arguments; it never mutates persistent configuration.
+
+OpenAlice-managed opencode models register effort-named variants in the
+Workspace config up front, so `--variant` remains a genuine one-run selection.
+Dispatch rejects a custom-provider model or effort that is not registered
+instead of silently falling back or rewriting the provider during a run.
+
+Exact Session ownership is intentionally stricter. An `@resumeId` already owns
+its runtime conversation, so an Issue cannot attach agent, model, or effort
+overrides to it. This avoids silently changing a resumed conversation's saved
+model semantics.
+
+Codex project configuration must not be confused with `CODEX_HOME`; the latter
+owns global auth, sessions, skills, and user configuration. Provider definitions
+are not a supported Codex project layer, so OpenAlice-managed custom providers
+use an explicit `.codex/openalice-home/`, while model/effort-only login-backed
+preferences leave `CODEX_HOME` unset.
+
 Context-window and output limits follow the same ownership boundary. Registered
 model semantics provide known limits; an explicit Workspace preference may
 override the context registration for runtimes that support it; otherwise the
@@ -126,6 +167,26 @@ The registry is repository data, not persisted user state. Updating a known
 model changes future resolution but must not silently rewrite existing
 Workspace files. Existing configurations change only through their normal
 explicit apply/create paths.
+
+Runtime compatibility belongs to the runtime adapter, not to the shared
+credential or route layers. Every provider-capable adapter declares
+`capabilities.aiProvider` with:
+
+- whether native/global login is sufficient or a Workspace credential is
+  required;
+- accepted wire shapes in native preference order and the blank-form default;
+- any vendor-specific wire narrowing and narrowly scoped legacy repair;
+- which custom-model facts it registers (`contextWindow`, `reasoning`, and
+  effort variants).
+
+`src/workspaces/adapters/index.ts` is the single built-in registration point.
+The Workspace `/agents` contract serializes these declarations for UI launch,
+credential, and model controls. Adding a provider-capable runtime therefore
+means implementing its adapter, declaring these capabilities, and registering
+it once. Shared injection, readiness, config routes, and UI helpers must not
+add a second adapter-id matrix. Runtime-exclusive behavior such as a structured
+surface, transcript parser, native config format, or CLI argument spelling
+remains in the adapter or its explicitly runtime-owned UI.
 
 An upstream catalog such as Models.dev may later generate part of this table at
 build time. OpenAlice-specific overrides still own protocol quirks and runtime
@@ -176,12 +237,16 @@ read-only, best-effort launch guidance, but it must not mark private global
 state complete or accept trust on the user's behalf. Unknown native state is
 advisory and fail-open; it never becomes a fabricated ready/not-ready fact.
 
-The test-before-save gate follows the same boundary as the probe. Changes to
-the key, endpoint, wire shape, authentication mode, or model require a fresh
-probe. Context-window, reasoning capability, and reasoning effort are local
-runtime registration fields; changing only those fields saves directly without
-making an unrelated provider request. Both automatic creation-default saves
-and explicit Workspace saves must acknowledge completion in the UI.
+The test-before-save gate follows the same boundary as the probe. Changes to a
+managed key, endpoint, wire shape, authentication mode, or its model require a
+fresh probe. A Codex/Claude native-login binding with no OpenAlice-managed key
+or endpoint has no HTTP credential for the modal to probe: model/effort-only
+changes save directly and are validated by the native runtime at launch.
+Context-window, reasoning capability, and reasoning effort are also local
+runtime registration fields and save without an unrelated provider request.
+Official endpoints may be omitted because the probe resolves their default from
+the wire shape. Both automatic creation-default saves and explicit Workspace
+saves must acknowledge completion in the UI.
 
 ## Configuration Ownership and Reset
 
@@ -195,9 +260,15 @@ Claude Code and opencode use the same lifecycle rule with
 the first write snapshots only the nodes OpenAlice will replace, later writes
 retain that original snapshot, and reset restores a node only if it still equals
 the last injected value. A user edit or whole-file deletion made after injection
-wins. Codex is the
-exception because its Workspace `.codex/` is an intentionally exclusive
-`CODEX_HOME`, not a shared project-config layer.
+wins.
+
+Codex applies the same reversible ownership rule to top-level `model` and
+`model_reasoning_effort` assignments in the shared project
+`.codex/config.toml`; comments, sections, and unknown keys remain untouched.
+Only `.codex/openalice-home/` is an exclusive `CODEX_HOME`, and only while an
+OpenAlice-managed custom provider is active. Reset removes that dedicated home
+and restores owned project scalars without deleting the user's `.codex/`
+directory or global login state.
 
 The rollback sidecars can contain prior or injected secrets and are therefore
 sensitive Workspace state. Templates must exclude both sidecars and native
@@ -213,8 +284,13 @@ contain credentials.
 - `src/ai-providers/model-semantics.ts` — exact semantic resolution and runtime-neutral binding inputs.
 - `src/ai-providers/presets.ts` — backend-to-UI preset serialization.
 - `src/core/config.ts` — credential access and creation-time Workspace defaults.
+- `src/workspaces/cli-adapter.ts` — adapter capability and provider-projection contract.
 - `src/workspaces/credential-injection.ts` — credential + selection + semantics composition.
-- `src/workspaces/adapters/` — native runtime projection and round-trip parsing.
+- `src/workspaces/adapters/index.ts` — built-in adapter registration.
+- `src/workspaces/adapters/` — declared runtime compatibility, native projection, and round-trip parsing.
+- `src/workspaces/adapters/owned-toml-config.ts` — reversible Codex project-scalar ownership.
+- `src/workspaces/schedule/scanner.ts` — Issue selection to one-run override dispatch.
+- `src/workspaces/headless-task-registry.ts` — durable requested model/effort provenance.
 - `ui/src/components/credentials/` — credential/account setup.
 - `ui/src/components/workspace/WorkspaceAIConfigModal.tsx` — per-Workspace selection and unknown-model overrides.
 
@@ -230,6 +306,8 @@ Tests for this subsystem must cover:
 - provider-only thinking switches never become fabricated effort values;
 - non-reasoning and unknown models do not receive fabricated capabilities;
 - model changes cannot retain a capability override for the previous id;
+- a synthetic unknown adapter works from its capability declaration without a
+  shared-layer id branch;
 - adapter write/read/write round trips preserve semantic fields;
 - reset removes only OpenAlice-owned configuration and restores prior values;
 - credential secrets never appear in logs, docs, committed fixtures, or test snapshots;

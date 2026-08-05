@@ -64,6 +64,24 @@ describe('issue_create', () => {
     expect(issue?.title).toBe('Fix the thing')
   })
 
+  it('creates and returns one-run model and effort overrides', async () => {
+    const res = await run(issueCreateFactory.build(ctx()), {
+      id: 'tuned',
+      title: 'Tuned run',
+      when: { kind: 'every', every: '30m' },
+      assignee: '@workspace',
+      agent: 'codex',
+      model: 'gpt-5.6',
+      effort: 'high',
+    })
+    expect(res.issue).toMatchObject({ agent: 'codex', model: 'gpt-5.6', effort: 'high' })
+    expect(await readBack('tuned')).toMatchObject({
+      agent: 'codex',
+      model: 'gpt-5.6',
+      effort: 'high',
+    })
+  })
+
   it('records the creating product Session without accepting identity args', async () => {
     const append = vi.fn(async (input) => ({ id: 'p-1', ...input }))
     const context = ctx({
@@ -96,14 +114,14 @@ describe('issue_create', () => {
     expect(res.error).toMatch(/already exists/)
   })
 
-  it('defaults scheduled work to Workspace ownership', async () => {
+  it('defaults scheduled work to one durable new owner', async () => {
     const created = await run(issueCreateFactory.build(ctx()), {
       id: 'fresh-owner',
       title: 'Fresh owner',
       when: { kind: 'every', every: '30m' },
     })
     expect(created.ok).toBe(true)
-    expect((await readBack('fresh-owner'))?.assignee).toBe('@workspace')
+    expect((await readBack('fresh-owner'))?.assignee).toBe('@new')
   })
 
   it('accepts @new as an explicit recruit-once ownership policy', async () => {
@@ -161,6 +179,14 @@ describe('issue_create', () => {
     expect(implicit.ok).toBe(true)
     expect((await readBack('shell-created'))?.assignee).toBe('@workspace')
 
+    const scheduled = await run(issueCreateFactory.build(context), {
+      id: 'shell-scheduled',
+      title: 'Shell-created schedule',
+      when: { kind: 'every', every: '30m' },
+    })
+    expect(scheduled.ok).toBe(true)
+    expect((await readBack('shell-scheduled'))?.assignee).toBe('@new')
+
     const explicit = await run(issueCreateFactory.build(context), {
       id: 'shell-owned', title: 'Invalid shell owner', assignee: '@me',
     })
@@ -213,6 +239,34 @@ describe('issue_update', () => {
     expect(issue).toMatchObject({ status: 'in_progress', priority: 'high', what: 'new exact work' })
     // scheduling frontmatter survives a board-field patch
     expect(issue?.when).toEqual({ kind: 'every', every: '30m' })
+  })
+
+  it('updates and clears runtime selection fields', async () => {
+    await run(issueCreateFactory.build(ctx()), {
+      id: 'runtime-fields',
+      title: 'Runtime fields',
+      when: { kind: 'every', every: '30m' },
+      assignee: '@workspace',
+    })
+    await run(issueUpdateFactory.build(ctx()), {
+      id: 'runtime-fields',
+      agent: 'codex',
+      model: 'gpt-5.6',
+      effort: 'high',
+    })
+    expect(await readBack('runtime-fields')).toMatchObject({
+      agent: 'codex',
+      model: 'gpt-5.6',
+      effort: 'high',
+    })
+    await run(issueUpdateFactory.build(ctx()), {
+      id: 'runtime-fields',
+      model: null,
+      effort: null,
+    })
+    const cleared = await readBack('runtime-fields')
+    expect(cleared?.model).toBeUndefined()
+    expect(cleared?.effort).toBeUndefined()
   })
 
   it('records successful mutations but not rejected ones', async () => {

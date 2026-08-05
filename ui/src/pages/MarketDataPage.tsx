@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type AppConfig } from '../api'
 import { SaveIndicator } from '../components/SaveIndicator'
-import { ConfigSection, Field, SettingsScrollArea, inputClass } from '../components/form'
+import { ConfigSection, SettingsScrollArea, inputClass } from '../components/form'
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
 import { PageHeader } from '../components/PageHeader'
@@ -255,7 +255,12 @@ export function MarketDataPage() {
         right={
           <div className="flex items-center gap-3">
             <SaveIndicator status={status} onRetry={retry} />
-            <Toggle size="sm" checked={enabled} onChange={(v) => updateConfigImmediate({ enabled: v })} />
+            <Toggle
+              ariaLabel="Market data"
+              size="sm"
+              checked={enabled}
+              onChange={(v) => updateConfigImmediate({ enabled: v })}
+            />
           </div>
         }
       />
@@ -306,7 +311,7 @@ function HubCard({
     <section className="mb-6 border border-border/60 rounded-xl bg-secondary/50 p-5">
       <div className="flex items-center justify-between mb-1.5">
         <h2 className="text-[14px] font-semibold">Data Hub</h2>
-        <Toggle size="sm" checked={hub.enabled} onChange={onToggle} />
+        <Toggle ariaLabel="Data Hub" size="sm" checked={hub.enabled} onChange={onToggle} />
       </div>
       {hub.enabled ? (
         <div className="flex items-center gap-2 mb-1.5">
@@ -397,7 +402,7 @@ function ChartVendorsSection({
                 {v.alwaysOn ? (
                   <span className="text-[11px] text-muted-foreground/60 uppercase tracking-wider shrink-0">always on</span>
                 ) : (
-                  <Toggle size="sm" checked={on} onChange={(val) => onToggle(v.id, val)} />
+                  <Toggle ariaLabel={v.name} size="sm" checked={on} onChange={(val) => onToggle(v.id, val)} />
                 )}
               </div>
               <p className="text-[12px] text-muted-foreground/70 mt-1.5 leading-relaxed">{v.desc}</p>
@@ -469,19 +474,38 @@ function AdvancedSection({
 
 // ==================== Test Button ====================
 
+type ProviderTestStatus = 'idle' | 'testing' | 'ok' | 'error'
+
+function providerTestStatusLabel(providerName: string, status: ProviderTestStatus): string {
+  switch (status) {
+    case 'testing':
+      return `Testing ${providerName} key`
+    case 'ok':
+      return `${providerName} key test passed`
+    case 'error':
+      return `${providerName} key test failed`
+    default:
+      return `Test ${providerName} key`
+  }
+}
+
 function TestButton({
+  providerName,
   status,
   disabled,
   onClick,
 }: {
-  status: 'idle' | 'testing' | 'ok' | 'error'
+  providerName: string
+  status: ProviderTestStatus
   disabled: boolean
   onClick: () => void
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={providerTestStatusLabel(providerName, status)}
       className={`shrink-0 border rounded-md px-3 py-2 text-[13px] font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-default ${
         status === 'ok'
           ? 'border-success text-success'
@@ -513,7 +537,7 @@ function KeyProvidersSection({
     for (const p of ALL_PROVIDERS) init[p.key] = providerKeys[p.key] || ''
     return init
   })
-  const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
+  const [testStatus, setTestStatus] = useState<Record<string, ProviderTestStatus>>({})
   const [testError, setTestError] = useState<Record<string, string>>({})
 
   const handleKeyChange = (keyName: string, value: string) => {
@@ -559,30 +583,57 @@ function KeyProvidersSection({
                 const status = testStatus[key] || 'idle'
                 const error = testError[key]
                 const isFmp = key === 'fmp'
+                const inputId = `market-data-provider-${key}-key`
+                const descriptionId = `${inputId}-description`
+                const hintId = `${inputId}-hint`
+                const statusId = `${inputId}-test-status`
                 return (
                   <div
                     key={key}
                     ref={isFmp ? fmpRef : undefined}
                     className={`rounded-lg transition-shadow ${isFmp && highlightFmp ? 'ring-2 ring-primary/60' : ''}`}
                   >
-                    <Field label={name} description={hint}>
-                      <p className="text-[12px] text-muted-foreground/70 mb-2">{desc}</p>
+                    <div className="mb-3.5 last:mb-0">
+                      <label
+                        htmlFor={inputId}
+                        className="block text-[13px] text-foreground mb-1.5 font-medium"
+                      >
+                        {name}
+                      </label>
+                      <p id={descriptionId} className="text-[12px] text-muted-foreground/70 mb-2">
+                        {desc}
+                      </p>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <input
+                          id={inputId}
                           className={inputClass}
                           type="password"
                           value={localKeys[key]}
                           onChange={(e) => handleKeyChange(key, e.target.value)}
+                          aria-label={`${name} API key`}
+                          aria-describedby={`${descriptionId} ${hintId} ${statusId}`}
                           placeholder="Not configured"
                         />
                         <TestButton
+                          providerName={name}
                           status={status}
                           disabled={!localKeys[key] || status === 'testing'}
                           onClick={() => testProvider(key)}
                         />
                       </div>
+                      <p id={hintId} className="text-[12px] text-muted-foreground/60 mt-1">
+                        {hint}
+                      </p>
                       {error && <p className="mt-1 text-[12px] text-destructive" role="alert">{error}</p>}
-                    </Field>
+                      <span
+                        id={statusId}
+                        className="sr-only"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {status === 'idle' ? '' : providerTestStatusLabel(name, status)}
+                      </span>
+                    </div>
                   </div>
                 )
               })}

@@ -23,7 +23,7 @@ import type {
   BarMeta,
   BarCapability,
 } from './types.js'
-import { formatBarId, parseBarId } from './types.js'
+import { formatBarId, isDerivativeBarId, parseBarId } from './types.js'
 
 /** Hard ceiling on bars returned by any single fetch (explosion guard). */
 const MAX_BARS = 5000
@@ -249,20 +249,17 @@ export function createBarService(deps: BarServiceDeps): BarService {
       throw new Error(`UTA source "${sourceId}" does not advertise historical-bar support.`)
     }
     const effectiveCap: BarCapability = cap ?? 'realtime'
-    // Mirror the vendor branch: a count-only request becomes a START WINDOW we
-    // over-fetch and then tail-slice (finalize keeps the most-recent `count`).
-    // We deliberately do NOT forward `count` as the broker's `limit`. Alpaca's
-    // getBarsV2 — and any API that anchors `limit` to a default *start* and
-    // returns the FIRST N bars ascending — would otherwise collapse a count-only
-    // request to the in-progress session: a single daily bar timestamped at the
-    // premarket open, or just the first minutes of an intraday series, instead
-    // of the most recent N. (Reproduced 2026-06-25 against alpaca paper: `1d
-    // count=60` → 1 bar timestamped 04:00; `1m count=50` → 08:00–08:49.)
+    // Mirror the vendor branch: a count-only request gets a bounded start
+    // window, while `limit` carries the cross-broker contract that the caller
+    // wants the most-recent N bars in that window. Broker adapters must enforce
+    // tail semantics even when their upstream API interprets limit as "first N
+    // from since" (CCXT and Alpaca both need adapter-specific handling).
     const start = opts.start ?? (opts.count != null ? startDateFor(opts) : undefined)
     const params: BarParams = {
       interval: toBarInterval(opts.interval),
       start: start ? new Date(start) : undefined,
       end: (opts.end ?? opts.asOf) ? new Date((opts.end ?? opts.asOf)!) : undefined,
+      limit: opts.count,
     }
     const wireBars = await acct.getHistorical({ aliceId: barId }, params)
     const bars = finalize(wireBars.map((b) => barToOhlcv(b, params.interval)), opts.count)
@@ -355,15 +352,18 @@ export function createBarService(deps: BarServiceDeps): BarService {
         }
       }
 
-      // User intent first, freshness second: an exact delayed EURUSD result must
-      // not disappear below dozens of vaguely-related realtime contracts. Auto
-      // source resolution applies its own derivative/freshness policy later.
+      // User intent first, real/spot exposure second, freshness third. A bare
+      // ticker such as AAPL must not open a realtime synthetic
+      // AAPL/USDT:USDT contract ahead of the actual equity merely because the
+      // derivative is fresher. This mirrors bare-symbol auto resolution while
+      // preserving every provider as an explicit selectable result.
       const FRESHNESS_RANK: Record<BarCapability, number> = {
         realtime: 0, iex: 1, subscription: 2, delayed: 3, free: 4,
       }
       out.sort(
         (a, b) =>
           candidateRelevance(query, b) - candidateRelevance(query, a) ||
+          Number(isDerivativeBarId(a.barId)) - Number(isDerivativeBarId(b.barId)) ||
           (a.barCapability ? FRESHNESS_RANK[a.barCapability] : 5) -
           (b.barCapability ? FRESHNESS_RANK[b.barCapability] : 5),
       )
