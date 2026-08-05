@@ -4,6 +4,12 @@ All notable changes to OpenAlice will be documented in this file.
 
 ## [Unreleased]
 
+### Workspace Runtime
+
+- Fix Codex headless Inbox and Issue commands on Linux hosts that disable
+  bubblewrap namespaces by using the same explicit full-access sandbox policy
+  as OpenAlice-owned interactive Codex sessions.
+
 ### Alice Invest
 
 - Add durable, schema-validated readiness evidence with a migration, fail-closed

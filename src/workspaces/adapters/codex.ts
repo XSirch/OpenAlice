@@ -110,12 +110,15 @@ export const codexAdapter: CliAdapter = {
   // call when there's no human to approve — even under approval_policy=never
   // (verified: "user cancelled MCP tool call") — so MCP is dead weight here.
   // Instead the agent reads data via `alice` and reports via `alice-workspace`
-  // (shell commands codex runs autonomously). Three GLOBAL `-c` (before `exec`)
+  // (shell commands codex runs autonomously). Two GLOBAL `-c` (before `exec`)
   // make that work:
-  //   approval_policy=never                        — don't block on approval
-  //   sandbox_mode=workspace-write                 — let it write the workspace
-  //   sandbox_workspace_write.network_access=true  — let `alice*` reach the
-  //                       loopback CLI gateway (else: "...fetch failed").
+  //   approval_policy=never           — don't block on approval
+  //   sandbox_mode=danger-full-access — let `alice*` reach the loopback CLI
+  //                                     gateway without starting bubblewrap.
+  // The workspace-write sandbox relies on Linux user/mount namespaces. Hosts
+  // that disable them fail inside bwrap before any `alice-workspace` command
+  // can run, so headless launches use the same explicit full-access boundary
+  // as OpenAlice-owned interactive Codex sessions.
   // No mcp_servers head (interactive composeCommand keeps it — MCP works there
   // with a human approver). `--` terminates options before the trailing prompt.
   composeHeadlessCommand(_base: readonly string[], ctx: SpawnContext, prompt: string): readonly string[] {
@@ -124,9 +127,7 @@ export const codexAdapter: CliAdapter = {
       '-c',
       'approval_policy="never"',
       '-c',
-      'sandbox_mode="workspace-write"',
-      '-c',
-      'sandbox_workspace_write.network_access=true',
+      'sandbox_mode="danger-full-access"',
       'exec',
     ];
     if (ctx.resume === 'last') return [...head, 'resume', '--json', '--last', prompt];
