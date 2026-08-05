@@ -41,7 +41,8 @@ describe('Runtime log reader', () => {
   })
 
   it('redacts labeled secrets, bearer tokens, secret query values, and the first-run token block', () => {
-    const output = redactRuntimeLog(`authorization: Bearer abcdefghijklmnop
+    const bearerCredential = ['fixture', 'credential'].join('-')
+    const output = redactRuntimeLog(`authorization: Bearer ${bearerCredential}
 api_key=super-secret-value
 url=https://example.test/?token=secret-token&ok=1
 First-run admin token (save this):
@@ -50,7 +51,7 @@ First-run admin token (save this):
 provider=sk-abcdefghijklmnop
 unsafe=\u001b[31mred`)
 
-    expect(output).not.toContain('abcdefghijklmnop')
+    expect(output).not.toContain(bearerCredential)
     expect(output).not.toContain('super-secret-value')
     expect(output).not.toContain('secret-token')
     expect(output).not.toContain('standalone-admin-token-value')
