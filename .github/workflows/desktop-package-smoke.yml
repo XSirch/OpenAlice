@@ -249,6 +249,8 @@ jobs:
           --candidate-package-root dist/electron-app
           --receipt "${{ runner.temp }}/openalice-desktop-upgrade.json"
         timeout-minutes: 15
+        env:
+          OPENALICE_DESKTOP_RELEASE_REPOSITORY: TraderAlice/OpenAlice
 
       - name: Upload desktop upgrade acceptance receipt
         if: always()
@@ -257,4 +259,3 @@ jobs:
           name: desktop-upgrade-acceptance-${{ matrix.os }}
           path: ${{ runner.temp }}/openalice-desktop-upgrade.json
           if-no-files-found: error
-
