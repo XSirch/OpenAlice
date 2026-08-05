@@ -1,5 +1,6 @@
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { ChevronDown } from 'lucide-react'
 import type { ViewSpec } from '../tabs/types'
 import { api } from '../api'
 import { getIntlLocale } from '../lib/intl'
@@ -17,7 +18,8 @@ import { EquityCurve } from '../components/EquityCurve'
 import { Metric, signFromDelta } from '../components/Metric'
 import { fmt, fmtPnl, fmtNum, fmtPctSigned, isUnsetDecimal } from '../lib/format'
 import { secTypeToClass, assetClassLabel, ASSET_CLASS_ORDER, type AssetClass } from '../lib/asset-class'
-import { ContractCell } from '../lib/contract-display'
+import { ContractCell, contractPrimary } from '../lib/contract-display'
+import { displayNameForUTA } from '../lib/uta-account-filter'
 
 // ==================== Page ====================
 
@@ -197,12 +199,14 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
   }
 
   const isDisabled = uta.enabled === false
+  const displayName = displayNameForUTA(uta, preset)
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader
-        title={preset?.label ?? uta.id}
+        title={displayName}
         live={{ lastUpdated }}
+        stackActionsOnNarrow
         description={
           <>
             <Link to="/trading" className="text-muted-foreground hover:text-foreground">← Trading</Link>
@@ -218,24 +222,32 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
           // secondary actions share btn-secondary-sm; Place Order is the
           // single filled-accent primary at the same size. No hand-rolled
           // paddings — mixed sizes were what made this row look drunk.
-          <div className="flex items-center gap-2">
-            <Toggle
-              size="sm"
-              checked={!isDisabled}
-              onChange={async (v) => { await tc.saveUTA({ ...uta, enabled: v }) }}
-            />
-            <div className="w-px h-5 bg-border" />
-            <ReconnectButton accountId={uta.id} />
-            <button onClick={() => setEditing(true)} className="btn-secondary-sm">
-              Edit
-            </button>
-            <button
-              onClick={() => setOrderMode({ kind: 'place' })}
-              disabled={isDisabled}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all active:scale-[0.98] cursor-pointer"
-            >
-              + Place Order
-            </button>
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <div className="mr-auto flex items-center gap-2">
+              <Toggle
+                ariaLabel={`${preset?.label ?? uta.id} enabled`}
+                size="sm"
+                checked={!isDisabled}
+                onChange={async (v) => { await tc.saveUTA({ ...uta, enabled: v }) }}
+              />
+              <span className="text-[11px] text-muted-foreground">
+                {isDisabled ? 'Account disabled' : 'Account enabled'}
+              </span>
+            </div>
+            <div className="oa-uta-header-divider h-5 w-px bg-border" />
+            <div className="flex flex-wrap items-center gap-2">
+              <ReconnectButton accountId={uta.id} />
+              <button onClick={() => setEditing(true)} className="btn-secondary-sm">
+                Edit
+              </button>
+              <button
+                onClick={() => setOrderMode({ kind: 'place' })}
+                disabled={isDisabled}
+                className="btn-primary-sm"
+              >
+                + Place Order
+              </button>
+            </div>
           </div>
         }
       />
@@ -248,39 +260,45 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
             </div>
           )}
 
-          {/* Exchange-style two-column layout: tables get the wide main
-              column, the Account panel rides a sticky sidebar. On narrow
-              screens it collapses to one column with the Account panel
-              first — it's the summary. */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
-            <div className="lg:order-2 lg:sticky lg:top-4 self-start min-w-0 space-y-3">
-              {subAccounts.length > 1 && (
-                <SubAccountSelector
-                  subAccounts={subAccounts}
-                  selected={selectedSub}
-                  onSelect={(sub) => {
-                    // Drop the previous wallet's numbers immediately so the
-                    // panel shows "Loading account info…" during the (slow,
-                    // multi-round-trip) scoped read instead of briefly painting
-                    // the old scope's net-liquidation under the new pill.
-                    setAccount(null)
-                    setSelectedSub(sub)
-                  }}
-                />
-              )}
-              <AccountPanel account={account} positions={positions} delta24h={delta24h} clock={clock} connecting={health?.connecting ?? false} />
-            </div>
+          {!lastUpdated ? <UTADetailMainSkeleton /> : (
+            <div className="space-y-5">
+              {/* Keep the visual overview together, then give the operational
+                  tables the full content width. The auto-fit grid responds to
+                  this pane's real width after both app sidebars, rather than
+                  guessing from the browser viewport. */}
+              <div
+                className="grid items-stretch gap-4"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 26rem), 1fr))' }}
+              >
+                {curvePoints.length >= 2 && (
+                  <div className="min-w-0">
+                    <EquityCurve
+                      points={curvePoints}
+                      accounts={[{ id, label: displayName }]}
+                      selectedAccountId={id}
+                      onAccountChange={() => { /* single-account mode: switcher hidden */ }}
+                    />
+                  </div>
+                )}
 
-            <div className="lg:order-1 min-w-0 space-y-5">
-              {!lastUpdated ? <UTADetailMainSkeleton /> : <>
-              {curvePoints.length >= 2 && (
-                <EquityCurve
-                  points={curvePoints}
-                  accounts={[{ id, label: preset?.label ?? id }]}
-                  selectedAccountId={id}
-                  onAccountChange={() => { /* single-account mode: switcher hidden */ }}
-                />
-              )}
+                <div className="min-w-0 space-y-3">
+                  {subAccounts.length > 1 && (
+                    <SubAccountSelector
+                      subAccounts={subAccounts}
+                      selected={selectedSub}
+                      onSelect={(sub) => {
+                        // Drop the previous wallet's numbers immediately so the
+                        // panel shows "Loading account info…" during the (slow,
+                        // multi-round-trip) scoped read instead of briefly painting
+                        // the old scope's net-liquidation under the new pill.
+                        setAccount(null)
+                        setSelectedSub(sub)
+                      }}
+                    />
+                  )}
+                  <AccountPanel account={account} positions={positions} delta24h={delta24h} clock={clock} connecting={health?.connecting ?? false} />
+                </div>
+              </div>
 
               <PositionsSection
                 positions={positions}
@@ -293,9 +311,8 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
               />
 
               <OrdersArea utaId={id} openOrders={orders} />
-              </>}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -573,7 +590,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 
 interface PositionGroup { class: AssetClass; positions: Position[] }
 
-function PositionsSection({ positions, onCloseClick }: {
+export function PositionsSection({ positions, onCloseClick }: {
   positions: Position[]
   onCloseClick: (p: Position) => void
 }) {
@@ -603,7 +620,50 @@ function PositionsSection({ positions, onCloseClick }: {
 
   return (
     <Section title={`Positions (${positions.length})`}>
-      <div className="border border-border rounded-lg overflow-x-auto">
+      <div
+        data-testid="uta-positions-mobile"
+        className="overflow-hidden rounded-lg border border-border md:hidden"
+      >
+        {groups.map((g) => {
+          const sumValue = g.positions.reduce((sum, position) => sum + Number(position.marketValue), 0)
+          const sumPnl = g.positions.reduce((sum, position) => sum + Number(position.unrealizedPnL), 0)
+          const currencies = new Set(g.positions.map(position => position.currency))
+          const groupCcy = currencies.size === 1 ? [...currencies][0] : undefined
+          return (
+            <div key={g.class} className="border-t border-border first:border-t-0">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-muted/40 px-3 py-2 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-foreground">{assetClassLabel(g.class)}</span>
+                  <span className="text-muted-foreground/60">·</span>
+                  <span className="text-muted-foreground">
+                    {g.positions.length} position{g.positions.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 tabular-nums">
+                  <span className="text-foreground">
+                    {groupCcy ? fmt(sumValue, groupCcy) : `$${sumValue.toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </span>
+                  <span className={sumPnl >= 0 ? 'text-success' : 'text-destructive'}>
+                    {groupCcy ? fmtPnl(sumPnl, groupCcy) : `${sumPnl >= 0 ? '+' : ''}${sumPnl.toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </span>
+                </div>
+              </div>
+              {g.positions.map((position, index) => (
+                <PositionMobileRow
+                  key={`${g.class}-${index}`}
+                  position={position}
+                  onClose={() => onCloseClick(position)}
+                />
+              ))}
+            </div>
+          )
+        })}
+      </div>
+
+      <div
+        data-testid="uta-positions-desktop"
+        className="hidden overflow-x-auto rounded-lg border border-border md:block"
+      >
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-secondary text-muted-foreground text-left">
@@ -613,7 +673,9 @@ function PositionsSection({ positions, onCloseClick }: {
               <th className="px-3 py-2 font-medium text-right">Avg → Mark</th>
               <th className="px-3 py-2 font-medium text-right">Mkt Value</th>
               <th className="px-3 py-2 font-medium text-right">PnL</th>
-              <th className="px-3 py-2 font-medium text-right" />
+              <th className="px-3 py-2 font-medium text-right">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -658,6 +720,82 @@ function PositionsSection({ positions, onCloseClick }: {
   )
 }
 
+function PositionMetric({
+  label,
+  value,
+  valueClassName = 'text-foreground',
+}: {
+  label: string
+  value: string
+  valueClassName?: string
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className={`mt-0.5 truncate text-[12px] tabular-nums ${valueClassName}`} title={value}>{value}</dd>
+    </div>
+  )
+}
+
+function PositionMobileRow({ position: p, onClose }: { position: Position; onClose: () => void }) {
+  const ccy = p.currency ?? 'USD'
+  const cost = Number(p.avgCost) * Number(p.quantity)
+  const pnl = Number(p.unrealizedPnL)
+  const pct = cost > 0 ? (pnl / cost) * 100 : 0
+  const pnlTone = pnl >= 0 ? 'text-success' : 'text-destructive'
+  const name = contractPrimary(p.contract)
+
+  return (
+    <details className="group border-t border-border">
+      <summary
+        aria-label={`${name} ${p.side} position, market value ${fmt(p.marketValue, ccy)}, PnL ${fmtPnl(pnl, ccy)}, ${fmtPctSigned(pct)}. Expand for position details.`}
+        className="list-none px-3 py-3 outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden"
+      >
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_16px] items-start gap-2">
+          <div className="min-w-0">
+            <ContractCell contract={p.contract} />
+            <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${p.side === 'long' ? 'bg-success/15 text-success' : 'bg-destructive/15 text-destructive'}`}>
+              {p.side}
+            </span>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(p.marketValue, ccy)}</div>
+            <div className={`mt-1 text-[11px] tabular-nums ${pnlTone}`}>
+              {fmtPnl(pnl, ccy)} · {fmtPctSigned(pct)}
+            </div>
+          </div>
+          <ChevronDown
+            size={14}
+            aria-hidden
+            className="mt-1 text-muted-foreground transition-transform group-open:rotate-180"
+          />
+        </div>
+      </summary>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border bg-secondary/35 px-3 py-3">
+        <PositionMetric label="Quantity" value={fmtNum(p.quantity)} />
+        <PositionMetric label="Average cost" value={fmt(p.avgCost, ccy)} />
+        <PositionMetric label="Current price" value={fmt(p.marketPrice, ccy)} />
+        <PositionMetric
+          label="Unrealized PnL"
+          value={fmtPnl(pnl, ccy)}
+          valueClassName={pnlTone}
+        />
+      </dl>
+      <div className="flex items-center justify-between gap-3 border-t border-border bg-secondary/20 px-3 py-2">
+        <span className="text-[11px] text-muted-foreground">Position action</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Close ${name} position`}
+          className="oa-pressable inline-flex min-h-10 items-center justify-center rounded-md border border-destructive/30 px-3 text-[12px] font-medium text-destructive transition-colors hover:bg-destructive/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+        >
+          Close position
+        </button>
+      </div>
+    </details>
+  )
+}
+
 function PositionRow({ position: p, onClose }: { position: Position; onClose: () => void }) {
   const ccy = p.currency ?? 'USD'
   const cost = Number(p.avgCost) * Number(p.quantity)
@@ -685,7 +823,9 @@ function PositionRow({ position: p, onClose }: { position: Position; onClose: ()
       </td>
       <td className="px-3 py-2 text-right">
         <button
+          type="button"
           onClick={onClose}
+          aria-label={`Close ${contractPrimary(p.contract)} position`}
           className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
         >
           Close
@@ -747,7 +887,7 @@ interface OpenOrderRow {
 
 type OrdersTab = 'open' | 'history' | 'trades'
 
-function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[] }) {
+export function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[] }) {
   const [tab, setTab] = useState<OrdersTab>('open')
   const [history, setHistory] = useState<OrderHistoryEntry[] | null>(null)
   const [trades, setTrades] = useState<TradeHistoryEntry[] | null>(null)
@@ -776,21 +916,25 @@ function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[
     return () => { cancelled = true; clearInterval(t) }
   }, [tab, utaId])
 
-  const tabs: Array<{ id: OrdersTab; label: string }> = [
-    { id: 'open', label: `Open (${openOrders.length})` },
-    { id: 'history', label: 'History' },
-    { id: 'trades', label: 'Trades' },
+  const tabs: Array<{ id: OrdersTab; label: string; panelLabel: string }> = [
+    { id: 'open', label: `Open (${openOrders.length})`, panelLabel: 'Open orders' },
+    { id: 'history', label: 'History', panelLabel: 'Order history' },
+    { id: 'trades', label: 'Trades', panelLabel: 'Trade history' },
   ]
+  const activeTab = tabs.find(candidate => candidate.id === tab)!
 
   return (
     <Section
       title="Orders"
       action={
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="group" aria-label="Order views">
           {tabs.map(t => (
             <button
               key={t.id}
+              type="button"
               onClick={() => setTab(t.id)}
+              aria-pressed={tab === t.id}
+              aria-controls={`orders-${t.id}-panel`}
               className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
                 tab === t.id
                   ? 'bg-primary/15 text-primary font-medium'
@@ -803,9 +947,15 @@ function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[
         </div>
       }
     >
-      {tab === 'open' && <OpenOrdersTable orders={openOrders} />}
-      {tab === 'history' && <OrderHistoryTable orders={history} />}
-      {tab === 'trades' && <TradeHistoryTable trades={trades} />}
+      <div
+        id={`orders-${tab}-panel`}
+        role="region"
+        aria-label={activeTab.panelLabel}
+      >
+        {tab === 'open' && <OpenOrdersTable orders={openOrders} />}
+        {tab === 'history' && <OrderHistoryTable orders={history} />}
+        {tab === 'trades' && <TradeHistoryTable trades={trades} />}
+      </div>
     </Section>
   )
 }
@@ -865,6 +1015,8 @@ const ORDER_STATUS_STYLES: Record<OrderHistoryStatus, string> = {
   submitted: 'bg-primary/15 text-primary',
 }
 
+const ORDER_HISTORY_COMPACT_WIDTH = 760
+
 function OrderStatusBadge({ status }: { status: OrderHistoryStatus }) {
   return (
     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${ORDER_STATUS_STYLES[status] ?? 'bg-muted text-muted-foreground'}`}>
@@ -889,8 +1041,19 @@ function SourceChip({ label }: { label: string }) {
   )
 }
 
-function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
+export function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [container, setContainer] = useState<HTMLDivElement | null>(null)
+  const [compact, setCompact] = useState(false)
+
+  useLayoutEffect(() => {
+    if (!container || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      setCompact(entry.contentRect.width < ORDER_HISTORY_COMPACT_WIDTH)
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [container])
 
   if (orders == null) {
     return (
@@ -906,9 +1069,84 @@ function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
       </div>
     )
   }
+
+  if (compact) {
+    return (
+      <div ref={setContainer}>
+        <ul className="grid gap-2" aria-label="Order history">
+          {orders.map((o, i) => {
+            const detailsId = `order-history-card-details-${i}`
+            const isExpanded = expanded === i
+            return (
+              <li key={`${o.commitHash}-${i}`} className="overflow-hidden rounded-lg border border-border bg-background">
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <ContractCell contract={o.contract} />
+                    <span className="inline-flex shrink-0 items-center gap-1.5">
+                      <OrderStatusBadge status={o.status} />
+                      {o.source === 'external' && <SourceChip label="External" />}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                    <span className="tabular-nums">{formatHistoryTime(o.timestamp)}</span>
+                    <span aria-hidden>·</span>
+                    <SideBadge side={o.side} />
+                    <span aria-hidden>·</span>
+                    <span>{o.orderType ?? '—'}</span>
+                  </div>
+
+                  <dl className="mt-3 grid grid-cols-3 gap-2">
+                    <div className="min-w-0 rounded-md bg-muted/35 px-2.5 py-2">
+                      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Qty</dt>
+                      <dd className="mt-0.5 truncate text-[12px] text-foreground tabular-nums">
+                        {o.quantity != null ? fmtNum(o.quantity) : '—'}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 rounded-md bg-muted/35 px-2.5 py-2">
+                      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Limit</dt>
+                      <dd className="mt-0.5 truncate text-[12px] text-foreground tabular-nums">{o.limitPrice ?? '—'}</dd>
+                    </div>
+                    <div className="min-w-0 rounded-md bg-muted/35 px-2.5 py-2">
+                      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Fill</dt>
+                      <dd className="mt-0.5 truncate text-[12px] text-foreground tabular-nums">
+                        {o.avgFillPrice ? `${o.avgFillPrice}${o.filledQty ? ` × ${o.filledQty}` : ''}` : '—'}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={detailsId}
+                    aria-label={`${isExpanded ? 'Hide' : 'Show'} details for ${contractPrimary(o.contract)} order`}
+                    onClick={() => setExpanded(prev => prev === i ? null : i)}
+                    className="oa-pressable mt-3 flex w-full items-center justify-between rounded-md border border-border px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    <span>Order details</span>
+                    <span>{isExpanded ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+
+                {isExpanded && (
+                  <div id={detailsId} className="oa-disclosure-enter border-t border-border bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground">
+                    <div className="font-mono text-foreground">{o.commitHash}</div>
+                    <p className="mt-1 break-words leading-5">{o.message}</p>
+                    {o.error && <p className="mt-1 break-words text-destructive">{o.error}</p>}
+                    {o.resolvedAt && <p className="mt-1">resolved {formatHistoryTime(o.resolvedAt)}</p>}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    )
+  }
+
   return (
-    <div className="border border-border rounded-lg overflow-x-auto">
-      <table className="w-full text-[13px]">
+    <div ref={setContainer} className="border border-border rounded-lg overflow-x-auto">
+      <table className="w-full min-w-[760px] text-[13px]">
         <thead>
           <tr className="bg-secondary text-muted-foreground text-left">
             <th className="px-3 py-2 font-medium">Time</th>
@@ -919,6 +1157,7 @@ function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
             <th className="px-3 py-2 font-medium text-right">Limit</th>
             <th className="px-3 py-2 font-medium text-right">Fill</th>
             <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium text-right">Details</th>
           </tr>
         </thead>
         <tbody>
@@ -943,10 +1182,25 @@ function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
                     {o.source === 'external' && <SourceChip label="External" />}
                   </span>
                 </td>
+                <td className="px-3 py-2 text-right">
+                  <button
+                    type="button"
+                    aria-expanded={expanded === i}
+                    aria-controls={`order-history-details-${i}`}
+                    aria-label={`${expanded === i ? 'Hide' : 'Show'} details for ${contractPrimary(o.contract)} order`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setExpanded(prev => prev === i ? null : i)
+                    }}
+                    className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {expanded === i ? 'Hide' : 'Details'}
+                  </button>
+                </td>
               </tr>
               {expanded === i && (
-                <tr className="border-t border-border bg-muted/20">
-                  <td colSpan={8} className="px-3 py-2 text-[11px] text-muted-foreground">
+                <tr id={`order-history-details-${i}`} className="border-t border-border bg-muted/20">
+                  <td colSpan={9} className="px-3 py-2 text-[11px] text-muted-foreground">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                       <span className="font-mono">{o.commitHash}</span>
                       <span>{o.message}</span>

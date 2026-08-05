@@ -26,6 +26,11 @@
  */
 import { Hono } from 'hono'
 
+import {
+  MODEL_REASONING_EFFORTS,
+  isModelReasoningEffort,
+  type ModelReasoningEffort,
+} from '../../ai-providers/model-semantics.js'
 import type { WorkspaceConversationControl } from '../../core/workspace-tool-center.js'
 import { ACTIVITY_UPDATE_COALESCE_MS } from '../../core/provenance-store.js'
 import { createWorkspaceConversationControl } from '../../workspaces/conversation-control.js'
@@ -134,7 +139,15 @@ export function createIssuesRoutes(svc: WorkspaceService, deps: IssueRoutesDeps 
 
     const body = await safeJson(c)
     const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-    const patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string } = {}
+    const patch: {
+      status?: IssueStatus
+      priority?: IssuePriority
+      assignee?: string
+      agent?: string | null
+      model?: string | null
+      effort?: ModelReasoningEffort | null
+      what?: string
+    } = {}
     if ('status' in fields) {
       const s = fields['status']
       if (typeof s !== 'string' || !ISSUE_STATUSES.includes(s as IssueStatus)) {
@@ -188,10 +201,33 @@ export function createIssuesRoutes(svc: WorkspaceService, deps: IssueRoutesDeps 
       } else {
         const agent = raw.trim()
         const adapter = svc.adapters.get(agent)
-        if (!adapter || !isAgentRuntime(adapter) || !meta.agents.includes(agent)) {
-          return c.json({ error: 'invalid_agent', message: `unknown or disabled agent runtime: ${agent}` }, 400)
+        if (!adapter || !isAgentRuntime(adapter)) {
+          return c.json({ error: 'invalid_agent', message: `unknown agent runtime: ${agent}` }, 400)
         }
         patch.agent = agent
+      }
+    }
+    if ('model' in fields) {
+      const raw = fields['model']
+      if (raw === null || raw === '') {
+        patch.model = null
+      } else if (typeof raw !== 'string' || !raw.trim()) {
+        return c.json({ error: 'invalid_model', message: 'model must be a native model id or null' }, 400)
+      } else {
+        patch.model = raw.trim()
+      }
+    }
+    if ('effort' in fields) {
+      const raw = fields['effort']
+      if (raw === null || raw === '') {
+        patch.effort = null
+      } else if (!isModelReasoningEffort(raw)) {
+        return c.json({
+          error: 'invalid_effort',
+          message: `effort must be one of: ${MODEL_REASONING_EFFORTS.join(', ')}`,
+        }, 400)
+      } else {
+        patch.effort = raw
       }
     }
     if ('what' in fields) {
@@ -205,7 +241,10 @@ export function createIssuesRoutes(svc: WorkspaceService, deps: IssueRoutesDeps 
       patch.what = what.trim()
     }
     if (Object.keys(patch).length === 0) {
-      return c.json({ error: 'no_fields', message: 'provide at least one of status, priority, assignee, agent, what' }, 400)
+      return c.json({
+        error: 'no_fields',
+        message: 'provide at least one of status, priority, assignee, agent, model, effort, what',
+      }, 400)
     }
 
     try {
@@ -237,8 +276,9 @@ export function createIssuesRoutes(svc: WorkspaceService, deps: IssueRoutesDeps 
   // POST /api/issues/:wsId/:id/comments — append a structured markdown comment
   // to `<id>.comments.json`. Author is fixed to 'human' here (the agent path
   // stamps its signed resume id when one is available). A different fixed
-  // Session owner is notified in the background; workspace-owned Issues remain
-  // durable notes and never recruit a random worker. Returns updated detail.
+  // Session owner is notified in the background. Human comments without a
+  // fixed owner follow the same provenance-aware creator/reconstruction path
+  // as Inbox. Returns updated detail.
   app.post('/:wsId/:id/comments', async (c) => {
     const wsId = c.req.param('wsId')
     const id = c.req.param('id')
@@ -273,6 +313,7 @@ export function createIssuesRoutes(svc: WorkspaceService, deps: IssueRoutesDeps 
         issueWorkspaceId: wsId,
         issue: res.issue,
         comment: res.comment,
+        source: { kind: 'human' },
       })
       if (dispatched.status !== 'not_requested') {
         const updated = await updateIssueCommentDelivery(meta.dir, id, res.comment.id, dispatched.delivery)

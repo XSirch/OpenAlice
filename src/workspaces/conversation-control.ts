@@ -1,5 +1,10 @@
 import { readFile } from 'node:fs/promises'
 
+import {
+  readAutoQuantPreferences,
+  readQuickChatPreferences,
+  rememberRecentChatWorkspace,
+} from '../core/preferences.js'
 import type {
   WorkspaceConversationAskResult,
   WorkspaceConversationControl,
@@ -8,11 +13,25 @@ import type {
   WorkspaceConversationTask,
 } from '../core/workspace-tool-center.js'
 import type { ArtifactRef, ProvenanceAction, SessionOrigin } from '../core/provenance-store.js'
+import type { AgentConversationDispatch } from './agent-conversation-log.js'
 import { isAgentRuntime } from './cli-adapter.js'
 import type { HeadlessStructuredOutput } from './headless-output.js'
 import { headlessLogPaths } from './headless-task-registry.js'
 import { logger as launcherLogger } from './logger.js'
 import type { WorkspaceService } from './service.js'
+import { AUTO_QUANT_WORKSPACE_TEMPLATE } from './chat-workspace-resolver.js'
+
+interface ConversationHarnessDependencies {
+  readQuickChatPreferences(): Promise<{ recentChatWorkspaceId: string | null }>
+  rememberRecentChatWorkspace(workspaceId: string): Promise<unknown>
+  readAutoQuantPreferences(): Promise<{ defaultWorkspaceId: string | null }>
+}
+
+const defaultHarnessDependencies: ConversationHarnessDependencies = {
+  readQuickChatPreferences,
+  rememberRecentChatWorkspace,
+  readAutoQuantPreferences,
+}
 
 interface ArtifactTarget {
   artifact: ArtifactRef
@@ -202,10 +221,13 @@ function reconstructionPrompt(
 
 export function createWorkspaceConversationControl(
   svc: WorkspaceService,
+  harnessDependencies: ConversationHarnessDependencies = defaultHarnessDependencies,
 ): WorkspaceConversationControl {
   return {
     async ask(input): Promise<WorkspaceConversationAskResult> {
-      const resolution = resolveWorkspaceConversationTarget(svc, input.target)
+      const resolution = input.target.kind === 'harness'
+        ? await resolveHarnessConversationTarget(svc, input.target.harness, harnessDependencies)
+        : resolveWorkspaceConversationTarget(svc, input.target)
       if (resolution.mode === 'unavailable') return { status: 'unavailable', resolution }
 
       const continuingOrigin = resolution.origin
@@ -232,18 +254,27 @@ export function createWorkspaceConversationControl(
         ? continuingOrigin.agent
         : input.agent ?? await svc.resolveDefaultAgentId(meta)
       if (!agentId) throw new Error(`workspace has no agent runtime: ${meta.tag}`)
-      if (resolution.mode === 'reconstructed' && !continuingOrigin && !meta.agents.includes(agentId)) {
-        throw new Error(`agent "${agentId}" is not enabled on workspace ${meta.tag}`)
-      }
       const adapter = svc.adapters.get(agentId)
       if (!adapter || !isAgentRuntime(adapter)) throw new Error(`unknown agent runtime: ${agentId}`)
       if (!adapter.capabilities.headless || !adapter.composeHeadlessCommand) {
         throw new Error(`agent runtime has no headless mode: ${agentId}`)
       }
 
-      const prompt = resolution.mode === 'exact'
-        ? input.prompt
-        : reconstructionPrompt(input.target, input.prompt, Boolean(continuingOrigin))
+      const promptMode = resolution.mode === 'reconstructed' && input.reconstruct === true
+        ? 'reconstruction'
+        : 'plain'
+      const prompt = promptMode === 'reconstruction'
+        ? reconstructionPrompt(input.target, input.prompt, Boolean(continuingOrigin))
+        : input.prompt
+      const conversation: AgentConversationDispatch = {
+        source: input.source ?? { kind: 'human' },
+        requestedTarget: input.target,
+        originalPrompt: input.prompt,
+        deliveredPrompt: prompt,
+        promptMode,
+        resolution,
+        ...(input.subject ? { subject: input.subject } : {}),
+      }
       const inquiry = input.subject
         ? {
             subject: input.subject,
@@ -256,10 +287,26 @@ export function createWorkspaceConversationControl(
         : undefined
       const dispatched = inquiry
         ? await svc.dispatchHeadlessTask(
-            meta, adapter, prompt, input.timeoutMs, undefined, continuingOrigin?.resumeId, inquiry,
+            meta,
+            adapter,
+            prompt,
+            input.timeoutMs,
+            undefined,
+            continuingOrigin?.resumeId,
+            inquiry,
+            undefined,
+            conversation,
           )
         : await svc.dispatchHeadlessTask(
-            meta, adapter, prompt, input.timeoutMs, undefined, continuingOrigin?.resumeId,
+            meta,
+            adapter,
+            prompt,
+            input.timeoutMs,
+            undefined,
+            continuingOrigin?.resumeId,
+            undefined,
+            undefined,
+            conversation,
           )
       let effectiveResolution = resolution
       if (resolution.mode === 'reconstructed' && resolution.artifact && !resolution.origin) {
@@ -315,6 +362,51 @@ export function createWorkspaceConversationControl(
       }
       return result
     },
+  }
+}
+
+async function resolveHarnessConversationTarget(
+  svc: WorkspaceService,
+  harness: 'chat' | 'autoquant',
+  dependencies: ConversationHarnessDependencies,
+): Promise<WorkspaceConversationResolution> {
+  if (harness === 'chat') {
+    const preferences = await dependencies.readQuickChatPreferences().catch((err) => {
+      launcherLogger.warn('conversation.harness_chat_preference_read_failed', { err })
+      return { recentChatWorkspaceId: null }
+    })
+    const target = await svc.resolveOrCreateChatWorkspace(preferences.recentChatWorkspaceId)
+    if (!target.ok) {
+      launcherLogger.warn('conversation.harness_chat_workspace_unavailable', {
+        code: target.code,
+        message: target.message,
+      })
+      return { mode: 'unavailable', reason: 'chat-workspace-unavailable' }
+    }
+    await dependencies.rememberRecentChatWorkspace(target.workspace.id).catch((err) => {
+      launcherLogger.warn('conversation.harness_chat_preference_write_failed', { err })
+    })
+    return {
+      mode: 'reconstructed',
+      workspaceId: target.workspace.id,
+      reason: 'harness-default',
+    }
+  }
+
+  const preferences = await dependencies.readAutoQuantPreferences().catch((err) => {
+    launcherLogger.warn('conversation.harness_autoquant_preference_read_failed', { err })
+    return { defaultWorkspaceId: null }
+  })
+  const workspace = preferences.defaultWorkspaceId
+    ? svc.registry.get(preferences.defaultWorkspaceId)
+    : undefined
+  if (!workspace || workspace.template !== AUTO_QUANT_WORKSPACE_TEMPLATE) {
+    return { mode: 'unavailable', reason: 'autoquant-not-initialized' }
+  }
+  return {
+    mode: 'reconstructed',
+    workspaceId: workspace.id,
+    reason: 'harness-default',
   }
 }
 

@@ -16,11 +16,15 @@ on:
       - "scripts/desktop-package-artifact.mjs"
       - "scripts/desktop-packaged-smoke.mjs"
       - "scripts/desktop-packaged-smoke-plan.mjs"
+      - "scripts/desktop-upgrade-smoke.mjs"
+      - "scripts/desktop-upgrade-smoke-lib.mjs"
       - "scripts/build-broker-packs.ts"
+      - "scripts/broker-pack-upgrade-smoke.ts"
       - "scripts/guardian/**"
       - "scripts/pnpm-command.mjs"
       - "scripts/pnpm-command.spec.ts"
       - "scripts/prepare-desktop-release-assets.mjs"
+      - "scripts/verify-desktop-update-assets.mjs"
       - "scripts/smoke-packaged-toolchain.mjs"
       - "scripts/verify-broker-packs.ts"
       - "scripts/workspace-acceptance-ai-mock.mjs"
@@ -55,11 +59,15 @@ on:
       - "scripts/desktop-package-artifact.mjs"
       - "scripts/desktop-packaged-smoke.mjs"
       - "scripts/desktop-packaged-smoke-plan.mjs"
+      - "scripts/desktop-upgrade-smoke.mjs"
+      - "scripts/desktop-upgrade-smoke-lib.mjs"
       - "scripts/build-broker-packs.ts"
+      - "scripts/broker-pack-upgrade-smoke.ts"
       - "scripts/guardian/**"
       - "scripts/pnpm-command.mjs"
       - "scripts/pnpm-command.spec.ts"
       - "scripts/prepare-desktop-release-assets.mjs"
+      - "scripts/verify-desktop-update-assets.mjs"
       - "scripts/smoke-packaged-toolchain.mjs"
       - "scripts/verify-broker-packs.ts"
       - "scripts/workspace-acceptance-ai-mock.mjs"
@@ -79,18 +87,52 @@ on:
       - "packages/connector-protocol/**"
       - "packages/uta-broker-*/**"
 
+concurrency:
+  group: desktop-package-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  preflight:
+    name: fast preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify CI workflow contracts
+        run: >-
+          pnpm exec vitest run
+          scripts/ci-workflow.spec.ts
+          scripts/desktop-package-workflow.spec.ts
+          scripts/release-workflow.spec.ts
+
+      - name: Typecheck root workspace
+        run: npx tsc --noEmit
+        timeout-minutes: 5
+
   package:
     name: package ubuntu-latest
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -104,9 +146,6 @@ jobs:
       - name: Smoke Guardian takeover through Electron
         run: xvfb-run --auto-servernum pnpm electron:smoke:guardian-recovery --skip-build
         timeout-minutes: 5
-        # GitHub's Ubuntu runners cannot configure Electron's setuid sandbox.
-        # This smoke runs in an isolated disposable worker and does not alter
-        # the sandbox policy of packaged application builds.
         env:
           ELECTRON_DISABLE_SANDBOX: "1"
 
@@ -132,8 +171,6 @@ jobs:
         run: xvfb-run --auto-servernum pnpm electron:smoke:workspace --skip-build --skip-pack
         timeout-minutes: 5
         env:
-          # The reused Linux package also launches Electron. GitHub-hosted
-          # runners cannot configure its setuid sandbox helper.
           ELECTRON_DISABLE_SANDBOX: "1"
           OPENALICE_SMOKE_RECEIPT_PATH: ${{ runner.temp }}/openalice-workspace-acceptance.json
 

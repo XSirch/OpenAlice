@@ -13,7 +13,8 @@
  * a data-model change.
  */
 
-export type WorkspaceSource = 'chat'
+export type WorkspaceSource = 'chat' | 'auto-quant'
+export type FileViewerSource = WorkspaceSource | 'tracked'
 
 /** One source of truth for the Dev sidebar and `/dev/:tab` URL contract. */
 export const DEV_TABS = ['tools', 'onboarding', 'snapshots', 'logs', 'simulator'] as const
@@ -53,6 +54,7 @@ export type ViewSpec =
   | { kind: 'inbox';               params: Record<string, never> }
   | { kind: 'tracked';             params: Record<string, never> }
   | { kind: 'chat-landing';        params: { targetWsId?: string } }
+  | { kind: 'auto-quant-landing';  params: { targetWsId?: string } }
   | { kind: 'workspace-manager';   params: { sessionId?: string } }
   | {
       kind: 'file-viewer'
@@ -60,9 +62,11 @@ export type ViewSpec =
         wsId: string
         path: string
         /** Preserve the product area that opened this Workspace artifact. */
-        source?: WorkspaceSource
+        source?: FileViewerSource
         /** Exact Session materialization to restore when leaving the artifact. */
         returnSessionId?: string
+        /** Tracked entity selection to restore when leaving a backlink artifact. */
+        returnTrackedName?: string
       }
     }
 
@@ -75,6 +79,7 @@ export type ViewKind = ViewSpec['kind']
  */
 export type ActivitySection =
   | 'chat'
+  | 'auto-quant'
   | 'inbox'
   | 'tracked'
   | 'workspaces'

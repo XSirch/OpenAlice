@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useId, useMemo } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { SettingsScrollArea, inputClass } from '../components/form'
 import { Skeleton } from '../components/StateViews'
@@ -65,10 +65,13 @@ async function saveTradingRuntimeConfigPatch(patch: Partial<TradingRuntimeConfig
   return next
 }
 
-function ExternalOrderMonitoringRow() {
+export function ExternalOrderMonitoringRow() {
   const [value, setValue] = useState<string | null>(null)
   const [runtimeConfig, setRuntimeConfig] = useState<TradingRuntimeConfig | null>(null)
   const [msg, setMsg] = useState('')
+  const selectId = useId()
+  const descriptionId = `${selectId}-description`
+  const statusId = `${selectId}-status`
 
   useEffect(() => {
     let cancelled = false
@@ -105,20 +108,31 @@ function ExternalOrderMonitoringRow() {
   if (value === null) return null
 
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 border border-border rounded-lg">
+    <div className="flex flex-col items-stretch gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <div className="text-[12px] font-medium text-foreground">External order monitoring</div>
-        <div className="text-[11px] text-muted-foreground">
+        <label htmlFor={selectId} className="text-[12px] font-medium text-foreground">
+          External order monitoring
+        </label>
+        <div id={descriptionId} className="text-[11px] text-muted-foreground">
           How often to scan for orders placed outside Alice (exchange app, direct API).
           Known pending orders are tracked every 10s regardless.
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
+        <span
+          id={statusId}
+          role="status"
+          aria-atomic="true"
+          className="text-[11px] text-muted-foreground"
+        >
+          {msg}
+        </span>
         <select
+          id={selectId}
+          aria-describedby={`${descriptionId} ${statusId}`}
           value={value}
           onChange={(e) => { void save(e.target.value) }}
-          className={inputClass + ' w-auto'}
+          className={inputClass + ' w-full sm:w-auto'}
         >
           {OBSERVE_CADENCE_OPTIONS.map((v) => (
             <option key={v} value={v}>{v === 'off' ? 'Off' : `Every ${v}`}</option>
@@ -243,11 +257,13 @@ export function MissingBrokerPacksNotice({ packs, onInstalled }: {
   packs: BrokerPackStatus[]
   onInstalled: (status: BrokerPackStatus) => void
 }) {
-  const missing = packs.filter((pack) => !pack.installed && pack.requiredBy.length > 0)
+  const actionable = packs.filter(
+    (pack) => (!pack.installed || pack.updateAvailable) && pack.requiredBy.length > 0,
+  )
   const [installing, setInstalling] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  if (missing.length === 0) return null
+  if (actionable.length === 0) return null
 
   const install = async (pack: BrokerPackStatus) => {
     if (pack.engine === 'mock') return
@@ -267,16 +283,21 @@ export function MissingBrokerPacksNotice({ packs, onInstalled }: {
       <div className="flex items-start gap-2.5">
         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
         <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-medium text-foreground">Optional broker support is missing</div>
+          <div className="text-[12px] font-medium text-foreground">Broker support needs attention</div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-            OpenAlice itself can keep running. Install only the integrations used by these accounts or K-line sources.
+            Update or repair only the integrations already used by these accounts or K-line sources.
           </p>
           <div className="mt-3 space-y-2">
-            {missing.map((pack) => (
+            {actionable.map((pack) => (
               <div key={pack.engine} className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2">
                 <div className="min-w-0">
                   <div className="text-[12px] font-medium uppercase text-foreground">{pack.engine}</div>
                   <div className="truncate text-[11px] text-muted-foreground">Required by {pack.requiredBy.join(', ')}</div>
+                  {pack.updateAvailable && pack.version && (
+                    <div className="mt-0.5 text-[11px] text-warning">
+                      Installed support is from OpenAlice {pack.version}
+                    </div>
+                  )}
                   {pack.reason && <div className="mt-0.5 text-[11px] text-warning">{pack.reason}</div>}
                 </div>
                 <button
@@ -284,7 +305,13 @@ export function MissingBrokerPacksNotice({ packs, onInstalled }: {
                   disabled={installing !== null}
                   onClick={() => { void install(pack) }}
                 >
-                  {installing === pack.engine ? 'Installing…' : pack.source === 'broken' ? 'Repair' : 'Install'}
+                  {installing === pack.engine
+                    ? 'Installing…'
+                    : pack.source === 'broken'
+                      ? 'Repair'
+                      : pack.updateAvailable
+                        ? 'Update'
+                        : 'Install'}
                 </button>
               </div>
             ))}

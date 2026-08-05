@@ -1,4 +1,10 @@
-import type { IssueComment, IssueDetail, IssuePriority, IssueRunRecord, IssueSnapshot, IssueStatus } from '../../api/issues'
+import type {
+  IssueComment,
+  IssueDetail,
+  IssuePatch,
+  IssueRunRecord,
+  IssueSnapshot,
+} from '../../api/issues'
 import { demoInboxEntries } from './inbox'
 
 // GET /api/issues aggregates every workspace's declared issues by SCANNING
@@ -491,13 +497,20 @@ const demoIssueComments: Record<string, IssueComment[]> = {}
 export function demoIssueUpdate(
   wsId: string,
   id: string,
-  patch: { status?: IssueStatus; priority?: IssuePriority; assignee?: string; agent?: string | null; what?: string },
+  patch: IssuePatch,
 ): IssueDetail | null {
   const boardIssue = findBoardIssue(wsId, id)
   if (!boardIssue) return null
   if (patch.status !== undefined) boardIssue.status = patch.status
   if (patch.priority !== undefined) boardIssue.priority = patch.priority
-  if (patch.assignee !== undefined) boardIssue.assignee = patch.assignee
+  if (patch.assignee !== undefined) {
+    boardIssue.assignee = patch.assignee
+    if (patch.assignee.startsWith('@resume-')) {
+      delete boardIssue.agent
+      delete boardIssue.model
+      delete boardIssue.effort
+    }
+  }
   if (patch.what !== undefined) {
     const key = `${wsId}/${id}`
     const existing = demoIssueExtras[key]
@@ -520,6 +533,14 @@ export function demoIssueUpdate(
       demoIssueExtras[key] = { body: `${boardIssue.title}\n\n(No description.)`, agent: patch.agent, runs: [] }
     }
   }
+  if (patch.model !== undefined) {
+    if (patch.model === null) delete boardIssue.model
+    else boardIssue.model = patch.model
+  }
+  if (patch.effort !== undefined) {
+    if (patch.effort === null) delete boardIssue.effort
+    else boardIssue.effort = patch.effort
+  }
   return demoIssueDetail(wsId, id)
 }
 
@@ -535,38 +556,36 @@ export function demoIssueAddComment(
   const key = `${wsId}/${id}`
   const comments = demoIssueComments[key] ?? []
   const commentId = `demo-comment-${comments.length + 1}`
-  const ownerResumeId = boardIssue.assignee.startsWith('@resume-') ? boardIssue.assignee.slice(1) : null
+  const ownerResumeId = boardIssue.assignee.startsWith('@resume-')
+    ? boardIssue.assignee.slice(1)
+    : `demo-reconstructed-${id}`
   const taskId = `demo-comment-run-${comments.length + 1}`
   comments.push({
     id: commentId,
     author,
     at: new Date().toISOString(),
     markdown: text,
-    ...(ownerResumeId ? {
-      delivery: { state: 'pending' as const, targetResumeId: ownerResumeId, taskId },
-    } : {}),
+    delivery: { state: 'pending' as const, targetResumeId: ownerResumeId, taskId },
   })
   demoIssueComments[key] = comments
-  if (ownerResumeId) {
-    window.setTimeout(() => {
-      const source = comments.find((comment) => comment.id === commentId)
-      if (!source || source.delivery?.state !== 'pending') return
-      const replyCommentId = `demo-reply-${commentId}`
-      source.delivery = {
-        state: 'replied',
-        targetResumeId: ownerResumeId,
-        taskId,
-        replyCommentId,
-      }
-      comments.push({
-        id: replyCommentId,
-        author: `@${ownerResumeId}`,
-        at: new Date().toISOString(),
-        markdown: 'I saw the comment and will carry this context into the next pass.',
-        replyTo: commentId,
-      })
-    }, 900)
-  }
+  window.setTimeout(() => {
+    const source = comments.find((comment) => comment.id === commentId)
+    if (!source || source.delivery?.state !== 'pending') return
+    const replyCommentId = `demo-reply-${commentId}`
+    source.delivery = {
+      state: 'replied',
+      targetResumeId: ownerResumeId,
+      taskId,
+      replyCommentId,
+    }
+    comments.push({
+      id: replyCommentId,
+      author: `@${ownerResumeId}`,
+      at: new Date().toISOString(),
+      markdown: 'I saw the comment and will carry this context into the next pass.',
+      replyTo: commentId,
+    })
+  }, 900)
   return demoIssueDetail(wsId, id)
 }
 

@@ -69,6 +69,8 @@ interface IssueSpec {
   status?: string
   priority?: string
   agent?: string
+  model?: string
+  effort?: string
   assignee?: string
   body?: string
 }
@@ -80,7 +82,13 @@ function issueMd(spec: IssueSpec): string {
   if (spec.priority) lines.push(`priority: ${spec.priority}`)
   if (spec.what) lines.push(`what: ${spec.what}`)
   if (spec.agent) lines.push(`agent: ${spec.agent}`)
-  if (spec.assignee) lines.push(`assignee: ${JSON.stringify(spec.assignee)}`)
+  if (spec.model) lines.push(`model: ${spec.model}`)
+  if (spec.effort) lines.push(`effort: ${spec.effort}`)
+  // Scanner tests exercise dispatch policy, not declaration defaults. Keep the
+  // historical fresh-every-fire fixture explicit now that omitted scheduled
+  // ownership means recruit once (`@new`).
+  const assignee = spec.assignee ?? (spec.when ? '@workspace' : undefined)
+  if (assignee) lines.push(`assignee: ${JSON.stringify(assignee)}`)
   if (spec.when) {
     const w = spec.when
     const inner =
@@ -101,7 +109,7 @@ async function makeWs(id: string, issues: IssueSpec[]): Promise<WorkspaceMeta> {
   for (const issue of issues) {
     await writeFile(join(issuesDir, `${issue.id}.md`), issueMd(issue), 'utf8')
   }
-  return { id, tag: id, dir, createdAt: new Date(NOW).toISOString(), agents: ['claude'] }
+  return { id, tag: id, dir, createdAt: new Date(NOW).toISOString() }
 }
 
 function scannerFor(
@@ -185,6 +193,51 @@ describe('ScheduleScanner', () => {
       kind: 'issue', workspaceId: 'w1', issueId: 't1',
     })
     expect(markers.get('w1', 't1')).toBe(NOW)
+  })
+
+  it('does not repeat an occurrence after dispatch registered a run that later fails', async () => {
+    const ws = await makeWs('w1', [{
+      id: 't1',
+      title: 'i1',
+      when: { kind: 'every', every: '30m' },
+      what: 'go',
+    }])
+    // Dispatch acceptance means the durable run exists. Its asynchronous
+    // launch/result may fail later, but that is one recorded occurrence and
+    // must not turn the scanner interval into an automatic retry loop.
+    const dispatch = vi.fn(async () => ({
+      taskId: 'run-that-will-fail',
+      resumeId: 'resume-failed-run-a1b2c3',
+    }))
+    const { scanner, markers } = scannerFor([ws], { dispatch })
+    await scanner.scan()
+    await scanner.scan()
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(markers.get('w1', 't1')).toBe(NOW)
+  })
+
+  it('passes Issue model and effort as one-run dispatch overrides', async () => {
+    const ws = await makeWs('w1', [{
+      id: 'tuned',
+      title: 'tuned run',
+      when: { kind: 'every', every: '30m' },
+      what: 'go',
+      agent: 'claude',
+      model: 'claude-opus-4-8',
+      effort: 'high',
+    }])
+    const { scanner, dispatch } = scannerFor([ws])
+    await scanner.scan()
+    expect(dispatch).toHaveBeenCalledWith(
+      ws,
+      headlessAdapter,
+      'go',
+      expect.any(Number),
+      { kind: 'issue', workspaceId: 'w1', issueId: 'tuned' },
+      undefined,
+      undefined,
+      { model: 'claude-opus-4-8', reasoningEffort: 'high' },
+    )
   })
 
   it('passes one exact resumeId through adapter resolution and dispatch', async () => {
@@ -381,7 +434,7 @@ describe('ScheduleScanner', () => {
   it('ignores a workspace with no issues dir', async () => {
     const dir = join(root, 'empty')
     await mkdir(dir, { recursive: true })
-    const ws: WorkspaceMeta = { id: 'empty', tag: 'empty', dir, createdAt: new Date(NOW).toISOString(), agents: ['claude'] }
+    const ws: WorkspaceMeta = { id: 'empty', tag: 'empty', dir, createdAt: new Date(NOW).toISOString() }
     const { scanner, dispatch } = scannerFor([ws])
     await scanner.scan()
     expect(dispatch).not.toHaveBeenCalled()
@@ -392,7 +445,7 @@ describe('ScheduleScanner', () => {
     const dir = join(root, 'legacy')
     await mkdir(join(dir, '.alice'), { recursive: true })
     await writeFile(join(dir, '.alice', 'issue.json'), JSON.stringify({ issues: [] }), 'utf8')
-    const ws: WorkspaceMeta = { id: 'legacy', tag: 'legacy', dir, createdAt: new Date(NOW).toISOString(), agents: ['claude'] }
+    const ws: WorkspaceMeta = { id: 'legacy', tag: 'legacy', dir, createdAt: new Date(NOW).toISOString() }
     const { scanner, dispatch } = scannerFor([ws])
     await scanner.scan()
     expect(dispatch).not.toHaveBeenCalled()

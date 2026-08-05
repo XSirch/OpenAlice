@@ -211,7 +211,7 @@ export function CreateUTADialog({
   ) : null
 
   return (
-    <Dialog onClose={onClose}>
+    <Dialog ariaLabel={headerLabel} onClose={onClose}>
       <div className="shrink-0 px-6 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <h3 className="text-[14px] font-semibold text-foreground truncate">{headerLabel}</h3>
@@ -256,7 +256,7 @@ export function CreateUTADialog({
                     Allow analysis reads; block broker-side order changes.
                   </div>
                 </div>
-                <Toggle size="sm" checked={readOnly} onChange={setReadOnly} />
+                <Toggle ariaLabel="Read-only account" size="sm" checked={readOnly} onChange={setReadOnly} />
               </div>
               <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-3 py-2.5">
                 <div className="min-w-0">
@@ -265,7 +265,7 @@ export function CreateUTADialog({
                     Include this connector in K-line and contract discovery.
                   </div>
                 </div>
-                <Toggle size="sm" checked={asVendor} onChange={setAsVendor} />
+                <Toggle ariaLabel="Use as data source" size="sm" checked={asVendor} onChange={setAsVendor} />
               </div>
               <SchemaFormFields
                 fields={fields}

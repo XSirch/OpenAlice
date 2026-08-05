@@ -43,7 +43,7 @@ You have two equivalent paths, and both write the **same**
    with no separate path.
 2. **Editing the file directly** with your normal file tools. Reach for this when
    you are writing rich markdown **What** or scheduling frontmatter
-   (`when` / `assignee` / `agent`) — the CLI verbs cover the board fields, What, and
+   (`when` / `assignee` / `agent` / `model` / `effort`) — the CLI verbs cover the board fields, What, and
    comments, but the document and schedule shape read most clearly as text. The
    file is always the single source of truth either way.
 
@@ -71,8 +71,9 @@ alice-workspace issue update --id morning-scan --status done
 
 # comment — append markdown to the structured `<id>.comments.json` sidecar. An
 # attributable Session signs with @resumeId. If somebody else comments on an
-# Issue with a fixed @resumeId owner, OpenAlice asks that owner in the background
-# and records the final reply in Activity. @workspace comments remain notes.
+# For a fixed @resumeId owner, OpenAlice asks that owner in the background.
+# Human comments without one ask the creator or a reconstructed Workspace Agent.
+# Agent-authored comments without a fixed owner remain timeline notes.
 alice-workspace issue comment --id morning-scan --text "Brief pushed; SPY gapped +0.4%."
 ```
 
@@ -85,7 +86,9 @@ alice-workspace issue create --title "Pre-market brief" --priority high \
   --when '{"kind":"cron","cron":"30 8 * * 1-5","timezone":"America/New_York"}' \
   --assignee @me \
   --what "Pull pre-market movers and overnight news for my watchlist, write a short brief to research/premarket.md, then run: alice-workspace inbox push --doc research/premarket.md --comments 'Pre-market brief'." \
-  --agent claude
+  --agent codex \
+  --model gpt-5.6 \
+  --effort high
 ```
 
 The verb set is `list` / `show` / `create` / `update` / `comment` (no `delete` —
@@ -159,8 +162,9 @@ plain tracked item; add a `when` and it starts firing.
   - `@human` and `@unassigned` are valid only for unscheduled work.
   CLI `issue create` defaults to `@me` when called by an attributable Session
   (who creates it owns it); `@me` is resolved to a concrete `@resumeId` before
-  writing. Use `@new` when the job needs a new long-lived owner, and
-  `@workspace` explicitly only when every fire should recruit a newcomer.
+  writing. Otherwise omitted scheduled ownership defaults to `@new`, while an
+  unscheduled board item defaults to `@workspace`. Use `@workspace` explicitly
+  only when every fire should recruit a newcomer.
 - **`when`** *(OPTIONAL — present iff the issue self-schedules)* — one of:
   - `{ kind: every, every: "30m" }` — repeat on an interval (`30m`, `2h`,
     `1h30m`). Runs on the next scan, then on the interval.
@@ -177,6 +181,17 @@ plain tracked item; add a `when` and it starts firing.
   scheduled work; defaults to this Workspace's runtime resolution. An exact
   Session assignee already has an immutable runtime, so Session-owned Issues
   cannot set this.
+- **`model`** *(optional)* — native model id for one scheduled run. Omit it to
+  inherit the Workspace/native runtime default. Provider routing and
+  authentication always remain Workspace-owned.
+- **`effort`** *(optional)* — one-run reasoning effort: `none`, `minimal`,
+  `low`, `medium`, `high`, `xhigh`, or `max`. Use a level supported by the
+  selected runtime; omit it to inherit.
+
+`agent`, `model`, and `effort` are one run-selection tuple. They are valid only
+for `@new` / `@workspace`; an exact `@resumeId` Session owns all three. The
+scheduler passes explicit model/effort values as one-run CLI arguments and does
+not rewrite persistent Workspace configuration.
 
 The old parallel `execution` field is retired and rejected after migration;
 never write it into a new Issue.

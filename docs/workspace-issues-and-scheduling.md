@@ -35,7 +35,9 @@ status: todo
 priority: high
 assignee: "@workspace"
 when: { kind: cron, cron: "30 8 * * 1-5", timezone: America/New_York }
-agent: pi
+agent: codex
+model: gpt-5.6
+effort: high
 ---
 
 Pull pre-market movers and overnight news, write `research/premarket.md`,
@@ -54,6 +56,11 @@ The filename stem is the stable issue id. Frontmatter:
     every scheduled fire;
   - an exact `@resumeId` continues one accountable product Session;
   - `@human` or `@unassigned` is valid only for unscheduled work.
+  When omitted, a scheduled Issue defaults to `@new` so its first run establishes
+  one durable owner; an unscheduled board item defaults to `@workspace`.
+  Structured creation by an attributable resumable Session still assigns that
+  creating Session. Use `@workspace` explicitly only when every fire should
+  recruit a newcomer.
 - `when` — optional schedule:
   - `{ kind: at, at: <ISO timestamp> }`
   - `{ kind: every, every: <duration> }`
@@ -61,10 +68,23 @@ The filename stem is the stable issue id. Frontmatter:
 - `agent` — optional CLI adapter id for `@new` / `@workspace` scheduled work;
   otherwise Workspace/default resolution is used. A Session assignee already
   owns its runtime and cannot be overridden here.
+- `model` — optional native model id for this Issue's run. Omission inherits the
+  Workspace/native runtime model.
+- `effort` — optional one-run reasoning effort:
+  `none | minimal | low | medium | high | xhigh | max`. The chosen runtime must
+  expose that level; omission inherits its Workspace/native default.
+
+`agent`, `model`, and `effort` are one run-selection tuple. They never carry an
+endpoint, provider, or credential, and the scheduler expresses them as native
+CLI arguments without rewriting Workspace files. All three are forbidden when
+`assignee` is an exact `@resumeId`, because that Session owns its runtime
+conversation. `@new` may use them for its first dispatch; after it becomes an
+exact Session owner, the claim rewrite removes the tuple.
 
 Migration `0018_issue_assignee_ownership` removes the retired parallel
 `execution` field. It maps `resume` to the former `session:<resumeId>` shape and
-fresh/omitted scheduled ownership to the former `workspace` shape.
+fresh/omitted scheduled ownership to the former `workspace` shape. That history
+is preserved as explicit `@workspace`; the new omission default is `@new`.
 Migration `0019_issue_session_signatures` then writes those owners as
 `@resumeId` / `@workspace`, the same visible signature language used in reports.
 
@@ -84,10 +104,13 @@ Comments are also the Issue's normal conversation entry. When `assignee` is an
 exact `@resumeId`, a comment from somebody else is delivered asynchronously to
 that Session and its final reply is appended as another structured comment.
 The source comment records `pending`, `replied`, or `failed`, so a durable note
-never masquerades as a delivered message. A comment on `@workspace`, `@human`,
-or `@unassigned` stays a timeline note: OpenAlice does not invent a new owner
-just because somebody commented. An owner commenting on their own Issue is not
-echoed back to the same Session.
+never masquerades as a delivered message. A human comment without a fixed owner
+uses the same provenance-aware fallback as Inbox: OpenAlice asks the
+attributable creator, or recruits a reconstruction Agent in the Issue
+Workspace when no creator Session exists. The answer is recorded in Activity
+without changing `assignee`; a temporary answerer never becomes the scheduling
+owner. Agent-authored comments without a fixed owner remain timeline notes, and
+an owner commenting on their own Issue is not echoed back to the same Session.
 
 `done` and `canceled` are terminal and stop scheduled firing. There is no
 separate `enabled` flag. A successful one-shot `at` issue is automatically
@@ -120,14 +143,14 @@ Agents normally use:
 ```bash
 alice-workspace issue list
 alice-workspace issue show --id <id-or-title>
-alice-workspace issue create --title "..." --what "..." --when '{"kind":"every","every":"1h"}' --assignee workspace
-alice-workspace issue update --id <id> --status done
+alice-workspace issue create --title "..." --what "..." --when '{"kind":"every","every":"1h"}' --assignee @workspace --agent codex --model gpt-5.6 --effort high
+alice-workspace issue update --id <id> --model gpt-5.6 --effort high
 alice-workspace issue comment --id <id> --text "..."
 ```
 
 The CLI and MCP tools use the same implementation and write the same files.
 Direct file editing is also valid and is the clearest way to author rich What
-markdown plus `when` / `assignee` / `agent` frontmatter.
+markdown plus `when` / `assignee` / `agent` / `model` / `effort` frontmatter.
 
 `issue comment` is preferable to a generic `issue ask --owner` for normal
 collaboration because it leaves the question and answer in the Issue Activity
@@ -145,6 +168,7 @@ an attended, human-approved path and a commit in the peer repository.
   -> ScheduleScanner (~60s)
   -> due calculation from `when` + last-fired marker
   -> assignee selects a new Workspace Session or exact resumeId
+  -> optional model/effort become one-run native CLI arguments
   -> headless run of the owning Workspace
   -> native agent CLI
   -> normalized reply + message/tool blocks
@@ -158,7 +182,18 @@ run checks X and exits silently when false.
 
 The scanner persists only last-fired markers under the launcher state root.
 Schedule semantics remain in the issue file. Markers are written after a
-successful dispatch; capacity/transient rejection stays due for retry.
+successful dispatch, meaning a durable run record was accepted. If that worker
+later fails to launch or exits unsuccessfully, the failed run remains the
+single attempt for that occurrence and the operator can use **Retry now**; the
+scanner does not turn its own tick interval into a retry storm. Capacity or
+another admission rejection that creates no run stays due for retry.
+
+The durable run record keeps the requested model and effort beside the resolved
+agent. This is selection provenance, not a claim that the provider honored an
+unknown model: native CLI failure remains visible in the run result. For an
+OpenAlice-managed opencode or Pi provider, the model must already be registered
+by that Workspace; otherwise dispatch fails with an actionable message instead
+of mutating provider registration during a concurrent run.
 
 The Issue API also derives an `automationHealth` projection from these markers,
 the latest scheduled run, and the assignee's resume availability. It is not
@@ -183,6 +218,13 @@ Old runs therefore gain structured `failure.kind/title/message/retryable`
 diagnostics without migration. A killed run close to 30 minutes is a timeout;
 a killed run whose watchdog closes much later is described conservatively as a
 paused computer/launcher rather than falsely blaming the agent.
+
+Startup evidence is explicit on new run records. `processStarted` becomes true
+only after the OS child emits `spawn`; `launchErrorCode` distinguishes an
+unsupported Windows batch shim, a missing executable, and another spawn
+failure. Pre-process failures also persist their human-readable `error` and
+stderr diagnostic, so they project as `launch_error / Agent could not start`
+rather than the misleading `process_exit` used by older `exitCode: -1` records.
 
 The Issue detail offers **Retry now** only for the latest failed or interrupted
 scheduled run. Retry re-reads the live Issue and uses the same markdown What,
@@ -283,12 +325,16 @@ assistant reply by default; diagnostic tool/message blocks require
 `--mode detailed`. New task ids are short `run-xxxxxxxx` codes; existing UUID
 task ids remain readable.
 
-Prefer `conversation ask ... --await` for a single follow-up. To question
-several independent Sessions, dispatch every ask first, then collect the tasks
-in one `conversation collect --task-id <a> --task-id <b>` call so the runs
-overlap. If server-side collection reaches its budget while a task still runs,
-use a later collect or one-shot read; agents should not manufacture shell sleep
-loops.
+Use `conversation ask ... --await` when one short follow-up is required for the
+current answer. For work delegated to another desk, omit `--await`, retain the
+returned task and Session ids, and retrieve the reply later; the peer may
+manage longer work through its own Issue/schedule and push a finished report to
+Inbox. To question several independent Sessions, dispatch every ask first, then
+collect the tasks in one `conversation collect --task-id <a> --task-id <b>`
+call so the runs overlap. If server-side collection reaches its budget while a
+task still runs, use a later collect or one-shot read; agents should not
+manufacture shell sleep loops. Add `--reconstruct` only when an unattributed
+artifact explicitly needs reconstruction guidance.
 
 The Issue detail UI treats scheduling as an intrinsic Work item capability.
 `assignee: "@new"` recruits one fresh Session on the first fire and then

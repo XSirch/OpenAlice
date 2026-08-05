@@ -12,10 +12,15 @@ import { basename, dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { claudeAdapter } from './claude.js';
+import { claudeAdapter, readClaudeSessionTitleFile } from './claude.js';
 import { codexAdapter } from './codex.js';
-import { opencodeAdapter } from './opencode.js';
-import { piAdapter, syncPiProjectTrust, syncPiWindowsShellPath } from './pi.js';
+import { openCodeSessionTitle, opencodeAdapter } from './opencode.js';
+import {
+  piAdapter,
+  readPiSessionTitleFile,
+  syncPiProjectTrust,
+  syncPiWindowsShellPath,
+} from './pi.js';
 import { migrateLegacyPiAgentDir, piWorkspaceProviderId } from './pi-config.js';
 import { prepareAgentRuntimeWorkspace } from '../cli-adapter.js';
 import { credentialToWorkspaceAiCred } from '../credential-injection.js';
@@ -51,6 +56,16 @@ describe('claudeAdapter AI-config', () => {
   it('composeCommand: "last" resume throws (intentionally unsupported)', () => {
     expect(() => claudeAdapter.composeCommand(['claude'], { cwd: dir, env: {}, resume: 'last' }))
       .toThrow(/"last" resume not supported/);
+  });
+
+  it('prefers Claude custom titles over generated titles', async () => {
+    const transcript = join(dir, 'claude-session.jsonl');
+    await writeFile(transcript, [
+      JSON.stringify({ type: 'ai-title', aiTitle: 'Generated title', sessionId: 'native-1' }),
+      JSON.stringify({ type: 'custom-title', customTitle: '  User renamed title  ', sessionId: 'native-1' }),
+      '',
+    ].join('\n'));
+    expect(await readClaudeSessionTitleFile(transcript)).toBe('User renamed title');
   });
 
   it('writes full x-api-key config byte-exact', async () => {
@@ -157,6 +172,17 @@ describe('claudeAdapter AI-config', () => {
     expect(JSON.parse(await read('.claude/settings.local.json'))).toEqual({ effortLevel: 'low' });
   });
 
+  it('persists an effort-only Claude native-login preference', async () => {
+    await claudeAdapter.writeAiConfig!(dir, { reasoningEffort: 'high' });
+    expect(JSON.parse(await read('.claude/settings.local.json'))).toEqual({
+      effortLevel: 'high',
+    });
+    expect(await claudeAdapter.readAiConfig!(dir)).toMatchObject({
+      model: null,
+      reasoningEffort: 'high',
+    });
+  });
+
   it('rejects effort values Claude Code cannot persist in project settings', async () => {
     await expect(claudeAdapter.writeAiConfig!(dir, { model: 'claude-x', reasoningEffort: 'max' }))
       .rejects.toThrow(/cannot persist project effort max/);
@@ -242,29 +268,77 @@ describe('codexAdapter AI-config', () => {
     await codexAdapter.writeAiConfig!(dir, {
       baseUrl: 'https://oai.test/v1', apiKey: 'sk-c', model: 'gpt-x', wireApi: 'responses',
     });
-    expect(await read('.codex/config.toml')).toBe(
+    expect(await read('.codex/openalice-home/config.toml')).toBe(
       'model = "gpt-x"\nmodel_provider = "workspace"\n\n'
       + '[model_providers.workspace]\nname = "OpenAlice workspace provider"\n'
       + 'base_url = "https://oai.test/v1"\nenv_key = "OPENALICE_WORKSPACE_KEY"\nwire_api = "responses"\n',
     );
-    expect(await read('.codex/env.json')).toBe('{\n  "OPENALICE_WORKSPACE_KEY": "sk-c"\n}\n');
+    expect(await read('.codex/openalice-home/env.json'))
+      .toBe('{\n  "OPENALICE_WORKSPACE_KEY": "sk-c"\n}\n');
+    expect(codexAdapter.composeEnv!({ cwd: dir, env: {} })).toEqual({
+      CODEX_HOME: join(dir, '.codex/openalice-home'),
+      OPENALICE_WORKSPACE_KEY: 'sk-c',
+    });
+    expect(codexAdapter.composeCommand([], { cwd: dir, env: {} })).toEqual(expect.arrayContaining([
+      '--model',
+      'gpt-x',
+      '-c',
+      'model_provider="workspace"',
+    ]));
   });
 
   it('always writes wire_api = responses (codex is Responses-only)', async () => {
     await codexAdapter.writeAiConfig!(dir, { baseUrl: 'https://oai.test/v1', apiKey: 'sk-c', model: 'gpt-x' });
-    expect(await read('.codex/config.toml')).toContain('wire_api = "responses"\n');
+    expect(await read('.codex/openalice-home/config.toml')).toContain('wire_api = "responses"\n');
   });
 
-  it('model-only writes no provider block and an empty env.json', async () => {
+  it('binds a managed API key without an explicit endpoint to the official provider', async () => {
+    await codexAdapter.writeAiConfig!(dir, { apiKey: 'sk-c', model: 'gpt-x' });
+    expect(await read('.codex/openalice-home/config.toml')).toContain(
+      'base_url = "https://api.openai.com/v1"\n',
+    );
+    expect(await codexAdapter.readAiConfig!(dir)).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-c',
+      model: 'gpt-x',
+    });
+  });
+
+  it('model-only uses native project config without redirecting CODEX_HOME', async () => {
     await codexAdapter.writeAiConfig!(dir, { model: 'gpt-y' });
     expect(await read('.codex/config.toml')).toBe('model = "gpt-y"\n');
-    expect(await read('.codex/env.json')).toBe('{}\n');
+    expect(existsSync(join(dir, '.codex/env.json'))).toBe(false);
+    expect(existsSync(join(dir, '.codex/openalice-provider.json'))).toBe(true);
+    expect(codexAdapter.composeEnv!({ cwd: dir, env: {} })).toEqual({});
   });
 
-  it('reset (empty cred) tears down the entire .codex/ directory', async () => {
+  it('reset removes only OpenAlice-owned Codex config and preserves siblings', async () => {
+    await mkdir(join(dir, '.codex'), { recursive: true });
+    await writeFile(join(dir, '.codex/config.toml'), 'notify = true\n');
     await codexAdapter.writeAiConfig!(dir, { baseUrl: 'u', model: 'm' });
     await codexAdapter.writeAiConfig!(dir, {});
-    expect(existsSync(join(dir, '.codex'))).toBe(false);
+    expect(await read('.codex/config.toml')).toBe('notify = true\n');
+    expect(existsSync(join(dir, '.codex/openalice-home'))).toBe(false);
+  });
+
+  it('restores a user-owned project model after resetting a native preference', async () => {
+    await mkdir(join(dir, '.codex'), { recursive: true });
+    await writeFile(join(dir, '.codex/config.toml'), 'model = "user-model"\nnotify = true\n');
+
+    await codexAdapter.writeAiConfig!(dir, { model: 'openalice-model', reasoningEffort: 'high' });
+    expect(await read('.codex/config.toml')).toBe(
+      'model = "openalice-model"\nnotify = true\nmodel_reasoning_effort = "high"\n',
+    );
+    await codexAdapter.writeAiConfig!(dir, {});
+    expect(await read('.codex/config.toml')).toBe('model = "user-model"\nnotify = true\n');
+  });
+
+  it('does not restore over a user edit made after native injection', async () => {
+    await codexAdapter.writeAiConfig!(dir, { model: 'openalice-model' });
+    await writeFile(join(dir, '.codex/config.toml'), 'model = "user-edited"\n');
+
+    await codexAdapter.writeAiConfig!(dir, {});
+    expect(await read('.codex/config.toml')).toBe('model = "user-edited"\n');
   });
 
   it('round-trips through readAiConfig', async () => {
@@ -280,8 +354,19 @@ describe('codexAdapter AI-config', () => {
     await codexAdapter.writeAiConfig!(dir, {
       baseUrl: 'https://oai.test/v1', model: 'gpt-x', reasoningEffort: 'medium',
     });
-    expect(await read('.codex/config.toml')).toContain('model_reasoning_effort = "medium"\n');
+    expect(await read('.codex/openalice-home/config.toml'))
+      .toContain('model_reasoning_effort = "medium"\n');
     expect(await codexAdapter.readAiConfig!(dir)).toMatchObject({ reasoningEffort: 'medium' });
+  });
+
+  it('writes and round-trips an effort-only native-login preference', async () => {
+    await codexAdapter.writeAiConfig!(dir, { reasoningEffort: 'high' });
+    expect(await read('.codex/config.toml')).toBe('model_reasoning_effort = "high"\n');
+    expect(codexAdapter.composeEnv!({ cwd: dir, env: {} })).toEqual({});
+    expect(await codexAdapter.readAiConfig!(dir)).toMatchObject({
+      model: null,
+      reasoningEffort: 'high',
+    });
   });
 
   it('readAiConfig returns null when no files exist', async () => {
@@ -289,8 +374,9 @@ describe('codexAdapter AI-config', () => {
   });
 
   it('listOnDisk returns only rollouts whose session_meta cwd matches this workspace', async () => {
-    // Workspace has its own .codex → adapter reads <cwd>/.codex/sessions (not ~).
-    const leaf = join(dir, '.codex', 'sessions', '2026', '06', '05');
+    await codexAdapter.writeAiConfig!(dir, { baseUrl: 'https://oai.test/v1', model: 'gpt-x' });
+    // Only custom-provider mode reads sessions from its isolated CODEX_HOME.
+    const leaf = join(dir, '.codex', 'openalice-home', 'sessions', '2026', '06', '05');
     await mkdir(leaf, { recursive: true });
     const mine = { type: 'session_meta', payload: { id: 'mine-uuid-0001', cwd: dir } };
     const other = { type: 'session_meta', payload: { id: 'other-uuid-0002', cwd: '/some/other/workspace' } };
@@ -308,10 +394,30 @@ describe('codexAdapter AI-config', () => {
     await mkdir(join(dir, '.codex'), { recursive: true });
     expect(await codexAdapter.listOnDisk!(dir)).toEqual([]);
   });
+
+  it('reads Codex native titles from its session index', async () => {
+    await codexAdapter.writeAiConfig!(dir, { baseUrl: 'https://oai.test/v1', model: 'gpt-x' });
+    const home = join(dir, '.codex', 'openalice-home');
+    await mkdir(home, { recursive: true });
+    await writeFile(join(home, 'session_index.jsonl'), [
+      JSON.stringify({ id: 'native-1', thread_name: '  Native Codex title  ', updated_at: '2026-07-30' }),
+      '{"partially-written":',
+      '',
+    ].join('\n'));
+    expect(await codexAdapter.readSessionTitle!(dir, 'native-1')).toBe('Native Codex title');
+    expect(await codexAdapter.readSessionTitle!(dir, 'missing')).toBeNull();
+  });
 });
 
 describe('opencodeAdapter AI-config', () => {
   const mcpEnv = { OPENALICE_MCP_URL: 'http://127.0.0.1:47332/mcp', AQ_WS_ID: 'ws-abc' };
+
+  it('uses the title returned by OpenCode session list', () => {
+    expect(openCodeSessionTitle([
+      { id: 'ses_1', title: '  Native OpenCode title  ' },
+    ], 'ses_1')).toBe('Native OpenCode title');
+    expect(openCodeSessionTitle([], 'ses_1')).toBeNull();
+  });
 
   it('prepares OpenCode to derive its theme from the terminal palette', async () => {
     await mkdir(join(dir, '.git/info'), { recursive: true });
@@ -410,14 +516,23 @@ describe('opencodeAdapter AI-config', () => {
     await opencodeAdapter.writeAiConfig!(dir, {
       baseUrl: 'https://cn.test/v1', apiKey: 'sk-o', model: 'deepseek-chat',
     });
-    expect(JSON.parse(await read('opencode.json'))).toEqual({
+    expect(JSON.parse(await read('opencode.json'))).toMatchObject({
       $schema: 'https://opencode.ai/config.json',
       provider: {
         workspace: {
           npm: '@ai-sdk/openai-compatible',
           name: 'OpenAlice workspace provider',
           options: { baseURL: 'https://cn.test/v1', apiKey: 'sk-o' },
-          models: { 'deepseek-chat': { name: 'deepseek-chat' } },
+          models: {
+            'deepseek-chat': {
+              name: 'deepseek-chat',
+              variants: {
+                none: { reasoningEffort: 'none' },
+                high: { reasoningEffort: 'high' },
+                max: { reasoningEffort: 'max' },
+              },
+            },
+          },
         },
       },
       model: 'workspace/deepseek-chat',
@@ -428,7 +543,7 @@ describe('opencodeAdapter AI-config', () => {
     await opencodeAdapter.writeAiConfig!(dir, {
       baseUrl: 'https://cn.test/v1', apiKey: 'sk-o', model: 'deepseek-chat', contextWindow: 1_000_000,
     });
-    expect(JSON.parse(await read('opencode.json')).provider.workspace.models['deepseek-chat']).toEqual({
+    expect(JSON.parse(await read('opencode.json')).provider.workspace.models['deepseek-chat']).toMatchObject({
       name: 'deepseek-chat',
       limit: { context: 1_000_000, output: 16_384 },
     });
@@ -509,7 +624,7 @@ describe('opencodeAdapter AI-config', () => {
         anthropic: 'https://api.minimax.io/anthropic',
         'openai-chat': 'https://api.minimax.io/v1',
       },
-    }, 'opencode', { model: 'MiniMax-M2.5' })!;
+    }, opencodeAdapter, { model: 'MiniMax-M2.5' })!;
 
     await opencodeAdapter.writeAiConfig!(dir, cred);
     const config = JSON.parse(await read('opencode.json'));
@@ -665,6 +780,83 @@ describe('composeHeadlessCommand (one-shot headless argv, prompt placed per-CLI)
     ]);
   });
 
+  it('projects one-run model and effort overrides into every native CLI', () => {
+    expect(claudeAdapter.composeHeadlessCommand!(
+      ['claude'],
+      ctx(),
+      'do x',
+      { model: 'claude-opus-4-8', reasoningEffort: 'high' },
+    )).toEqual(expect.arrayContaining([
+      '--model', 'claude-opus-4-8', '--effort', 'high',
+    ]));
+    expect(codexAdapter.composeHeadlessCommand!(
+      ['codex'],
+      ctx(),
+      'do x',
+      { model: 'gpt-5.6', reasoningEffort: 'xhigh' },
+    )).toEqual(expect.arrayContaining([
+      '--model', 'gpt-5.6', '-c', 'model_reasoning_effort="xhigh"',
+    ]));
+    expect(opencodeAdapter.composeHeadlessCommand!(
+      ['opencode'],
+      ctx(),
+      'do x',
+      { model: 'openai/gpt-5.6', reasoningEffort: 'high' },
+    )).toEqual(expect.arrayContaining([
+      '--model', 'openai/gpt-5.6', '--variant', 'high',
+    ]));
+    expect(piAdapter.composeHeadlessCommand!(
+      ['pi'],
+      ctx(),
+      'do x',
+      { model: 'gpt-5.6', reasoningEffort: 'none' },
+    )).toEqual(expect.arrayContaining([
+      '--model', 'gpt-5.6', '--thinking', 'off',
+    ]));
+  });
+
+  it('rejects a one-run effort Claude Code does not expose', () => {
+    expect(() => claudeAdapter.composeHeadlessCommand!(
+      ['claude'],
+      ctx(),
+      'do x',
+      { reasoningEffort: 'xhigh' },
+    )).toThrow(/cannot use one-run effort xhigh/);
+  });
+
+  it('keeps custom-provider model overrides inside registered opencode/Pi models', async () => {
+    await opencodeAdapter.writeAiConfig!(dir, {
+      baseUrl: 'https://provider.test/v1',
+      model: 'registered-model',
+    });
+    expect(opencodeAdapter.composeHeadlessCommand!(
+      ['opencode'],
+      { cwd: dir, env: {} },
+      'do x',
+      { model: 'registered-model', reasoningEffort: 'high' },
+    )).toEqual(expect.arrayContaining([
+      '--model', 'workspace/registered-model', '--variant', 'high',
+    ]));
+    expect(() => opencodeAdapter.composeHeadlessCommand!(
+      ['opencode'],
+      { cwd: dir, env: {} },
+      'do x',
+      { model: 'unregistered-model' },
+    )).toThrow(/not registered by this Workspace provider/);
+
+    await mkdir(join(dir, '.pi'), { recursive: true });
+    await writeFile(join(dir, '.pi/settings.json'), JSON.stringify({
+      defaultProvider: 'openalice-workspace-test',
+      defaultModel: 'registered-model',
+    }));
+    expect(() => piAdapter.composeHeadlessCommand!(
+      ['pi'],
+      { cwd: dir, env: {} },
+      'do x',
+      { model: 'unregistered-model' },
+    )).toThrow(/not registered by this Workspace provider/);
+  });
+
   it('resumes headless conversations by backend-resolved native id for all runtimes', () => {
     const resume = { sessionId: 'native-session-1' } as const;
     expect(claudeAdapter.composeHeadlessCommand!(['claude'], { ...ctx(), resume }, 'next')).toContain('native-session-1');
@@ -697,6 +889,17 @@ describe('composeHeadlessCommand (one-shot headless argv, prompt placed per-CLI)
 
 describe('piAdapter AI-config', () => {
   const mcpEnv = { OPENALICE_MCP_URL: 'http://127.0.0.1:47332/mcp', AQ_WS_ID: 'ws-abc' };
+
+  it('uses the latest explicit Pi session name', async () => {
+    const transcript = join(dir, 'pi-session.jsonl');
+    await writeFile(transcript, [
+      JSON.stringify({ type: 'session', id: 'native-1', cwd: dir }),
+      JSON.stringify({ type: 'session_info', name: 'First name' }),
+      JSON.stringify({ type: 'session_info', name: '  Renamed in Pi  ' }),
+      '',
+    ].join('\n'));
+    expect(await readPiSessionTitleFile(transcript)).toBe('Renamed in Pi');
+  });
   let previousPiAgentDir: string | undefined;
 
   beforeEach(() => {

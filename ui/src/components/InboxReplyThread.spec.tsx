@@ -54,10 +54,31 @@ describe('InboxReplyThread', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Reply to this update…' }), {
       target: { value: 'Which data did you use?' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+    const reply = screen.getByRole('button', { name: 'Reply' })
+    expect(reply.className).toContain('h-10')
+    expect(reply.className).toContain('w-10')
+    expect(reply.className).toContain('sm:h-8')
+    fireEvent.click(reply)
 
     await waitFor(() => expect(ask).toHaveBeenCalledWith('Which data did you use?'))
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+  })
+
+  it('sends with Enter and keeps Shift+Enter for a new line', async () => {
+    const load = vi.fn().mockResolvedValue([])
+    const ask = vi.fn().mockResolvedValue({ status: 'dispatched' })
+
+    render(
+      <InboxReplyThread sender="pi" hasExactSender load={load} ask={ask} />,
+    )
+
+    const textbox = await screen.findByRole('textbox', { name: 'Reply to this update…' })
+    fireEvent.change(textbox, { target: { value: 'First line' } })
+    fireEvent.keyDown(textbox, { key: 'Enter', code: 'Enter', shiftKey: true })
+    expect(ask).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(textbox, { key: 'Enter', code: 'Enter' })
+    await waitFor(() => expect(ask).toHaveBeenCalledWith('First line'))
   })
 
   it('renders completed and running replies as one chronological thread', async () => {
