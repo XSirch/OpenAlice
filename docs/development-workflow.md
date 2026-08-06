@@ -335,17 +335,10 @@ and verifies both CDN objects. A manual `mirror_tag` run is recovery-only: it
 checks out that existing tag and may reproduce its bytes, but must never source
 an installer from current `master`.
 
-Desktop promotion evidence includes a real N-1 state journey on Apple Silicon,
-Intel macOS, and Windows. PR package jobs seed state with the previous published
-app and verify the unpacked candidate can migrate, write, and restart. The
-versioned release preserves each final signed macOS ZIP or Windows NSIS
-installer as soon as its fast package acceptance and updater byte verification
-pass, then runs the N-1 journey in a downstream platform job. A failed upgrade
-job can therefore reuse the preserved candidate without repeating packaging,
-signing, or notarization. `publish-release` still requires every platform's
-upgrade receipt and verifies each updater YAML reference, size, SHA-512, and
-blockmap before publishing. Missing receipts or mismatched update metadata must
-prevent the tag and public assets from being created.
+The supported release target is Linux/VPS. Promotion builds and accepts the
+Linux headless Runtime for x64 and arm64, the Linux Broker Packs, and the CLI
+installer before publishing. macOS and Windows desktop installers are not part
+of CI, release publication, or CDN verification.
 
 Do not delete `dev` after promotion. After a master hotfix, propagate the fix
 back to `dev` immediately so a later promotion cannot revert it.

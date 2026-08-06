@@ -7,8 +7,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import * as pty from 'node-pty'
 import { afterEach, describe, expect, it } from 'vitest'
+
+const pty = await import('node-pty').catch(() => null)
+const ptyIt = pty ? it : it.skip
 
 const execFileAsync = promisify(execFile)
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -309,7 +311,7 @@ describe.skipIf(process.platform === 'win32')('OpenAlice CLI installer', { timeo
     await expect(access(installRoot)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('treats blank interactive confirmation as cancellation', async () => {
+  ptyIt('treats blank interactive confirmation as cancellation', async () => {
     const home = await mkdtemp(join(tmpdir(), 'openalice-install-cancel-'))
     temporaryPaths.push(home)
     const installRoot = join(home, '.openalice')
@@ -327,7 +329,7 @@ describe.skipIf(process.platform === 'win32')('OpenAlice CLI installer', { timeo
     await expect(access(installRoot)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('installs after an explicit interactive y confirmation', async () => {
+  ptyIt('installs after an explicit interactive y confirmation', async () => {
     const home = await mkdtemp(join(tmpdir(), 'openalice-install-confirm-'))
     temporaryPaths.push(home)
     const installRoot = join(home, '.openalice')
@@ -371,6 +373,10 @@ describe.skipIf(process.platform === 'win32')('OpenAlice CLI installer', { timeo
 
 function runInstallerInPty(args, { home, reply }) {
   return new Promise((resolvePromise, rejectPromise) => {
+    if (!pty) {
+      rejectPromise(new Error('node-pty is unavailable'))
+      return
+    }
     const terminal = pty.spawn('bash', [join(repositoryRoot, 'install'), ...args], {
       cwd: repositoryRoot,
       cols: 120,

@@ -60,6 +60,12 @@ desktop distribution remains the signed Electron installer. The complete
 consent, update, filesystem, PATH, authenticity, and test contract lives in
 [[docs/cli-installer.md]].
 
+Source checkouts also declare the Node 22.19.0 minimum through pnpm's
+`devEngines.runtime` download policy. A host may bootstrap pnpm 10 with an
+older Node version, but dependency lifecycle scripts and project commands run
+with a compatible downloaded Node runtime. This is a development/QA bootstrap aid,
+not a relaxation of the Node 22 application requirement.
+
 Installer flags, non-interactive consent, development seams, the clean Docker
 fixture, and the manual prompt playground are documented only in
 [[docs/cli-installer.md]].

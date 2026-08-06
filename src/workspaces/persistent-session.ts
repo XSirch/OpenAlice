@@ -1,4 +1,3 @@
-import * as pty from 'node-pty';
 import type { WebSocket } from 'ws';
 
 import type { Logger } from './logger.js';
@@ -8,6 +7,7 @@ import {
   type ServerControlMessage,
 } from './protocol.js';
 import { ReplayBuffer } from './replay-buffer.js';
+import { requirePty, type PtyProcess } from './pty-runtime.js';
 import { resolveLaunchCommand } from './win-command.js';
 import {
   terminalColorSchemeUpdateSequence,
@@ -85,7 +85,7 @@ const RESPAWN_WINDOW_LIMIT = 3;
  * reattach.
  */
 export class PersistentSession {
-  private term: pty.IPty;
+  private term: PtyProcess;
   private readonly buffer: ReplayBuffer;
   private readonly headless: HeadlessTerminalSnapshot;
   private terminalViewAttributes: TerminalViewAttributes | null = null;
@@ -160,7 +160,7 @@ export class PersistentSession {
     });
   }
 
-  private spawnChild(): pty.IPty {
+  private spawnChild(): PtyProcess {
     if (this.opts.command.length === 0) {
       throw new Error('command must contain at least one argv element');
     }
@@ -173,7 +173,7 @@ export class PersistentSession {
     }).argv;
     if (!argv0) throw new Error('command must contain at least one argv element');
 
-    const term = pty.spawn(argv0, args, {
+    const term = requirePty().spawn(argv0, args, {
       name: 'xterm-256color',
       cols: this.currentCols,
       rows: this.currentRows,
@@ -195,7 +195,7 @@ export class PersistentSession {
    * we open the circuit breaker and dispose for real.
    */
   private onChildExit(
-    exited: pty.IPty,
+    exited: PtyProcess,
     exitCode: number,
     signalRaw: number | undefined,
   ): void {
