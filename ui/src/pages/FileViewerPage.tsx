@@ -11,12 +11,12 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft, Eye, FileText, Pencil, Save, X } from 'lucide-react'
 
 import { FileContentView } from '../components/FileContentView'
 import { CenteredLoading } from '../components/StateViews'
 import { useWorkspaces } from '../contexts/workspaces-context'
-import { readWorkspaceFile, type ReadFileResult } from '../components/workspace/api'
+import { readWorkspaceFile, updateWorkspaceMarkdown, type ReadFileResult } from '../components/workspace/api'
 import { workspaceDisplayName, workspaceDisplayTitle } from '../components/workspace/display'
 import { useTrackedSelection } from '../live/tracked-selection'
 import { useWorkspace } from '../tabs/store'
@@ -41,16 +41,41 @@ export function FileViewerPage({ spec }: Props) {
     : t('fileViewer.backToWorkspace', { workspace: workspaceName })
 
   const [result, setResult] = useState<ReadFileResult | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
     setResult(null)
     readWorkspaceFile(wsId, path).then((r) => {
-      if (!cancelled) setResult(r)
+      if (!cancelled) {
+        setResult(r)
+        if (r.kind === 'ok') setDraft(r.content)
+        setEditing(false)
+        setSaveError(null)
+      }
     })
     return () => {
       cancelled = true
     }
   }, [wsId, path])
+
+  const canEdit = path.toLowerCase().endsWith('.md') && result?.kind === 'ok' && Boolean(result.revision)
+  const save = async () => {
+    if (result?.kind !== 'ok') return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const updated = await updateWorkspaceMarkdown(wsId, path, draft, result.revision)
+      setResult({ kind: 'ok', content: draft, revision: updated.revision })
+      setEditing(false)
+    } catch (error) {
+      setSaveError((error as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const goBack = () => {
     if (source === 'tracked') {
@@ -62,7 +87,7 @@ export function FileViewerPage({ spec }: Props) {
     setSidebar(
       source === 'chat'
         ? 'chat'
-        : source === 'auto-quant' ? 'auto-quant' : 'workspaces',
+        : source === 'auto-quant' ? 'auto-quant' : source === 'alice-portfolio' ? 'alice-portfolio' : 'workspaces',
     )
     openOrFocus({
       kind: 'workspace',
@@ -95,6 +120,24 @@ export function FileViewerPage({ spec }: Props) {
           >
             {path}
           </span>
+          {canEdit && (
+            <div className="mt-2 flex shrink-0 gap-1 sm:ml-2 sm:mt-0">
+              {editing ? (
+                <>
+                  <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
+                    <Save size={13} aria-hidden />{saving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button type="button" onClick={() => { setDraft(result.content); setEditing(false); setSaveError(null) }} disabled={saving} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium">
+                    <X size={13} aria-hidden />Cancel
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setEditing(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-muted">
+                  <Pencil size={13} aria-hidden />Edit
+                </button>
+              )}
+            </div>
+          )}
           <span
             className="mt-1 block break-all text-[11px] text-muted-foreground/70 sm:ml-auto sm:mt-0 sm:max-w-[min(35vw,20rem)] sm:truncate sm:text-right"
             title={workspaceTitle}
@@ -105,7 +148,19 @@ export function FileViewerPage({ spec }: Props) {
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-[820px] mx-auto px-6 py-6">
-          {result === null ? (
+          {saveError && <div role="alert" className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{saveError}</div>}
+          {editing && result?.kind === 'ok' ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Eye size={13} aria-hidden />Markdown source</div>
+              <textarea
+                aria-label={`Edit ${path}`}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                className="min-h-[65vh] w-full resize-y rounded-md border border-border bg-background p-3 font-mono text-sm leading-6 text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+                spellCheck
+              />
+            </div>
+          ) : result === null ? (
             <CenteredLoading />
           ) : (
             <FileContentView path={path} result={result} />

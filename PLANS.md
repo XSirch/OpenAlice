@@ -28,6 +28,7 @@ the durable truth after it changes.
 
 ## Completed
 
+- [[plans/alice-portfolio-provenance-ui.md]] — Preserved MeuPluggy bank custody provenance, added a dedicated Alice Portfolio area, and enabled revision-safe Markdown editing in durable Workspaces.
 - [[plans/semantic-issue-assignees.md]] — Replaced ambiguous scheduled-Issue
   assignee tokens with behavior-named canonical values, explicit deprecated
   aliases, and an idempotent Workspace-file migration. Delivered in serial PR

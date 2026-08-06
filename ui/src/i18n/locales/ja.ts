@@ -11,6 +11,7 @@ export const ja: Resources = {
       workspaces: 'ワークスペース',
       market: 'マーケット',
       news: 'ニュース',
+      alicePortfolio: 'Alice Portfolio',
       tradingAsGit: 'Trading as Git',
       portfolio: 'ポートフォリオ',
       wealthForecast: '資産予測',

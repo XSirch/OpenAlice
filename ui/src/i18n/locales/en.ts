@@ -22,6 +22,7 @@ export const en = {
       workspaces: 'Workspaces',
       market: 'Market',
       news: 'News',
+      alicePortfolio: 'Alice Portfolio',
       tradingAsGit: 'Trading as Git',
       portfolio: 'Portfolio',
       wealthForecast: 'Wealth forecast',

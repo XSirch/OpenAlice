@@ -7,6 +7,7 @@
  */
 
 import { Hono } from 'hono';
+import { markdownRevision, MarkdownEditError, updateWorkspaceMarkdown } from '../../workspaces/markdown-editor.js';
 import { readFile } from 'node:fs/promises';
 import { join, resolve as resolvePath } from 'node:path';
 
@@ -1299,13 +1300,40 @@ export function createWorkspaceRoutes(
       if (content.length > 1024 * 1024) {
         return c.json({ error: 'file_too_large', sizeBytes: content.length }, 413);
       }
-      return c.json({ path: p, content });
+      return c.json({ path: p, content, revision: markdownRevision(content) });
     } catch (err) {
       if (err instanceof PathTraversal) {
         return c.json({ error: 'invalid_path', message: err.message }, 400);
       }
       launcherLogger.warn('files.read_failed', { id, path: p, err });
       return c.json({ error: 'read_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.put('/:id/file', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'workspace_not_found' }, 404);
+    const body = await c.req.json().catch(() => null) as { path?: unknown; content?: unknown; expectedRevision?: unknown } | null;
+    if (!body || typeof body.path !== 'string' || typeof body.content !== 'string' || typeof body.expectedRevision !== 'string') {
+      return c.json({ error: 'invalid_request' }, 400);
+    }
+    if (Buffer.byteLength(body.content, 'utf8') > 1024 * 1024) return c.json({ error: 'file_too_large' }, 413);
+    try {
+      return c.json(await updateWorkspaceMarkdown({
+        workspaceDir: meta.dir,
+        path: body.path,
+        content: body.content,
+        expectedRevision: body.expectedRevision,
+      }));
+    } catch (error) {
+      if (error instanceof MarkdownEditError) {
+        const status = error.code === 'file_not_found' ? 404 : error.code === 'revision_conflict' ? 409 : error.code === 'git_failed' ? 500 : 400;
+        return c.json({ error: error.code, message: error.message }, status);
+      }
+      launcherLogger.warn('files.update_failed', { id, path: body.path, err: error });
+      return c.json({ error: 'update_failed', message: (error as Error).message }, 500);
     }
   });
 

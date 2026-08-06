@@ -1250,7 +1250,7 @@ export async function listFiles(id: string, relPath: string): Promise<DirListing
  * tombstone variants without parsing error strings.
  */
 export type ReadFileResult =
-  | { kind: 'ok'; content: string }
+  | { kind: 'ok'; content: string; revision: string }
   | { kind: 'workspace_missing' }
   | { kind: 'file_missing' }
   | { kind: 'too_large'; sizeBytes: number }
@@ -1268,8 +1268,8 @@ export async function readWorkspaceFile(id: string, relPath: string): Promise<Re
     return { kind: 'error', message: (err as Error).message };
   }
   if (res.ok) {
-    const body = (await res.json()) as { content: string };
-    return { kind: 'ok', content: body.content };
+    const body = (await res.json()) as { content: string; revision: string };
+    return { kind: 'ok', content: body.content, revision: body.revision };
   }
   // Map known error shapes to discriminated variants. Unknown → generic error.
   const body = (await res.json().catch(() => null)) as { error?: string; sizeBytes?: number } | null;
@@ -1280,6 +1280,31 @@ export async function readWorkspaceFile(id: string, relPath: string): Promise<Re
     case 'invalid_path':        return { kind: 'invalid_path' };
     default:                    return { kind: 'error', message: body?.error ?? `HTTP ${res.status}` };
   }
+}
+
+export class WorkspaceMarkdownUpdateError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message)
+    this.name = 'WorkspaceMarkdownUpdateError'
+  }
+}
+
+export async function updateWorkspaceMarkdown(
+  id: string,
+  path: string,
+  content: string,
+  expectedRevision: string,
+): Promise<{ revision: string; commit: string }> {
+  const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path, content, expectedRevision }),
+  })
+  const body = await res.json().catch(() => ({})) as { revision?: string; commit?: string; error?: string; message?: string }
+  if (!res.ok || !body.revision || !body.commit) {
+    throw new WorkspaceMarkdownUpdateError(body.error ?? 'update_failed', body.message ?? `HTTP ${res.status}`)
+  }
+  return { revision: body.revision, commit: body.commit }
 }
 
 // ── Agent provider config ───────────────────────────────────────────────────

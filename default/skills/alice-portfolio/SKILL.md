@@ -87,6 +87,11 @@ manufacture holdings or a precise rebalance.
 
 Record the portfolio `asOf` and calculate from returned values only:
 
+- identify the `custodian` of every MeuPluggy position;
+- group positions and current values by custodian in the portfolio summary;
+- write `instituição não informada pelo Pluggy` when `custodian` is absent;
+- never infer a bank from the asset name, symbol, issuer, or product family.
+
 - total observed patrimony and allocation by class, issuer, product, currency,
   liquidity bucket, maturity bucket and relevant risk factor;
 - concentration, issuer credit and FGC coverage, duration/liquidity mismatch,

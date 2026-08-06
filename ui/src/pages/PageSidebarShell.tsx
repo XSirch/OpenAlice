@@ -10,6 +10,7 @@ type NavTitleKey =
   | 'nav.item.dev'
   | 'nav.item.market'
   | 'nav.item.portfolio'
+  | 'nav.item.alicePortfolio'
   | 'nav.item.automation'
 
 interface PageSidebarShellProps {

@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import {
   DEMO_AUTO_QUANT_WORKSPACE_ID,
+  DEMO_ALICE_PORTFOLIO_WORKSPACE_ID,
   demoChatWorkspace,
   demoWorkspaces,
   demoTemplates,
@@ -44,6 +45,9 @@ let demoWorkspaceCreateSequence = 0
 let demoAutoQuantDefaultWorkspaceId: string | null = DEMO_AUTO_QUANT_WORKSPACE_ID
 const demoCreatedWorkspaceIds = new Set<string>()
 const DEMO_WORKSPACE_TAG_RE = /^[a-z0-9][a-z0-9_-]{0,32}$/
+const demoFileEdits = new Map<string, string>()
+const demoGoal = '# Objetivo atual\n\n- Objetivo: aposentadoria\n'
+const demoRevision = (content: string): string => `demo-${content.length}-${content.charCodeAt(0) || 0}`
 
 export function resetDemoWorkspaceCreateState(): void {
   for (const id of demoCreatedWorkspaceIds) {
@@ -124,7 +128,10 @@ function demoDirectoryListing(workspaceId: string, requestedPath: string) {
     mtime: string
   }>()
 
-  for (const filePath of demoWorkspaceFilePaths[workspaceId] ?? []) {
+  const filePaths = workspaceId === DEMO_ALICE_PORTFOLIO_WORKSPACE_ID
+    ? ['portfolio/goal.md']
+    : demoWorkspaceFilePaths[workspaceId] ?? []
+  for (const filePath of filePaths) {
     if (!filePath.startsWith(prefix)) continue
     const remainder = filePath.slice(prefix.length)
     if (!remainder) continue
@@ -137,7 +144,7 @@ function demoDirectoryListing(workspaceId: string, requestedPath: string) {
       name,
       kind,
       sizeBytes: kind === 'file'
-        ? new TextEncoder().encode(demoWorkspaceFiles[filePath] ?? '').byteLength
+        ? new TextEncoder().encode(filePath === 'portfolio/goal.md' ? demoGoal : demoWorkspaceFiles[filePath] ?? '').byteLength
         : null,
       mtime: DEMO_FILE_MTIME,
     })
@@ -833,9 +840,21 @@ export const workspacesHandlers = [
   http.get('/api/workspaces/:id/file', ({ request }) => {
     const url = new URL(request.url)
     const path = url.searchParams.get('path') ?? ''
-    const content = demoWorkspaceFiles[path]
-    if (content != null) return HttpResponse.json({ content })
+    const content = demoFileEdits.get(path) ?? (path === 'portfolio/goal.md' ? demoGoal : demoWorkspaceFiles[path])
+    if (content != null) return HttpResponse.json({ content, revision: demoRevision(content) })
     return HttpResponse.json({ error: 'file_not_found' }, { status: 404 })
+  }),
+  http.put('/api/workspaces/:id/file', async ({ request }) => {
+    const body = await request.json() as { path?: string; content?: string; expectedRevision?: string }
+    const current = demoFileEdits.get(body.path ?? '') ?? (body.path === 'portfolio/goal.md' ? demoGoal : demoWorkspaceFiles[body.path ?? ''])
+    if (!body.path?.toLowerCase().endsWith('.md') || current == null || typeof body.content !== 'string') {
+      return HttpResponse.json({ error: 'not_markdown' }, { status: 400 })
+    }
+    if (body.expectedRevision !== demoRevision(current)) {
+      return HttpResponse.json({ error: 'revision_conflict', message: 'The file changed after it was opened.' }, { status: 409 })
+    }
+    demoFileEdits.set(body.path, body.content)
+    return HttpResponse.json({ revision: demoRevision(body.content), commit: 'demo-portfolio-commit' })
   }),
 
   http.post('/api/workspaces/:id/sessions/spawn', ({ params }) =>

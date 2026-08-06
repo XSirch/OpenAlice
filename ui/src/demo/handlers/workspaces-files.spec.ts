@@ -5,6 +5,7 @@ import { setupServer } from 'msw/node'
 
 import {
   DEMO_CHAT_WORKSPACE_ID,
+  DEMO_ALICE_PORTFOLIO_WORKSPACE_ID,
   DEMO_WORKSPACE_ID,
 } from '../fixtures/workspaces'
 import {
@@ -38,6 +39,21 @@ async function listFiles(workspaceId: string, path = '') {
 }
 
 describe('demo Workspace file listings', () => {
+  it('round-trips a revision-safe Alice Portfolio Markdown update', async () => {
+    const root = await listFiles(DEMO_ALICE_PORTFOLIO_WORKSPACE_ID)
+    expect(root.body.entries).toMatchObject([{ name: 'portfolio', kind: 'dir' }])
+    const portfolio = await listFiles(DEMO_ALICE_PORTFOLIO_WORKSPACE_ID, 'portfolio')
+    expect(portfolio.body.entries).toMatchObject([{ name: 'goal.md', kind: 'file' }])
+    const read = await fetch(`${baseUrl}/api/workspaces/${DEMO_ALICE_PORTFOLIO_WORKSPACE_ID}/file?path=portfolio%2Fgoal.md`)
+    const initial = await read.json() as { revision: string }
+    const update = await fetch(`${baseUrl}/api/workspaces/${DEMO_ALICE_PORTFOLIO_WORKSPACE_ID}/file`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: 'portfolio/goal.md', content: '# Novo objetivo\n', expectedRevision: initial.revision }),
+    })
+    expect(update.status).toBe(200)
+    await expect(update.json()).resolves.toMatchObject({ commit: 'demo-portfolio-commit' })
+  })
   it('assigns every readable demo artifact to a Workspace directory', () => {
     const indexedPaths = Object.values(demoWorkspaceFilePaths).flat().sort()
     expect(indexedPaths).toEqual(Object.keys(demoWorkspaceFiles).sort())
