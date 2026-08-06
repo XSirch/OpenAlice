@@ -25,7 +25,6 @@ jobs:
       created: ${{ !github.event.inputs.mirror_tag && steps.check.outputs.exists == 'false' }}
       tag: ${{ github.event.inputs.mirror_tag || steps.version.outputs.tag }}
       prerelease: ${{ steps.version.outputs.prerelease }}
-      previous_tag: ${{ steps.version.outputs.previous_tag }}
 
     steps:
       - uses: actions/checkout@v7
@@ -40,7 +39,6 @@ jobs:
           test "$CLI_VERSION" = "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
           # Determine if pre-release (contains - like beta.1, rc.1)
           if [[ "$VERSION" == *-* ]]; then
@@ -213,7 +211,9 @@ jobs:
         run: pnpm broker-packs:build
 
       - name: Prove previous-release Broker Pack upgrade
-        run: pnpm broker-packs:upgrade-smoke -- --from "${{ needs.release.outputs.previous_tag }}"
+        run: pnpm broker-packs:upgrade-smoke
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Preserve Broker Packs
         uses: actions/upload-artifact@v4

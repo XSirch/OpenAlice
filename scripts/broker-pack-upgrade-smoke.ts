@@ -10,7 +10,6 @@
  */
 
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
 import {
   mkdtemp,
@@ -40,6 +39,10 @@ import {
 import { getCurrentVersion } from '../src/core/version.js'
 import { reconcileInstalledBrokerPacks } from '../src/services/broker-packs/auto-updater.js'
 import { getBrokerPackLocalStatus } from '../src/services/broker-packs/installer.js'
+import {
+  selectPreviousBrokerPackRelease,
+  type GitHubReleaseSummary,
+} from './broker-pack-upgrade-smoke-lib.js'
 
 const repoRoot = resolve(import.meta.dirname, '..')
 const candidateRoot = resolve(repoRoot, 'dist', 'broker-packs')
@@ -47,7 +50,7 @@ const repository = 'TraderAlice/OpenAlice'
 
 async function main(): Promise<void> {
   const currentVersion = getCurrentVersion()
-  const previousTag = readPreviousTag(process.argv.slice(2), currentVersion)
+  const previousTag = await readPreviousTag(process.argv.slice(2), currentVersion)
   const previousVersion = previousTag.replace(/^v/, '')
   if (previousVersion === currentVersion) {
     throw new Error(`previous release ${previousTag} must differ from candidate ${currentVersion}`)
@@ -199,19 +202,35 @@ async function serveCandidateAssets(root: string): Promise<Server> {
   return server
 }
 
-function readPreviousTag(args: string[], currentVersion: string): string {
+async function readPreviousTag(args: string[], currentVersion: string): Promise<string> {
   const index = args.indexOf('--from')
   if (index >= 0) {
     const value = args[index + 1]?.trim()
     if (!value) throw new Error('--from requires a release tag')
     return value.startsWith('v') ? value : `v${value}`
   }
-  const tags = execFileSync('git', ['tag', '--sort=-creatordate'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  }).split(/\r?\n/).map((tag) => tag.trim()).filter(Boolean)
-  const previous = tags.find((tag) => tag.replace(/^v/, '') !== currentVersion)
-  if (!previous) throw new Error('no previous release tag found; pass --from <tag>')
+  const headers: Record<string, string> = {
+    accept: 'application/vnd.github+json',
+    'user-agent': 'OpenAlice-broker-pack-upgrade-smoke',
+  }
+  const token = process.env['GITHUB_TOKEN']?.trim()
+  if (token) headers.authorization = `Bearer ${token}`
+  const releases = await fetchJson<GitHubReleaseSummary[]>(
+    `https://api.github.com/repos/${repository}/releases?per_page=100`,
+    headers,
+  )
+  const previous = selectPreviousBrokerPackRelease(
+    releases,
+    currentVersion,
+    process.platform,
+    process.arch,
+  )
+  if (!previous) {
+    throw new Error(
+      `no previous release contains a Broker Pack catalog for ${process.platform}-${process.arch}; `
+      + 'pass --from <tag> to override',
+    )
+  }
   return previous
 }
 
@@ -223,12 +242,16 @@ async function readCatalog(path: string): Promise<BrokerPackReleaseCatalog> {
   return JSON.parse(await readFile(path, 'utf8')) as BrokerPackReleaseCatalog
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  return JSON.parse((await fetchBytes(url)).toString('utf8')) as T
+async function fetchJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
+  return JSON.parse((await fetchBytes(url, headers)).toString('utf8')) as T
 }
 
-async function fetchBytes(url: string): Promise<Buffer> {
-  const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(120_000) })
+async function fetchBytes(url: string, headers?: Record<string, string>): Promise<Buffer> {
+  const response = await fetch(url, {
+    redirect: 'follow',
+    signal: AbortSignal.timeout(120_000),
+    headers,
+  })
   if (!response.ok) throw new Error(`GET ${url} failed: HTTP ${response.status}`)
   return Buffer.from(await response.arrayBuffer())
 }

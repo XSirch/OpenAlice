@@ -195,6 +195,11 @@ npx tsc --noEmit
 cd ui && npx tsc -b
 ```
 
+The upgrade smoke discovers the newest non-draft GitHub Release that actually
+contains a Broker Pack catalog for the current platform and architecture. Use
+`--from <tag>` only to exercise a specific release explicitly; an older Git tag
+without published Pack assets is not a valid upgrade fixture.
+
 For desktop changes, follow [[docs/managed-workspace-runtime.md]] and require
 `pnpm electron:assert-package` plus the packaged Workspace smoke. For a broker
 implementation change, also follow the paper/demo scenarios in
