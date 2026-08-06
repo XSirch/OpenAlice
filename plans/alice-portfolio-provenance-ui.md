@@ -9,6 +9,12 @@ relationship, added a MeuPluggy account overview for bank accounts, cards and
 investments grouped by institution, and added a direct `portfolio/goal.md`
 shortcut to the Alice Portfolio sidebar.
 
+MeuPluggy proxy follow-up on 2026-08-06: the official MeuPluggy flow exposes
+one proxy Item per authorized bank while retaining `MeuPluggy` as the Connector
+name. Added an explicit, user-confirmed Item-to-institution mapping; the proxy
+connector name is never emitted as custodian and unlabeled legacy Items remain
+unknown rather than being inferred from asset or issuer names.
+
 Owner guides: [[docs/workspace-agent-guidance.md]], [[docs/managed-workspace-runtime.md]].
 
 ## Decisions

@@ -22,7 +22,7 @@ export function createAliceInvestCustodyTools(deps = {
         const config = await deps.readConfig()
         if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return { ok: false as const, error: 'MeuPluggy is not configured.' }
         const [snapshot, definitions] = await Promise.all([
-          deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+          deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions),
           deps.readDefinitions(),
         ])
         const classified = new Map(definitions.entries.map((entry) => [entry.source.positionId, entry.product]))
@@ -35,7 +35,7 @@ export function createAliceInvestCustodyTools(deps = {
       execute: async ({ positionId, product }) => {
         const config = await deps.readConfig()
         if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return { ok: false as const, error: 'MeuPluggy is not configured.' }
-        const snapshot = await deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds)
+        const snapshot = await deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions)
         if (!snapshot.positions.some((position) => position.id === positionId)) return { ok: false as const, error: 'The custody position is not present in the latest MeuPluggy snapshot.' }
         const current = await deps.readDefinitions()
         const entries = [...current.entries.filter((entry) => entry.source.positionId !== positionId), { source: { provider: 'pluggy' as const, positionId }, product }]
