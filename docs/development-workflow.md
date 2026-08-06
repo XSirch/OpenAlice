@@ -335,6 +335,11 @@ and verifies both CDN objects. A manual `mirror_tag` run is recovery-only: it
 checks out that existing tag and may reproduce its bytes, but must never source
 an installer from current `master`.
 
+The Cloudflare R2 mirror is optional for forks and private deployments. It runs
+only when `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`,
+`R2_BUCKET`, and `DOWNLOAD_BASE_URL` are all configured; otherwise the workflow
+keeps the GitHub Release and reports the skipped mirror as a notice.
+
 The supported release target is Linux/VPS. Promotion builds and accepts the
 Linux headless Runtime for x64 and arm64, the Linux Broker Packs, and the CLI
 installer before publishing. macOS and Windows desktop installers are not part

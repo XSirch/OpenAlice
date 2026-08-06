@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import YAML from 'yaml'
 
 interface WorkflowStep {
+  id?: string
+  if?: string
   name?: string
   uses?: string
   with?: Record<string, unknown>
@@ -77,5 +79,15 @@ describe('Release workflow critical path', () => {
     ])
     const publish = step(workflow.jobs['publish-release'], 'Create tag and GitHub Release from accepted candidates')
     expect(String(publish.with?.files)).not.toMatch(/\.dmg|\.exe|\.blockmap|release-assets/)
+  })
+
+  it('treats the R2 mirror as optional when repository secrets are absent', () => {
+    const mirror = workflow.jobs['mirror-release-assets']
+    expect(step(mirror, 'Check optional R2 configuration').id).toBe('r2')
+    expect(step(mirror, 'Install AWS CLI').if).toBe("steps.r2.outputs.enabled == 'true'")
+    expect(step(mirror, 'Mirror release assets to Cloudflare R2').if).toBe(
+      "steps.r2.outputs.enabled == 'true'",
+    )
+    expect(step(mirror, 'Verify CDN metadata').if).toBe("steps.r2.outputs.enabled == 'true'")
   })
 })

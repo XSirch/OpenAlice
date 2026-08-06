@@ -337,12 +337,34 @@ jobs:
             gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           fi
 
+      - name: Check optional R2 configuration
+        id: r2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+        run: |
+          missing=()
+          for name in R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ACCOUNT_ID R2_BUCKET DOWNLOAD_BASE_URL; do
+            if [ -z "${!name}" ]; then missing+=("$name"); fi
+          done
+          if ((${#missing[@]})); then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=R2 mirror skipped::Missing repository secrets: ${missing[*]}"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install AWS CLI
+        if: steps.r2.outputs.enabled == 'true'
         run: |
           python3 -m pip install --user awscli
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Mirror release assets to Cloudflare R2
+        if: steps.r2.outputs.enabled == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -379,6 +401,7 @@ jobs:
             --endpoint-url "$ENDPOINT"
 
       - name: Verify CDN metadata
+        if: steps.r2.outputs.enabled == 'true'
         env:
           DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
           PUBLIC_INSTALL_URL: https://openalice.ai/install
