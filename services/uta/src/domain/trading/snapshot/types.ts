@@ -22,6 +22,7 @@ export interface UTASnapshot {
     totalCashValue: string
     unrealizedPnL: string
     realizedPnL: string
+    custodian?: string
     buyingPower?: string
     initMarginReq?: string
     maintMarginReq?: string
