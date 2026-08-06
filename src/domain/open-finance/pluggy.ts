@@ -54,7 +54,31 @@ interface PluggyInvestment {
 }
 
 interface PluggyListResponse { results?: PluggyInvestment[]; data?: PluggyInvestment[] }
-interface PluggyItem { connector?: { name?: string } }
+interface PluggyConnector { id?: number; name?: string }
+interface PluggyItem { connector?: PluggyConnector }
+interface PluggyAccount {
+  id?: string
+  type?: 'BANK' | 'CREDIT'
+  name?: string
+  marketingName?: string
+  number?: string
+  balance?: number
+  currencyCode?: string
+  creditData?: { availableCreditLimit?: number; creditLimit?: number }
+}
+interface PluggyAccountListResponse { results?: PluggyAccount[]; data?: PluggyAccount[] }
+
+export interface PluggyOverview {
+  provider: 'pluggy'
+  fetchedAt: string
+  institutions: Array<{
+    itemId: string
+    name?: string
+    bankAccounts: Array<{ id: string; name: string; balance?: number; currency: string; numberLast4?: string }>
+    creditCards: Array<{ id: string; name: string; balance?: number; currency: string; numberLast4?: string; availableCreditLimit?: number; creditLimit?: number }>
+    investments: { count: number; total?: number; currency: string }
+  }>
+}
 interface PluggyInvestmentTransaction {
   amount?: number
   netAmount?: number
@@ -92,6 +116,50 @@ export async function createPluggyApiKey(credentials: PluggyCredentials): Promis
   return body.apiKey
 }
 
+/** Read-only overview grouped by the Item's Connector (the financial institution). */
+export async function fetchPluggyOverview(credentials: PluggyCredentials, itemIds: string[]): Promise<PluggyOverview> {
+  if (itemIds.length === 0) throw new Error('Add at least one MeuPluggy item ID before refreshing the overview.')
+  const apiKey = await createPluggyApiKey(credentials)
+  const headers = { 'X-API-KEY': apiKey }
+  const institutions = await Promise.all(itemIds.map(async (itemId) => {
+    const [itemResponse, accountsResponse, investmentsResponse] = await Promise.all([
+      pluggyFetch(`/items/${encodeURIComponent(itemId)}`, { headers }),
+      pluggyFetch(`/accounts?itemId=${encodeURIComponent(itemId)}`, { headers }),
+      pluggyFetch(`/investments?itemId=${encodeURIComponent(itemId)}`, { headers }),
+    ])
+    const item = await itemResponse.json() as PluggyItem
+    const accountsBody = await accountsResponse.json() as PluggyAccountListResponse
+    const investmentsBody = await investmentsResponse.json() as PluggyListResponse
+    const connector = await resolveConnector(item.connector, headers)
+    const accounts = accountsBody.results ?? accountsBody.data ?? []
+    const investments = investmentsBody.results ?? investmentsBody.data ?? []
+    const normalizeAccount = (account: PluggyAccount) => ({
+      id: account.id ?? `${itemId}:${account.type ?? 'ACCOUNT'}:${account.name ?? 'account'}`,
+      name: account.marketingName ?? account.name ?? 'Account',
+      balance: finiteNumber(account.balance),
+      currency: account.currencyCode ?? 'BRL',
+      ...(lastFour(account.number) ? { numberLast4: lastFour(account.number) } : {}),
+    })
+    const currencies = new Set(investments.map((investment) => investment.currencyCode ?? 'BRL'))
+    const investmentValues = investments.map((investment) => finiteNumber(investment.balance ?? investment.amount))
+    const investmentTotal = investmentValues.every((value) => value != null) && currencies.size <= 1
+      ? investmentValues.reduce((sum, value) => sum + (value ?? 0), 0)
+      : undefined
+    return {
+      itemId,
+      name: connector?.name,
+      bankAccounts: accounts.filter((account) => account.type === 'BANK').map(normalizeAccount),
+      creditCards: accounts.filter((account) => account.type === 'CREDIT').map((account) => ({
+        ...normalizeAccount(account),
+        availableCreditLimit: finiteNumber(account.creditData?.availableCreditLimit),
+        creditLimit: finiteNumber(account.creditData?.creditLimit),
+      })),
+      investments: { count: investments.length, total: investmentTotal, currency: [...currencies][0] ?? 'BRL' },
+    }
+  }))
+  return { provider: 'pluggy', fetchedAt: new Date().toISOString(), institutions }
+}
+
 /** Read only investment custody. No payment, item mutation, or account-write endpoint is used. */
 export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds: string[]): Promise<CustodySnapshot> {
   if (itemIds.length === 0) throw new Error('Add at least one MeuPluggy item ID before refreshing custody.')
@@ -104,7 +172,8 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
     ])
     const item = await itemResponse.json() as PluggyItem
     const body = await investmentsResponse.json() as PluggyListResponse
-    return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: item.connector?.name }))
+    const connector = await resolveConnector(item.connector, headers)
+    return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: connector?.name }))
   }))).flat()
   const resolvedRecords = await mapWithConcurrency(records, 5, async ({ investment, institution }) => {
     const candidateOriginal = finiteNumber(investment.amountOriginal)
@@ -210,4 +279,15 @@ async function mapWithConcurrency<T, R>(values: T[], limit: number, mapper: (val
 function finiteNumber(value: unknown): number | undefined {
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+async function resolveConnector(connector: PluggyConnector | undefined, headers: Record<string, string>): Promise<PluggyConnector | undefined> {
+  if (connector?.name || connector?.id == null) return connector
+  const response = await pluggyFetch(`/connectors/${encodeURIComponent(String(connector.id))}`, { headers })
+  return response.json() as Promise<PluggyConnector>
+}
+
+function lastFour(value?: string): string | undefined {
+  const digits = value?.replace(/\D/g, '')
+  return digits ? digits.slice(-4) : undefined
 }

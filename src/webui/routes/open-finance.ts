@@ -6,7 +6,7 @@ import { readOpenFinanceConfig, readPublicOpenFinanceConfig, writeOpenFinanceCon
 import { calculateFgcExposure } from '../../domain/alice-invest/fixed-income/fgc.js'
 import { buildFixedIncomeLadder } from '../../domain/alice-invest/fixed-income/ladder.js'
 import { reconcilePluggyFixedIncomeCustody } from '../../domain/alice-invest/fixed-income/reconciliation.js'
-import { fetchPluggyCustody } from '../../domain/open-finance/pluggy.js'
+import { fetchPluggyCustody, fetchPluggyOverview } from '../../domain/open-finance/pluggy.js'
 import { triggerUTARestart } from '../../services/uta-supervisor/restart-trigger.js'
 import { readBrokerageLedger, writeBrokerageLedger } from '../../core/alice-invest-tax-ledger.js'
 import { calculateAveragePrices, confirmBrokerageImport, previewB3BrokerageCsv, type BrokerageImportPreview } from '../../domain/alice-invest/tax/ledger.js'
@@ -33,6 +33,7 @@ interface OpenFinanceRouteDeps {
   writeFgcPolicy: typeof writeFgcCoveragePolicy
   readConfig: typeof readOpenFinanceConfig
   fetchCustody: typeof fetchPluggyCustody
+  fetchOverview: typeof fetchPluggyOverview
   readBrokerageLedger: typeof readBrokerageLedger
   writeBrokerageLedger: typeof writeBrokerageLedger
   readBrazilTaxPolicy: typeof readBrazilTaxPolicy
@@ -47,6 +48,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
   writeFgcPolicy: writeFgcCoveragePolicy,
   readConfig: readOpenFinanceConfig,
   fetchCustody: fetchPluggyCustody,
+  fetchOverview: fetchPluggyOverview,
   readBrokerageLedger,
   writeBrokerageLedger,
   readBrazilTaxPolicy,
@@ -69,6 +71,13 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       const config = await readOpenFinanceConfig()
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
       return c.json(await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds))
+    } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
+  })
+  app.get('/overview', async (c) => {
+    try {
+      const config = await deps.readConfig()
+      if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
+      return c.json(await deps.fetchOverview({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds))
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.get('/fixed-income/definitions', async (c) => c.json(await deps.readDefinitions()))

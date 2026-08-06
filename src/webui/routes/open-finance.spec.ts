@@ -8,6 +8,16 @@ const definitions: FixedIncomeCustodyDefinitions = { version: 1, entries: [] }
 const config = { version: 1 as const, pluggy: { enabled: true, clientId: 'client', clientSecret: 'secret', itemIds: ['00000000-0000-4000-8000-000000000001'] } }
 
 describe('open finance fixed-income routes', () => {
+  it('returns the read-only Pluggy overview grouped by Item connector', async () => {
+    const overview = { provider: 'pluggy' as const, fetchedAt: '2026-08-06T12:00:00.000Z', institutions: [{ itemId: config.pluggy.itemIds[0]!, name: 'Nubank', bankAccounts: [], creditCards: [], investments: { count: 21, total: 128467.18, currency: 'BRL' } }] }
+    const fetchOverview = vi.fn(async () => overview)
+    const app = createOpenFinanceRoutes({ readConfig: vi.fn(async () => config), fetchOverview })
+    const response = await app.request('/overview')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(overview)
+    expect(fetchOverview).toHaveBeenCalledWith({ clientId: 'client', clientSecret: 'secret' }, config.pluggy.itemIds)
+  })
+
   it('stores explicit classifications and reconciles them through a read-only snapshot', async () => {
     const readDefinitions = vi.fn(async () => definitions)
     const writeDefinitions = vi.fn(async (value: unknown) => value as FixedIncomeCustodyDefinitions)

@@ -28,6 +28,18 @@ export interface CustodySnapshot {
   fetchedAt: string
 }
 
+export interface PluggyOverview {
+  provider: 'pluggy'
+  fetchedAt: string
+  institutions: Array<{
+    itemId: string
+    name?: string
+    bankAccounts: Array<{ id: string; name: string; balance?: number; currency: string; numberLast4?: string }>
+    creditCards: Array<{ id: string; name: string; balance?: number; currency: string; numberLast4?: string; availableCreditLimit?: number; creditLimit?: number }>
+    investments: { count: number; total?: number; currency: string }
+  }>
+}
+
 export interface FgcExposure {
   groups: Array<{ conglomerate: string; eligibleAmountBRL: string; estimatedCoveredBeforeAggregateLimitBRL: string; estimatedUncoveredBRL: string }>
   eligibleAmountBRL: string
@@ -74,6 +86,7 @@ export const openFinanceApi = {
   save: (input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<OpenFinanceConfig> =>
     fetchJson('/api/open-finance', { method: 'PUT', headers, body: JSON.stringify(input) }),
   custody: (): Promise<CustodySnapshot> => fetchJson('/api/open-finance/custody'),
+  overview: (): Promise<PluggyOverview> => fetchJson('/api/open-finance/overview'),
   fgc: (): Promise<FgcExposure> => fetchJson('/api/open-finance/fixed-income/fgc'),
   fixedIncomeLadder: (): Promise<FixedIncomeLadder> => fetchJson('/api/open-finance/fixed-income/ladder'),
   fixedIncomeSummary: (): Promise<FixedIncomeSummary> => fetchJson('/api/open-finance/fixed-income/summary'),

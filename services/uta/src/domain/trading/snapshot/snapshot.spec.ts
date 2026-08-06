@@ -103,6 +103,14 @@ describe('Snapshot Builder', () => {
     expect(typeof snap!.positions[0].avgCost).toBe('string')
   })
 
+  it('preserves the optional position custodian', async () => {
+    const position = makePosition()
+    position.custodian = 'Banco Demo'
+    vi.spyOn(broker, 'getPositions').mockResolvedValue([position])
+    const snap = await buildSnapshot(uta, 'manual')
+    expect(snap?.positions[0]?.custodian).toBe('Banco Demo')
+  })
+
   // #3b — OPT/FOP metadata round-trips into the snapshot so the UI can
   // render strike / right / multiplier badges from a persisted snapshot
   // without needing the broker contract registry to be in-memory.

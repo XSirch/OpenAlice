@@ -354,6 +354,8 @@ export interface Position {
   realizedPnL: string
   costBasisSource?: 'reported' | 'transactions'
   acquiredAt?: string
+  /** Financial institution holding an Open Finance position in custody. */
+  custodian?: string
   /** Leveraged-derivative risk metadata (crypto perps/futures). Absent for
    *  spot and brokers without per-position leverage. Mirrors uta-protocol's
    *  PositionRisk. */
@@ -633,6 +635,7 @@ export interface UTASnapshotSummary {
     totalCashValue: string
     unrealizedPnL: string
     realizedPnL: string
+    custodian?: string
     buyingPower?: string
     initMarginReq?: string
     maintMarginReq?: string

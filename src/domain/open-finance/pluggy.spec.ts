@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createPluggyApiKey, fetchPluggyCustody } from './pluggy.js'
+import { createPluggyApiKey, fetchPluggyCustody, fetchPluggyOverview } from './pluggy.js'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -25,6 +25,44 @@ describe('Pluggy custody client', () => {
   it('fails clearly when Pluggy accepts credentials but omits the API key', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })))
     await expect(createPluggyApiKey({ clientId: 'id', clientSecret: 'secret' })).rejects.toThrow('Pluggy did not return an API key.')
+  })
+
+  it('resolves the institution from the Item connector id and builds the dashboard overview', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ connector: { id: 201 } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [
+        { id: 'bank', type: 'BANK', name: 'Conta Corrente', number: '12345-6', balance: 718.59, currencyCode: 'BRL' },
+        { id: 'card', type: 'CREDIT', marketingName: 'Black', number: '5528', balance: 161.45, currencyCode: 'BRL' },
+      ] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [
+        { id: 'investment', name: 'CDB', balance: 1000, currencyCode: 'BRL' },
+      ] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 201, name: 'Itaú' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const overview = await fetchPluggyOverview({ clientId: 'id', clientSecret: 'secret' }, ['a1'])
+    expect(overview.institutions).toEqual([expect.objectContaining({
+      itemId: 'a1',
+      name: 'Itaú',
+      bankAccounts: [expect.objectContaining({ id: 'bank', numberLast4: '3456', balance: 718.59 })],
+      creditCards: [expect.objectContaining({ id: 'card', numberLast4: '5528', balance: 161.45 })],
+      investments: { count: 1, total: 1000, currency: 'BRL' },
+    })])
+    expect(fetchMock.mock.calls.map((call) => call[0])).toContain('https://api.pluggy.ai/connectors/201')
+  })
+
+  it('uses the connector endpoint for custody when the Item only carries a connector id', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ connector: { id: 201 } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ id: 'cdb', name: 'CDB', balance: 1000, currencyCode: 'BRL' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 201, name: 'Nubank' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await fetchPluggyCustody({ clientId: 'id', clientSecret: 'secret' }, ['a1'])
+    expect(snapshot.positions[0]?.institution).toBe('Nubank')
   })
 
   it('omits closed Pluggy records with no material balance or quantity', async () => {

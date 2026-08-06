@@ -865,6 +865,9 @@ export function PositionsTable({ positions, fxRates }: { positions: PositionWith
                     <div className="mt-1 truncate text-[10px] text-muted-foreground">
                       {position.accountLabel} · {currency}
                     </div>
+                    {position.custodian && (
+                      <div className="mt-1 truncate text-[10px] text-muted-foreground">Custodian: {position.custodian}</div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="font-semibold tabular-nums text-foreground">
@@ -929,6 +932,7 @@ export function PositionsTable({ positions, fxRates }: { positions: PositionWith
                       )}
                       <span className="text-[10px] text-muted-foreground">{p.accountLabel}</span>
                     </div>
+                    {p.custodian && <div className="mt-1 text-[10px] text-muted-foreground">Custodian: {p.custodian}</div>}
                   </td>
                   <td className="px-3 py-2 text-center text-muted-foreground text-[11px]">{ccy}</td>
                   <td className="px-3 py-2 text-right text-foreground">{fmtNum(Number(p.quantity))}</td>

@@ -56,6 +56,7 @@ export async function buildSnapshot(
         marketValue: p.marketValue,
         unrealizedPnL: p.unrealizedPnL,
         realizedPnL: p.realizedPnL,
+        ...(p.custodian && { custodian: p.custodian }),
         ...(p.contract.secType && { secType: p.contract.secType }),
         ...(p.multiplier && p.multiplier !== '1' && { multiplier: p.multiplier }),
         ...(p.contract.strike != null && p.contract.strike !== UNSET_DOUBLE && { strike: p.contract.strike }),
