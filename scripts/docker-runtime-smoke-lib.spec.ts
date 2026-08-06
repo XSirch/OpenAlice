@@ -76,11 +76,22 @@ describe('Dockerfile runtime contract', () => {
   const dockerignore = readFileSync(resolve(root, '.dockerignore'), 'utf8')
   const compose = readFileSync(resolve(root, 'docker-compose.yml'), 'utf8')
   const workflow = readFileSync(resolve(root, '.github/workflows/docker-smoke.yml'), 'utf8')
-  const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { packageManager: string }
+  const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
+    packageManager: string
+    dependencies?: Record<string, string>
+    optionalDependencies?: Record<string, string>
+  }
 
   it('keeps the image pnpm version aligned with packageManager', () => {
     const pnpmVersion = packageJson.packageManager.replace(/^pnpm@/, '')
     expect(dockerfile).toContain(`corepack prepare pnpm@${pnpmVersion} --activate`)
+  })
+
+  it('keeps the Linux PTY native addon non-fatal outside runtime builds', () => {
+    expect(packageJson.dependencies?.['node-pty']).toBeUndefined()
+    expect(packageJson.optionalDependencies?.['node-pty']).toMatch(/^\^1\./)
+    expect(dockerfile).toContain('RUN pnpm install --frozen-lockfile')
+    expect(dockerfile).toContain('--external node-pty')
   })
 
   it('copies pnpm patch files before the frozen dependency install', () => {
