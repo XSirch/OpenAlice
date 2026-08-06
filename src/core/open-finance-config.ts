@@ -13,11 +13,12 @@ const schema = z.object({
     clientId: z.string().min(1).optional(),
     clientSecret: z.string().min(1).optional(),
     itemIds: z.array(z.string().uuid()).default([]),
-  }).default({ enabled: false, itemIds: [] }),
+    itemInstitutions: z.record(z.string().uuid(), z.string().trim().min(1)).default({}),
+  }).default({ enabled: false, itemIds: [], itemInstitutions: {} }),
 })
 
 export type OpenFinanceConfig = z.infer<typeof schema>
-export type PublicOpenFinanceConfig = { pluggy: { enabled: boolean; configured: boolean; itemIds: string[] } }
+export type PublicOpenFinanceConfig = { pluggy: { enabled: boolean; configured: boolean; itemIds: string[]; itemInstitutions: Record<string, string> } }
 
 export async function readOpenFinanceConfig(): Promise<OpenFinanceConfig> {
   try {
@@ -31,10 +32,10 @@ export async function readOpenFinanceConfig(): Promise<OpenFinanceConfig> {
 
 export async function readPublicOpenFinanceConfig(): Promise<PublicOpenFinanceConfig> {
   const config = await readOpenFinanceConfig()
-  return { pluggy: { enabled: config.pluggy.enabled, configured: Boolean(config.pluggy.clientId && config.pluggy.clientSecret), itemIds: config.pluggy.itemIds } }
+  return { pluggy: { enabled: config.pluggy.enabled, configured: Boolean(config.pluggy.clientId && config.pluggy.clientSecret), itemIds: config.pluggy.itemIds, itemInstitutions: config.pluggy.itemInstitutions } }
 }
 
-export async function writeOpenFinanceConfig(input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<PublicOpenFinanceConfig> {
+export async function writeOpenFinanceConfig(input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[]; itemInstitutions?: Record<string, string> }): Promise<PublicOpenFinanceConfig> {
   const current = await readOpenFinanceConfig()
   const next = schema.parse({
     version: 1,
@@ -43,6 +44,7 @@ export async function writeOpenFinanceConfig(input: { enabled: boolean; clientId
       clientId: input.clientId?.trim() || current.pluggy.clientId,
       clientSecret: input.clientSecret?.trim() || current.pluggy.clientSecret,
       itemIds: input.itemIds ?? current.pluggy.itemIds,
+      itemInstitutions: input.itemInstitutions ?? current.pluggy.itemInstitutions,
     },
   })
   const temp = `${FILE}.tmp-${process.pid}`

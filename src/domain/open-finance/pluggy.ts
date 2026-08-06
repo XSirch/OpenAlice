@@ -117,7 +117,7 @@ export async function createPluggyApiKey(credentials: PluggyCredentials): Promis
 }
 
 /** Read-only overview grouped by the Item's Connector (the financial institution). */
-export async function fetchPluggyOverview(credentials: PluggyCredentials, itemIds: string[]): Promise<PluggyOverview> {
+export async function fetchPluggyOverview(credentials: PluggyCredentials, itemIds: string[], itemInstitutions: Record<string, string> = {}): Promise<PluggyOverview> {
   if (itemIds.length === 0) throw new Error('Add at least one MeuPluggy item ID before refreshing the overview.')
   const apiKey = await createPluggyApiKey(credentials)
   const headers = { 'X-API-KEY': apiKey }
@@ -147,7 +147,7 @@ export async function fetchPluggyOverview(credentials: PluggyCredentials, itemId
       : undefined
     return {
       itemId,
-      name: connector?.name,
+      name: institutionForItem(itemId, connector, itemInstitutions),
       bankAccounts: accounts.filter((account) => account.type === 'BANK').map(normalizeAccount),
       creditCards: accounts.filter((account) => account.type === 'CREDIT').map((account) => ({
         ...normalizeAccount(account),
@@ -161,7 +161,7 @@ export async function fetchPluggyOverview(credentials: PluggyCredentials, itemId
 }
 
 /** Read only investment custody. No payment, item mutation, or account-write endpoint is used. */
-export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds: string[]): Promise<CustodySnapshot> {
+export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds: string[], itemInstitutions: Record<string, string> = {}): Promise<CustodySnapshot> {
   if (itemIds.length === 0) throw new Error('Add at least one MeuPluggy item ID before refreshing custody.')
   const apiKey = await createPluggyApiKey(credentials)
   const headers = { 'X-API-KEY': apiKey }
@@ -173,7 +173,8 @@ export async function fetchPluggyCustody(credentials: PluggyCredentials, itemIds
     const item = await itemResponse.json() as PluggyItem
     const body = await investmentsResponse.json() as PluggyListResponse
     const connector = await resolveConnector(item.connector, headers)
-    return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution: connector?.name }))
+    const institution = institutionForItem(itemId, connector, itemInstitutions)
+    return (body.results ?? body.data ?? []).map((investment) => ({ investment, institution }))
   }))).flat()
   const resolvedRecords = await mapWithConcurrency(records, 5, async ({ investment, institution }) => {
     const candidateOriginal = finiteNumber(investment.amountOriginal)
@@ -290,4 +291,11 @@ async function resolveConnector(connector: PluggyConnector | undefined, headers:
 function lastFour(value?: string): string | undefined {
   const digits = value?.replace(/\D/g, '')
   return digits ? digits.slice(-4) : undefined
+}
+
+function institutionForItem(itemId: string, connector: PluggyConnector | undefined, itemInstitutions: Record<string, string>): string | undefined {
+  const confirmed = itemInstitutions[itemId]?.trim()
+  if (confirmed) return confirmed
+  const connectorName = connector?.name?.trim()
+  return connectorName && connectorName.toLocaleLowerCase('pt-BR') !== 'meupluggy' ? connectorName : undefined
 }

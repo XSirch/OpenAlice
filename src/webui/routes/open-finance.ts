@@ -21,7 +21,7 @@ import { calculateTotalReturn } from '../../domain/alice-invest/corporate-events
 import { calculateBrazilMacroExposure } from '../../domain/alice-invest/macro-exposure.js'
 import { buildPortfolioAlerts } from '../../domain/alice-invest/portfolio-alerts.js'
 
-const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional() })
+const updateSchema = z.object({ enabled: z.boolean(), clientId: z.string().optional(), clientSecret: z.string().optional(), itemIds: z.array(z.string().uuid()).optional(), itemInstitutions: z.record(z.string().uuid(), z.string().trim().min(1)).optional() })
 const brokeragePreviewSchema = z.object({ sourceName: z.string().trim().min(1).max(256), content: z.string().max(5 * 1024 * 1024) })
 const brokerageConfirmSchema = z.object({ previewId: z.string().uuid() })
 const taxEstimateSchema = z.object({ assetClass: z.enum(['b3_equity_common', 'b3_fii', 'fixed_income', 'fund', 'crypto']), grossSalesBRL: z.string().optional(), netGainBRL: z.string().optional(), calendarDays: z.number().int().nonnegative().optional(), hasDayTrade: z.boolean().optional(), sources: z.array(taxSourceRequirementSchema).max(4) })
@@ -70,14 +70,14 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
     try {
       const config = await readOpenFinanceConfig()
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
-      return c.json(await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds))
+      return c.json(await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions))
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.get('/overview', async (c) => {
     try {
       const config = await deps.readConfig()
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
-      return c.json(await deps.fetchOverview({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds))
+      return c.json(await deps.fetchOverview({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions))
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
   app.get('/fixed-income/definitions', async (c) => c.json(await deps.readDefinitions()))
@@ -94,7 +94,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
       const [definitions, snapshot] = await Promise.all([
         deps.readDefinitions(),
-        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions),
       ])
       return c.json(reconcilePluggyFixedIncomeCustody(snapshot, definitions))
     } catch (error) {
@@ -113,7 +113,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       const [definitions, policy, snapshot] = await Promise.all([
         deps.readDefinitions(),
         deps.readFgcPolicy(),
-        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions),
       ])
       const reconciliation = reconcilePluggyFixedIncomeCustody(snapshot, definitions)
       return c.json({ ...calculateFgcExposure(reconciliation.positions, policy), reconciliation })
@@ -127,7 +127,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
       const [definitions, snapshot] = await Promise.all([
         deps.readDefinitions(),
-        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions),
       ])
       const reconciliation = reconcilePluggyFixedIncomeCustody(snapshot, definitions)
       return c.json({ ...buildFixedIncomeLadder({ positions: reconciliation.positions, asOf: snapshot.fetchedAt, annualCdiPct: c.req.query('annualCdiPct'), annualIpcaPct: c.req.query('annualIpcaPct') }), reconciliation })
@@ -142,7 +142,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       const [definitions, policy, snapshot] = await Promise.all([
         deps.readDefinitions(),
         deps.readFgcPolicy(),
-        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds),
+        deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions),
       ])
       const reconciliation = reconcilePluggyFixedIncomeCustody(snapshot, definitions)
       return c.json({ snapshot, fgc: calculateFgcExposure(reconciliation.positions, policy), ladder: buildFixedIncomeLadder({ positions: reconciliation.positions, asOf: snapshot.fetchedAt }), reconciliation })
@@ -154,7 +154,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
     try {
       const config = await deps.readConfig()
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
-      const [definitions, snapshot] = await Promise.all([deps.readDefinitions(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds)])
+      const [definitions, snapshot] = await Promise.all([deps.readDefinitions(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions)])
       return c.json({ exposures: calculateBrazilMacroExposure(reconcilePluggyFixedIncomeCustody(snapshot, definitions).positions), disclaimer: 'Scenario context based on explicit product metadata, not a forecast or order recommendation.' })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })
@@ -163,7 +163,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
       const config = await deps.readConfig()
       if (!config.pluggy.enabled || !config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy is not configured.' }, 400)
       const [definitions, policy, snapshot, ledger, events] = await Promise.all([
-        deps.readDefinitions(), deps.readFgcPolicy(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds), deps.readBrokerageLedger(), deps.readCorporateEvents(),
+        deps.readDefinitions(), deps.readFgcPolicy(), deps.fetchCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions), deps.readBrokerageLedger(), deps.readCorporateEvents(),
       ])
       const reconciliation = reconcilePluggyFixedIncomeCustody(snapshot, definitions)
       const positions = calculateAveragePrices(ledger.entries).map((position) => ({ symbol: position.symbol, quantity: position.quantity }))
@@ -242,7 +242,7 @@ export function createOpenFinanceRoutes(overrides: Partial<OpenFinanceRouteDeps>
     try {
       const config = await readOpenFinanceConfig()
       if (!config.pluggy.clientId || !config.pluggy.clientSecret) return c.json({ error: 'Pluggy client ID and secret are required.' }, 400)
-      const snapshot = await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds)
+      const snapshot = await fetchPluggyCustody({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }, config.pluggy.itemIds, config.pluggy.itemInstitutions)
       return c.json({ ok: true, positions: snapshot.positions.length })
     } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 502) }
   })

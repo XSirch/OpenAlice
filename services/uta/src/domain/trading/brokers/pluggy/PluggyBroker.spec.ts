@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/core/open-finance-config.js', () => ({
-  readOpenFinanceConfig: vi.fn().mockResolvedValue({ pluggy: { enabled: true, clientId: 'id', clientSecret: 'secret', itemIds: ['item'] } }),
+  readOpenFinanceConfig: vi.fn().mockResolvedValue({ pluggy: { enabled: true, clientId: 'id', clientSecret: 'secret', itemIds: ['item'], itemInstitutions: { item: 'Banco Demo' } } }),
 }))
 vi.mock('@/domain/open-finance/pluggy.js', () => ({
   fetchPluggyCustody: vi.fn().mockResolvedValue({

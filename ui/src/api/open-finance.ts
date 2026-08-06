@@ -1,7 +1,7 @@
 import { fetchJson, headers } from './client'
 
 export interface OpenFinanceConfig {
-  pluggy: { enabled: boolean; configured: boolean; itemIds: string[] }
+  pluggy: { enabled: boolean; configured: boolean; itemIds: string[]; itemInstitutions: Record<string, string> }
 }
 
 export interface CustodyPosition {
@@ -83,7 +83,7 @@ export interface TotalReturnBreakdown { symbol: string; asOf: string; contributi
 
 export const openFinanceApi = {
   load: (): Promise<OpenFinanceConfig> => fetchJson('/api/open-finance'),
-  save: (input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[] }): Promise<OpenFinanceConfig> =>
+  save: (input: { enabled: boolean; clientId?: string; clientSecret?: string; itemIds?: string[]; itemInstitutions?: Record<string, string> }): Promise<OpenFinanceConfig> =>
     fetchJson('/api/open-finance', { method: 'PUT', headers, body: JSON.stringify(input) }),
   custody: (): Promise<CustodySnapshot> => fetchJson('/api/open-finance/custody'),
   overview: (): Promise<PluggyOverview> => fetchJson('/api/open-finance/overview'),
