@@ -89,7 +89,7 @@ interface Window {
         }>
       }>
       readFile(input: { id: string; path: string }): Promise<
-        | { kind: 'ok'; content: string }
+        | { kind: 'ok'; content: string; revision: string }
         | { kind: 'workspace_missing' }
         | { kind: 'file_missing' }
         | { kind: 'too_large'; sizeBytes: number }

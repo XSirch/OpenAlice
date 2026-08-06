@@ -38,6 +38,7 @@ import { InboxPageShell } from '../pages/InboxPageShell'
 import { TrackedPage } from '../pages/TrackedPage'
 import { AutoQuantLandingPage, ChatLandingPage } from '../pages/ChatLandingPage'
 import { WorkspaceManagerPage } from '../pages/WorkspaceManagerPage'
+import { AlicePortfolioLandingPage } from '../pages/AlicePortfolioLandingPage'
 import { PageSidebarShell } from '../pages/PageSidebarShell'
 import { WorkspaceListPage } from '../pages/WorkspaceListPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
@@ -46,6 +47,7 @@ import { TemplateDetailPage } from '../pages/TemplateDetailPage'
 import { FileViewerPage } from '../pages/FileViewerPage'
 import { TrackedSidebar } from '../components/TrackedSidebar'
 import { WorkspacesSidebar } from '../components/workspace/WorkspacesSidebar'
+import { AlicePortfolioSidebar } from '../components/workspace/AlicePortfolioSidebar'
 import { SettingsCategoryList } from '../components/SettingsCategoryList'
 import { DevCategoryList } from '../components/DevCategoryList'
 import { MarketSidebar } from '../components/MarketSidebar'
@@ -453,6 +455,17 @@ const autoQuantLandingModule: ViewModule<'auto-quant-landing'> = {
   Component: ({ spec }) => <AutoQuantLandingPage spec={spec} />,
 }
 
+const alicePortfolioLandingModule: ViewModule<'alice-portfolio-landing'> = {
+  kind: 'alice-portfolio-landing',
+  title: () => 'Alice Portfolio',
+  toUrl: () => '/alice-portfolio',
+  Component: () => (
+    <PageSidebarShell storageKey="alice-portfolio" titleKey="nav.item.alicePortfolio" defaultWidth={260} sidebar={({ closeMobileDrawer }) => <AlicePortfolioSidebar onNavigate={closeMobileDrawer} />}>
+      <AlicePortfolioLandingPage />
+    </PageSidebarShell>
+  ),
+}
+
 const workspaceManagerModule: ViewModule<'workspace-manager'> = {
   kind: 'workspace-manager',
   shell: 'chat',
@@ -499,6 +512,8 @@ const workspaceModule: ViewModule<'workspace'> = {
         ? `/chat/workspaces/${encodeURIComponent(spec.params.wsId)}`
         : spec.params.source === 'auto-quant'
           ? `/auto-quant/workspaces/${encodeURIComponent(spec.params.wsId)}`
+          : spec.params.source === 'alice-portfolio'
+            ? `/alice-portfolio/workspaces/${encodeURIComponent(spec.params.wsId)}`
         : `/workspaces/${encodeURIComponent(spec.params.wsId)}`
     const sid = spec.params.sessionId
     return sid ? `${base}/s/${encodeURIComponent(sid)}` : base
@@ -506,6 +521,12 @@ const workspaceModule: ViewModule<'workspace'> = {
   Component: (props) =>
     props.spec.params.source === 'chat' || props.spec.params.source === 'auto-quant'
       ? <WorkspacePage {...props} />
+      : props.spec.params.source === 'alice-portfolio'
+        ? (
+          <PageSidebarShell storageKey="alice-portfolio" titleKey="nav.item.alicePortfolio" defaultWidth={260} sidebar={({ closeMobileDrawer }) => <AlicePortfolioSidebar onNavigate={closeMobileDrawer} />}>
+            <WorkspacePage {...props} />
+          </PageSidebarShell>
+        )
       : (
         <PageSidebarShell
           storageKey="workspaces"
@@ -568,6 +589,8 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
       ? `/chat/workspaces/${encodeURIComponent(spec.params.wsId)}`
       : spec.params.source === 'auto-quant'
         ? `/auto-quant/workspaces/${encodeURIComponent(spec.params.wsId)}`
+        : spec.params.source === 'alice-portfolio'
+          ? `/alice-portfolio/workspaces/${encodeURIComponent(spec.params.wsId)}`
       : `/workspaces/${encodeURIComponent(spec.params.wsId)}`
     const query = spec.params.returnSessionId
       ? `?sessionId=${encodeURIComponent(spec.params.returnSessionId)}`
@@ -576,6 +599,12 @@ const fileViewerModule: ViewModule<'file-viewer'> = {
   },
   Component: ({ spec }) => spec.params.source === 'chat' || spec.params.source === 'auto-quant'
     ? <FileViewerPage spec={spec} />
+    : spec.params.source === 'alice-portfolio'
+      ? (
+        <PageSidebarShell storageKey="alice-portfolio" titleKey="nav.item.alicePortfolio" defaultWidth={260} sidebar={({ closeMobileDrawer }) => <AlicePortfolioSidebar onNavigate={closeMobileDrawer} />}>
+          <FileViewerPage spec={spec} />
+        </PageSidebarShell>
+      )
     : spec.params.source === 'tracked'
       ? (
         <PageSidebarShell
@@ -628,6 +657,7 @@ const VIEWS = {
   tracked: trackedModule,
   'chat-landing': chatLandingModule,
   'auto-quant-landing': autoQuantLandingModule,
+  'alice-portfolio-landing': alicePortfolioLandingModule,
   'workspace-manager': workspaceManagerModule,
   'workspace-list': workspaceListModule,
   workspace: workspaceModule,

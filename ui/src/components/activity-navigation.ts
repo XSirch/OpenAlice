@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BriefcaseBusiness,
   Code2,
   GitBranch,
   Inbox,
@@ -23,7 +24,7 @@ import type { ViewSpec } from '../tabs/types'
 type NavItemKey =
   | 'nav.item.inbox' | 'nav.item.tracked' | 'nav.item.chat' | 'nav.item.autoQuant' | 'nav.item.workspaces'
   | 'nav.item.market' | 'nav.item.news' | 'nav.item.tradingAsGit' | 'nav.item.issue'
-  | 'nav.item.portfolio' | 'nav.item.connectors' | 'nav.item.wealthForecast' | 'nav.item.modelPortfolio' | 'nav.item.automation' | 'nav.item.settings' | 'nav.item.dev'
+  | 'nav.item.portfolio' | 'nav.item.alicePortfolio' | 'nav.item.connectors' | 'nav.item.wealthForecast' | 'nav.item.modelPortfolio' | 'nav.item.automation' | 'nav.item.settings' | 'nav.item.dev'
 
 interface NavLeaf {
   page: Page
@@ -55,6 +56,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { page: 'tracked',    labelKey: 'nav.item.tracked',    icon: Telescope, defaultTab: { kind: 'tracked', params: {} } },
       { page: 'market',     labelKey: 'nav.item.market',     icon: BarChart3, defaultTab: { kind: 'market-list', params: {} } },
       { page: 'news',       labelKey: 'nav.item.news',       icon: Newspaper, defaultTab: { kind: 'news', params: {} } },
+      { page: 'alice-portfolio', labelKey: 'nav.item.alicePortfolio', icon: BriefcaseBusiness, defaultTab: { kind: 'alice-portfolio-landing', params: {} } },
     ],
   },
   {

@@ -37,7 +37,7 @@ describe('built-in workspace templates', () => {
     expect(templates.get('alice-portfolio')).toMatchObject({
       displayName: 'Alice Portfolio',
       description: 'Holistic goal-based wealth planning using read-only MeuPluggy holdings and research on real investments.',
-      version: '1.0.0',
+      version: '1.1.0',
       injectTools: false,
       injectPersona: true,
       upgradeStrategy: 'managed-context',

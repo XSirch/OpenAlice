@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import '../i18n'
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   setSidebar: vi.fn(),
   selectTracked: vi.fn(),
   readWorkspaceFile: vi.fn(),
+  updateWorkspaceMarkdown: vi.fn(),
   workspaces: [] as Array<{ id: string; tag: string; displayName?: string }>,
 }))
 
@@ -30,6 +31,7 @@ vi.mock('../tabs/store', () => ({
 
 vi.mock('../components/workspace/api', () => ({
   readWorkspaceFile: mocks.readWorkspaceFile,
+  updateWorkspaceMarkdown: mocks.updateWorkspaceMarkdown,
 }))
 
 vi.mock('../live/tracked-selection', () => ({
@@ -44,7 +46,8 @@ vi.mock('../components/FileContentView', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.readWorkspaceFile.mockResolvedValue({ kind: 'ok', content: 'hello' })
+  mocks.readWorkspaceFile.mockResolvedValue({ kind: 'ok', content: 'hello', revision: 'r1' })
+  mocks.updateWorkspaceMarkdown.mockResolvedValue({ revision: 'r2', commit: 'commit-2' })
   mocks.workspaces = [{
     id: 'chat-1',
     tag: 'chat-jul20',
@@ -132,5 +135,14 @@ describe('FileViewerPage back navigation', () => {
       kind: 'tracked',
       params: {},
     })
+  })
+
+  it('edits and saves an existing Markdown file with its expected revision', async () => {
+    render(<FileViewerPage spec={{ kind: 'file-viewer', params: { wsId: 'chat-1', path: 'portfolio/goal.md', source: 'alice-portfolio' } }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Edit portfolio/goal.md' }), { target: { value: '# Updated goal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mocks.updateWorkspaceMarkdown).toHaveBeenCalledWith('chat-1', 'portfolio/goal.md', '# Updated goal', 'r1'))
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy()
   })
 })

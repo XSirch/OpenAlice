@@ -44,6 +44,10 @@ a skill `alice-portfolio`.
 - Preserve a data de referência da carteira. Mostre lacunas, ativos sem
   classificação e instituições ou contas possivelmente ausentes antes de
   concluir sobre concentração ou diversificação.
+- Identifique o banco custodiante de cada ativo pelo campo `custodian` e inclua
+  um resumo de ativos e valores agrupados por instituição. Quando o campo não
+  vier preenchido, escreva `instituição não informada pelo Pluggy`. Nunca
+  deduza o banco pelo nome, símbolo, emissor ou tipo do ativo.
 - Analise o portfólio como um todo: concentração, risco de crédito e cobertura
   do FGC, liquidez, duração, inflação, moeda, custos, tributação e aderência de
   cada posição aos objetivos confirmados.

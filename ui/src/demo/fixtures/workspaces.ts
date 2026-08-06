@@ -45,6 +45,7 @@ export const DEMO_CHAT_WORKSPACE_ID = 'demo-chat-ws'
 export const DEMO_CHAT_SESSION_ID = 'demo-chat-session'
 export const DEMO_AUTO_QUANT_WORKSPACE_ID = 'demo-ws-auto-quant'
 export const DEMO_MACRO_WORKSPACE_ID = 'demo-ws-macro'
+export const DEMO_ALICE_PORTFOLIO_WORKSPACE_ID = 'demo-ws-alice-portfolio'
 
 // A small spread of agents + states so the sidebar shows the full session
 // styling (per-agent badge colours for claude/codex/opencode/pi, the paused
@@ -121,6 +122,19 @@ export const demoChatWorkspace: Workspace = {
 
 const demoIssueWorkspaces: Workspace[] = [
   {
+    id: DEMO_ALICE_PORTFOLIO_WORKSPACE_ID,
+    tag: 'aposentadoria',
+    displayName: 'Minha aposentadoria',
+    dir: '/demo/workspaces/aposentadoria',
+    createdAt: new Date().toISOString(),
+    template: 'alice-portfolio',
+    spawnedFromVersion: '1.1.0',
+    currentVersion: '1.1.0',
+    upgradeAvailable: null,
+    sessions: [],
+    agentOverride: { claude: false, codex: false, opencode: false, pi: false },
+  },
+  {
     id: DEMO_AUTO_QUANT_WORKSPACE_ID,
     tag: 'auto-quant',
     displayName: 'Auto Quant',
@@ -196,7 +210,17 @@ export const autoQuantTemplate: TemplateInfo = {
   },
 }
 
-export const demoTemplates: TemplateInfo[] = [chatTemplate, autoQuantTemplate]
+export const alicePortfolioTemplate: TemplateInfo = {
+  name: 'alice-portfolio',
+  displayName: 'Alice Portfolio',
+  description: 'Goal-based portfolio planning with read-only MeuPluggy custody.',
+  groupOrder: 40,
+  defaultAgents: ['codex', 'claude'],
+  version: '1.1.0',
+  hasReadme: true,
+}
+
+export const demoTemplates: TemplateInfo[] = [chatTemplate, autoQuantTemplate, alicePortfolioTemplate]
 
 // Back-compat singleton for older callers (other fixture files reference
 // `demoTemplate` and we want a stable name). Points at the flagship.

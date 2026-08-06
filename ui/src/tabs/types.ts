@@ -13,7 +13,7 @@
  * a data-model change.
  */
 
-export type WorkspaceSource = 'chat' | 'auto-quant'
+export type WorkspaceSource = 'chat' | 'auto-quant' | 'alice-portfolio'
 export type FileViewerSource = WorkspaceSource | 'tracked'
 
 /** One source of truth for the Dev sidebar and `/dev/:tab` URL contract. */
@@ -55,6 +55,7 @@ export type ViewSpec =
   | { kind: 'tracked';             params: Record<string, never> }
   | { kind: 'chat-landing';        params: { targetWsId?: string } }
   | { kind: 'auto-quant-landing';  params: { targetWsId?: string } }
+  | { kind: 'alice-portfolio-landing'; params: Record<string, never> }
   | { kind: 'workspace-manager';   params: { sessionId?: string } }
   | {
       kind: 'file-viewer'
@@ -94,6 +95,7 @@ export type ActivitySection =
   | 'issue'
   | 'automation'
   | 'news'
+  | 'alice-portfolio'
 
 export interface Tab {
   id: string

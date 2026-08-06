@@ -112,6 +112,7 @@ export class PluggyBroker implements IBroker {
         multiplier: '1',
         costBasisSource: position.costBasisSource,
         acquiredAt: position.acquiredAt,
+        custodian: position.institution,
       }
     })
   }

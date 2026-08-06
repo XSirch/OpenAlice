@@ -1,4 +1,5 @@
 import { ipcMain, type WebContents } from 'electron'
+import { createHash } from 'node:crypto'
 import type { ChildProcess, Serializable } from 'node:child_process'
 import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -230,7 +231,7 @@ export function registerOpenAliceIpc(opts: OpenAliceIpcOptions): void {
       const fileStat = await stat(abs)
       if (fileStat.size > 1024 * 1024) return { kind: 'too_large', sizeBytes: fileStat.size }
       const content = await readFile(abs, 'utf8')
-      return { kind: 'ok', content }
+      return { kind: 'ok', content, revision: createHash('sha256').update(content, 'utf8').digest('hex') }
     } catch (err) {
       if (err instanceof WorkspacePathTraversal) return { kind: 'invalid_path' }
       if (isENOENT(err)) return { kind: 'file_missing' }
