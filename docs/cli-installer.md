@@ -35,6 +35,10 @@ mode. It covers Git, Python 3, make, and a C++ compiler because pnpm may need to
 compile native Node modules such as `node-pty`. It does not install Node,
 additional Agent CLIs, broker SDKs, credentials, Docker, or Electron. Managed
 Pi is part of the baseline OpenAlice transaction, not a Runtime-tool option.
+`node-pty` is an optional package dependency so dependency-only QA and tooling
+that do not open a Workspace terminal can still install on minimal hosts. A
+source Runtime remains responsible for installing the build tools above; the
+terminal surface is not considered available when the native addon was skipped.
 
 The stable browser-local distribution is bundle-backed:
 
