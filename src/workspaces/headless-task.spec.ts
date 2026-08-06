@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -18,8 +18,12 @@ const noopLogger = {
   },
 } as unknown as Logger;
 
-// node must resolve on PATH for these to spawn.
-const baseEnv = { PATH: process.env['PATH'] ?? '' };
+// Prefer the exact runtime executing Vitest. pnpm-managed runtimes add a POSIX
+// `node` shim ahead of node.exe on Windows, which child_process cannot execute
+// directly even though the downloaded runtime itself is healthy.
+const baseEnv = {
+  PATH: `${dirname(process.execPath)}${delimiter}${process.env['PATH'] ?? ''}`,
+};
 
 describe('runHeadlessTask', () => {
   it('runs to natural exit when no watchdog is requested', async () => {

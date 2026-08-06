@@ -568,9 +568,8 @@ The second assertion deliberately uses an observable Workspace side effect,
 not a model claiming that a command succeeded. The run emits a versioned JSON
 receipt whose individual checks make PATH, injection, CLI transport, runtime
 output, tool use, and cleanup failures distinguishable. The Desktop Package
-Smoke matrix preserves these receipts as CI artifacts. Release candidates run
-the same acceptance on all three platform/architecture builds before any tag or
-GitHub Release is created; only accepted installers are then published.
+Smoke jobs preserve these receipts as CI artifacts. The release workflow is
+Linux/VPS-only and does not publish macOS or Windows desktop installers.
 
 ### N-1 desktop upgrade acceptance
 
@@ -592,19 +591,9 @@ desktop data, credentials, or preferences. The previous renderer is driven
 through a short-lived loopback DevTools endpoint so the test uses its real API
 and bootstrap code without adding a production smoke route.
 
-Release candidates repeat the journey against publication bytes. macOS expands
-the final signed architecture-specific ZIP; Windows silently installs N-1 and
-then runs the final NSIS installer over the same isolated install directory.
-Before either artifact is accepted, the release job parses the platform update
-YAML and recomputes the referenced file size and SHA-512, requires its blockmap,
-and verifies the candidate version. A failed upgrade receipt or byte mismatch
-blocks `publish-release`, so no tag, GitHub Release, or CDN mirror is created.
-
-This gate proves N-1 state compatibility and the shipped ZIP/NSIS bytes. macOS
-ShipIt replacement and signing/notarization remain native release mechanics;
-the updater status/handoff contract stays covered by desktop unit/UI tests and
-signed release rehearsal. Do not describe an unpacked-package PR smoke as proof
-that ShipIt itself replaced the application.
+This desktop journey remains available as a local compatibility smoke, but it
+is not a release gate. Release publication is gated by the accepted Linux
+headless Runtime, Linux Broker Packs, and CLI installer.
 
 Do not replace the actual shims with direct tool-function calls in this smoke:
 that would stop covering argv parsing, manifest discovery, managed Node,
@@ -668,12 +657,9 @@ such as `node-pty` and therefore requires Visual Studio Build Tools with the
 C++ desktop workload. This is a source-build prerequisite only; users running
 the produced OpenAlice installer do not need Visual Studio.
 
-The `Desktop Package Smoke` workflow runs native Apple Silicon, Intel macOS,
-and Windows package jobs. macOS release builds remain separate rather than
-universal so native dependencies are installed, built, signed, and notarized
-on their matching architecture. Apple Silicon uses the canonical
-`latest-mac.yml` update feed; Intel uses `latest-mac-intel.yml` with the
-electron-updater compatibility alias `latest-intel-mac.yml`.
+The `Desktop Package Smoke` workflow runs on Linux only. Native macOS and
+Windows package builds are intentionally outside the supported CI and release
+surface.
 
 A release-facing change should also verify a clean-machine flow:
 

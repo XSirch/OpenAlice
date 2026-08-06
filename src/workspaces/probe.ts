@@ -24,9 +24,9 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import * as pty from 'node-pty';
 
 import type { Logger } from './logger.js';
+import { requirePty } from './pty-runtime.js';
 import { resolveLaunchCommand } from './win-command.js';
 
 export interface HeadlessProbeArgs {
@@ -87,7 +87,7 @@ export async function runHeadlessProbe(args: HeadlessProbeArgs): Promise<Headles
   let signal: number | null = null;
   let killed = false;
 
-  const child = pty.spawn(argv0, argv1, {
+  const child = requirePty().spawn(argv0, argv1, {
     cwd,
     env: env as { [key: string]: string },
     cols: 80,

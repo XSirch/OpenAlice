@@ -87,200 +87,6 @@ jobs:
           path: notes.md
           if-no-files-found: error
 
-  # Per-platform desktop installers are built before any tag or GitHub Release
-  # exists. Each runner builds only its own platform/arch, preserves the candidate
-  # immediately after fast package acceptance, and leaves the slower N-1 upgrade
-  # journey to a downstream job that can be retried without rebuilding it. macOS
-  # builds are signed and notarized through Developer ID secrets; Windows remains
-  # unsigned until a Windows code-signing certificate exists.
-  build-desktop:
-    needs: release
-    if: needs.release.outputs.created == 'true' && !github.event.inputs.mirror_tag
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-15-intel
-            arch: x64
-          - os: windows-latest
-            arch: x64
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # macOS still uses dugite's embedded Git. Windows keeps only dugite's JS
-      # wrapper and routes it to managed PortableGit in the packaged smoke.
-      - name: Verify bundled git (dugite) was fetched
-        if: runner.os == 'macOS'
-        run: |
-          node -e "const{existsSync}=require('fs');const{dirname,join}=require('path');const g=join(dirname(require.resolve('dugite/package.json')),'git');if(!existsSync(g)){console.error('dugite embedded git MISSING at '+g);process.exit(1)}console.log('dugite embedded git OK '+g)"
-
-      - name: Build Alice + UTA + desktop shell
-        run: pnpm electron:build
-
-      - name: Vendor managed workspace runtime
-        run: pnpm vendor:runtime
-
-      - name: Write Apple notarization API key
-        if: runner.os == 'macOS'
-        run: |
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          printf '%s' "$APPLE_API_KEY_P8" > "$KEY_PATH"
-          chmod 600 "$KEY_PATH"
-          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
-        env:
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-
-      - name: Package macOS installer
-        if: runner.os == 'macOS'
-        # Build on the matching native host so pnpm and electron-builder both
-        # select the correct native dependencies for arm64 or Intel.
-        run: |
-          ulimit -n 65536 || ulimit -n 32768 || ulimit -n 16384 || ulimit -n 10240
-          echo "open files limit: $(ulimit -n)"
-          pnpm -F @traderalice/desktop exec electron-builder --projectDir ../.. --publish never --${{ matrix.arch }}
-        env:
-          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-
-      - name: Package Windows installer
-        if: runner.os == 'Windows'
-        # Windows remains unsigned until a Windows code-signing certificate is
-        # available.
-        run: pnpm -F @traderalice/desktop exec electron-builder --projectDir ../.. --publish never --${{ matrix.arch }}
-
-      - name: Prove release candidate Workspace CLI acceptance
-        run: pnpm electron:smoke:workspace --skip-build --skip-pack
-        timeout-minutes: 5
-        env:
-          OPENALICE_SMOKE_RECEIPT_PATH: ${{ runner.temp }}/openalice-workspace-acceptance.json
-
-      - name: Preserve release acceptance receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-acceptance-${{ runner.os }}-${{ matrix.arch }}
-          path: ${{ runner.temp }}/openalice-workspace-acceptance.json
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Prepare update channel aliases
-        shell: bash
-        env:
-          RELEASE_PLATFORM: ${{ runner.os }}
-          RELEASE_ARCH: ${{ matrix.arch }}
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          node scripts/prepare-desktop-release-assets.mjs build \
-            --out-dir dist/electron-app \
-            --platform "$RELEASE_PLATFORM" \
-            --arch "$RELEASE_ARCH" \
-            --version "$VERSION"
-          rm -f dist/electron-app/builder-debug.yml
-
-      - name: Verify candidate update metadata and referenced bytes
-        shell: bash
-        env:
-          RELEASE_PLATFORM: ${{ runner.os }}
-          RELEASE_ARCH: ${{ matrix.arch }}
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          pnpm electron:verify-update-assets -- \
-            --out-dir dist/electron-app \
-            --platform "$RELEASE_PLATFORM" \
-            --arch "$RELEASE_ARCH" \
-            --version "$VERSION"
-
-      - name: Preserve desktop release candidate
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-assets-${{ runner.os }}-${{ matrix.arch }}
-          path: |
-            dist/electron-app/*.dmg
-            dist/electron-app/*.zip
-            dist/electron-app/*.yml
-            dist/electron-app/*.blockmap
-            dist/electron-app/*.exe
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
-
-  # The final-artifact upgrade journey is intentionally downstream from the
-  # build. A failed platform can be retried from its preserved installer without
-  # repeating Electron packaging, macOS signing, or notarization.
-  accept-desktop-upgrade:
-    name: Accept desktop upgrade (${{ matrix.os }}, ${{ matrix.arch }})
-    needs: [release, build-desktop]
-    if: needs.release.outputs.created == 'true' && needs.build-desktop.result == 'success' && !github.event.inputs.mirror_tag
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-15-intel
-            arch: x64
-          - os: windows-latest
-            arch: x64
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Restore desktop release candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: release-assets-${{ runner.os }}-${{ matrix.arch }}
-          path: dist/electron-app
-
-      - name: Prove final desktop artifact upgrades previous release state
-        run: >-
-          pnpm electron:smoke:upgrade --
-          --from "${{ needs.release.outputs.previous_tag }}"
-          --candidate-artifact-dir dist/electron-app
-          --receipt "${{ runner.temp }}/openalice-desktop-upgrade.json"
-        timeout-minutes: 30
-
-      - name: Preserve desktop upgrade acceptance receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-upgrade-acceptance-${{ runner.os }}-${{ matrix.arch }}
-          path: ${{ runner.temp }}/openalice-desktop-upgrade.json
-          if-no-files-found: error
-          retention-days: 7
-
   cli-installer-acceptance:
     name: Accept CLI installer candidate
     needs: release
@@ -311,12 +117,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            platform: darwin
-            arch: arm64
-          - os: macos-15-intel
-            platform: darwin
-            arch: x64
           - os: ubuntu-24.04
             platform: linux
             arch: x64
@@ -380,9 +180,8 @@ jobs:
           compression-level: 0
           retention-days: 1
 
-  # Broker Packs are release artifacts, not inputs to the desktop package. Build
-  # and validate them on their native platforms in parallel with desktop and
-  # headless Runtime candidates instead of serializing them in desktop jobs.
+  # The supported deployment surface is Linux/VPS. Build Broker Packs only for
+  # that release target.
   build-broker-packs:
     name: Build Broker Packs (${{ matrix.os }}, ${{ matrix.arch }})
     needs: release
@@ -391,12 +190,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-15-intel
-            arch: x64
-          - os: windows-latest
-            arch: x64
           - os: ubuntu-latest
             arch: x64
     runs-on: ${{ matrix.os }}
@@ -435,8 +228,8 @@ jobs:
 
   publish-release:
     name: Publish accepted release
-    needs: [release, build-desktop, accept-desktop-upgrade, build-headless-runtime, build-broker-packs, cli-installer-acceptance]
-    if: needs.release.outputs.created == 'true' && needs.build-desktop.result == 'success' && needs.accept-desktop-upgrade.result == 'success' && needs.build-headless-runtime.result == 'success' && needs.build-broker-packs.result == 'success' && needs.cli-installer-acceptance.result == 'success'
+    needs: [release, build-headless-runtime, build-broker-packs, cli-installer-acceptance]
+    if: needs.release.outputs.created == 'true' && needs.build-headless-runtime.result == 'success' && needs.build-broker-packs.result == 'success' && needs.cli-installer-acceptance.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -447,12 +240,6 @@ jobs:
         with:
           name: release-notes
           path: dist/release-notes
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: release-assets-*
-          path: dist/release-assets
-          merge-multiple: true
 
       - uses: actions/download-artifact@v4
         with:
@@ -477,11 +264,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           files: |
-            dist/release-assets/*.dmg
-            dist/release-assets/*.zip
-            dist/release-assets/*.yml
-            dist/release-assets/*.blockmap
-            dist/release-assets/*.exe
             dist/release-broker-packs/*.json
             dist/release-broker-packs/*.tgz
             dist/release-headless-runtime/*.json
@@ -546,8 +328,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.mirror_tag || needs.release.outputs.tag }}
         run: |
-          shopt -s nullglob
-          files=(dist/r2-upload/*-mac-intel.yml dist/r2-upload/*-intel-mac.yml dist/r2-upload/latest-mac-arm64.yml)
+          files=()
           installer="dist/r2-upload/OpenAlice-${TAG#v}-install"
           if [ -f "$installer" ]; then
             files+=("$installer")
@@ -574,24 +355,10 @@ jobs:
 
           aws s3 cp dist/r2-upload "s3://${R2_BUCKET}/" \
             --recursive \
-            --exclude "*.yml" \
             --exclude "manifest.json" \
-            --exclude "mac-arm64.dmg" \
-            --exclude "mac-arm64.zip" \
-            --exclude "mac-x64.dmg" \
-            --exclude "mac-x64.zip" \
-            --exclude "windows-x64.exe" \
             --exclude "install" \
             --exclude "OpenAlice-*-install" \
             --cache-control "public, max-age=31536000, immutable" \
-            --endpoint-url "$ENDPOINT"
-
-          aws s3 cp dist/r2-upload "s3://${R2_BUCKET}/" \
-            --recursive \
-            --exclude "*" \
-            --include "*.yml" \
-            --cache-control "no-cache" \
-            --content-type "text/yaml" \
             --endpoint-url "$ENDPOINT"
 
           aws s3 cp dist/r2-upload/manifest.json "s3://${R2_BUCKET}/manifest.json" \
@@ -611,41 +378,6 @@ jobs:
             --content-type "text/plain" \
             --endpoint-url "$ENDPOINT"
 
-          if [ -f dist/r2-upload/mac-arm64.dmg ]; then
-            aws s3 cp dist/r2-upload/mac-arm64.dmg "s3://${R2_BUCKET}/mac-arm64.dmg" \
-              --cache-control "no-cache" \
-              --content-type "application/x-apple-diskimage" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/mac-arm64.zip ]; then
-            aws s3 cp dist/r2-upload/mac-arm64.zip "s3://${R2_BUCKET}/mac-arm64.zip" \
-              --cache-control "no-cache" \
-              --content-type "application/zip" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/mac-x64.dmg ]; then
-            aws s3 cp dist/r2-upload/mac-x64.dmg "s3://${R2_BUCKET}/mac-x64.dmg" \
-              --cache-control "no-cache" \
-              --content-type "application/x-apple-diskimage" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/mac-x64.zip ]; then
-            aws s3 cp dist/r2-upload/mac-x64.zip "s3://${R2_BUCKET}/mac-x64.zip" \
-              --cache-control "no-cache" \
-              --content-type "application/zip" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
-          if [ -f dist/r2-upload/windows-x64.exe ]; then
-            aws s3 cp dist/r2-upload/windows-x64.exe "s3://${R2_BUCKET}/windows-x64.exe" \
-              --cache-control "no-cache" \
-              --content-type "application/vnd.microsoft.portable-executable" \
-              --endpoint-url "$ENDPOINT"
-          fi
-
       - name: Verify CDN metadata
         env:
           DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
@@ -654,36 +386,7 @@ jobs:
         run: |
           BASE_URL="${DOWNLOAD_BASE_URL%/}"
           VERSION="${TAG#v}"
-          CHANNEL="latest"
           shopt -s nullglob
-
-          if [[ "$VERSION" == *-* ]]; then
-            CHANNEL="${VERSION#*-}"
-            CHANNEL="${CHANNEL%%.*}"
-          fi
-
-          if [ "$CHANNEL" = "latest" ]; then
-            MAC_METADATA="latest-mac.yml"
-            WINDOWS_METADATA="latest.yml"
-          else
-            MAC_METADATA="${CHANNEL}-mac.yml"
-            WINDOWS_METADATA="${CHANNEL}.yml"
-          fi
-
-          curl -fsSI "${BASE_URL}/${MAC_METADATA}"
-          curl -fsSI "${BASE_URL}/${WINDOWS_METADATA}"
-          curl -fsSI "${BASE_URL}/OpenAlice-${VERSION}-arm64.dmg"
-          curl -fsSI "${BASE_URL}/mac-arm64.dmg"
-          if [ -f dist/r2-upload/mac-x64.dmg ]; then
-            curl -fsSI "${BASE_URL}/mac-x64.dmg"
-          fi
-          if [ -f dist/r2-upload/mac-x64.zip ]; then
-            curl -fsSI "${BASE_URL}/mac-x64.zip"
-          fi
-          if [ -f "dist/r2-upload/${CHANNEL}-mac-intel.yml" ]; then
-            curl -fsSI "${BASE_URL}/${CHANNEL}-mac-intel.yml"
-          fi
-          curl -fsSI "${BASE_URL}/windows-x64.exe"
           curl -fsSI "${BASE_URL}/manifest.json"
           curl -fsSI "${BASE_URL}/OpenAlice-${VERSION}-install"
           curl -fsSI "${BASE_URL}/install"
@@ -712,16 +415,4 @@ jobs:
             CATALOG="$catalog" node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync(process.env.CATALOG,'utf8'));for(const p of c.packs)console.log(p.file)" |
               while IFS= read -r pack; do curl -fsSI "${BASE_URL}/${pack}"; done
           done
-
-          WINDOWS_FEED_EXE=$(
-            WINDOWS_METADATA="$WINDOWS_METADATA" node -e "const fs=require('fs');const content=fs.readFileSync('dist/r2-upload/'+process.env.WINDOWS_METADATA,'utf8');const match=content.match(/(?:^|\\n)path:\\s*['\"]?([^'\"\\n]+)['\"]?/);process.stdout.write(match?.[1]?.trim()||'')"
-          )
-
-          if [ -n "$WINDOWS_FEED_EXE" ]; then
-            WINDOWS_FEED_URL=$(
-              WINDOWS_FEED_EXE="$WINDOWS_FEED_EXE" node -e "process.stdout.write(encodeURI(process.env.WINDOWS_FEED_EXE))"
-            )
-            curl -fsSI "${BASE_URL}/${WINDOWS_FEED_URL}"
-            curl -fsSI "${BASE_URL}/${WINDOWS_FEED_URL}.blockmap"
-          fi
 

@@ -128,7 +128,7 @@ export function prepareMirrorAssets({ outDir, tag, baseUrl, repository }) {
       mac: macFeed ? `${normalizedBaseUrl}/${macFeed}` : null,
       macArm64: macFeed ? `${normalizedBaseUrl}/${macFeed}` : null,
       macIntel: existsSync(join(outDir, intelFeed)) ? `${normalizedBaseUrl}/${intelFeed}` : null,
-      windows: `${normalizedBaseUrl}/${channel}.yml`,
+      windows: existsSync(windowsMetadata) ? `${normalizedBaseUrl}/${channel}.yml` : null,
     },
     macArm64Dmg: urlFor(macArm64Dmg && 'mac-arm64.dmg'),
     macArm64Zip: urlFor(macArm64Zip && 'mac-arm64.zip'),

@@ -10,11 +10,12 @@ interface WorkflowStep {
 }
 
 interface WorkflowJob {
+  'runs-on'?: string
   needs?: string | string[]
   steps?: WorkflowStep[]
   strategy?: {
     matrix?: {
-      include?: Array<{ os?: string; arch?: string }>
+      include?: Array<{ os?: string; platform?: string; arch?: string }>
     }
   }
 }
@@ -36,15 +37,23 @@ function needs(job: WorkflowJob): string[] {
 }
 
 describe('Release workflow critical path', () => {
-  it('builds native Broker Packs outside the desktop package jobs', () => {
-    const desktop = workflow.jobs['build-desktop']
+  it('contains no macOS or Windows release jobs', () => {
+    expect(workflow.jobs['build-desktop']).toBeUndefined()
+    expect(workflow.jobs['accept-desktop-upgrade']).toBeUndefined()
+
+    for (const job of Object.values(workflow.jobs)) {
+      expect(job['runs-on'] ?? '').not.toMatch(/macos|windows/i)
+      for (const target of job.strategy?.matrix?.include ?? []) {
+        expect(target.os ?? '').not.toMatch(/macos|windows/i)
+        expect(target.platform ?? '').not.toBe('darwin')
+      }
+    }
+  })
+
+  it('builds Broker Packs only for Linux', () => {
     const brokerPacks = workflow.jobs['build-broker-packs']
 
-    expect(desktop.steps?.map((candidate) => candidate.name)).not.toContain('Build optional Broker Packs')
     expect(brokerPacks.strategy?.matrix?.include).toEqual([
-      { os: 'macos-14', arch: 'arm64' },
-      { os: 'macos-15-intel', arch: 'x64' },
-      { os: 'windows-latest', arch: 'x64' },
       { os: 'ubuntu-latest', arch: 'x64' },
     ])
     expect(step(brokerPacks, 'Preserve Broker Packs').with?.['name']).toBe(
@@ -52,26 +61,21 @@ describe('Release workflow critical path', () => {
     )
   })
 
-  it('preserves desktop candidates before running retriable N-1 acceptance', () => {
-    const desktop = workflow.jobs['build-desktop']
-    const upgrade = workflow.jobs['accept-desktop-upgrade']
-
-    expect(step(desktop, 'Preserve desktop release candidate').uses).toBe('actions/upload-artifact@v4')
-    expect(desktop.steps?.map((candidate) => candidate.name)).not.toContain(
-      'Prove final desktop artifact upgrades previous release state',
-    )
-    expect(needs(upgrade)).toEqual(['release', 'build-desktop'])
-    expect(step(upgrade, 'Restore desktop release candidate').uses).toBe('actions/download-artifact@v4')
-    expect(step(upgrade, 'Prove final desktop artifact upgrades previous release state')).toBeDefined()
+  it('builds headless Runtime only for Linux x64 and arm64', () => {
+    expect(workflow.jobs['build-headless-runtime'].strategy?.matrix?.include).toEqual([
+      { os: 'ubuntu-24.04', platform: 'linux', arch: 'x64' },
+      { os: 'ubuntu-24.04-arm', platform: 'linux', arch: 'arm64' },
+    ])
   })
 
-  it('keeps publication gated on both candidate builds and upgrade receipts', () => {
-    expect(needs(workflow.jobs['publish-release'])).toEqual(expect.arrayContaining([
-      'build-desktop',
-      'accept-desktop-upgrade',
-      'build-broker-packs',
+  it('gates publication only on Linux release candidates', () => {
+    expect(needs(workflow.jobs['publish-release'])).toEqual([
+      'release',
       'build-headless-runtime',
+      'build-broker-packs',
       'cli-installer-acceptance',
-    ]))
+    ])
+    const publish = step(workflow.jobs['publish-release'], 'Create tag and GitHub Release from accepted candidates')
+    expect(String(publish.with?.files)).not.toMatch(/\.dmg|\.exe|\.blockmap|release-assets/)
   })
 })

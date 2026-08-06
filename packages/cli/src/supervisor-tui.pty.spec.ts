@@ -12,8 +12,15 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import * as pty from 'node-pty'
 import { afterEach, describe, expect, it } from 'vitest'
+
+type PtyModule = typeof import('node-pty')
+const pty = await import('node-pty').catch(() => null)
+
+function spawnPty(...args: Parameters<PtyModule['spawn']>): ReturnType<PtyModule['spawn']> {
+  if (!pty) throw new Error('node-pty is unavailable')
+  return pty.spawn(...args)
+}
 
 const cliEntry = join(dirname(fileURLToPath(import.meta.url)), '../bin/openalice.ts')
 const cliPackageRoot = dirname(dirname(cliEntry))
@@ -28,11 +35,11 @@ afterEach(async () => {
   )))
 })
 
-describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
+describe.skipIf(process.platform === 'win32' || !pty)('Supervisor TUI PTY', () => {
   it('starts from the bare command and restores the terminal on detach', async () => {
     const isolatedHome = await mkdtemp(join(tmpdir(), 'openalice-cli-tui-'))
     temporaryPaths.push(isolatedHome)
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 80,
       rows: 24,
       cwd: dirname(cliEntry),
@@ -80,7 +87,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const isolatedHome = await mkdtemp(join(tmpdir(), 'openalice-cli-context-'))
     temporaryPaths.push(isolatedHome)
     const instanceHome = join(isolatedHome, 'research')
-    const child = pty.spawn(process.execPath, [
+    const child = spawnPty(process.execPath, [
       cliEntry,
       '--instance', 'research',
       '--home', instanceHome,
@@ -128,7 +135,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
   it('opens an in-TUI source prompt when startup has no checkout', async () => {
     const isolatedHome = await mkdtemp(join(tmpdir(), 'openalice-cli-source-prompt-'))
     temporaryPaths.push(isolatedHome)
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 100,
       rows: 28,
       cwd: isolatedHome,
@@ -207,7 +214,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const installedEntry = join(releaseRoot, 'bin', 'openalice.ts')
     const unrelatedCwd = join(isolatedHome, 'empty')
     await mkdir(unrelatedCwd)
-    const child = pty.spawn(process.execPath, [installedEntry], {
+    const child = spawnPty(process.execPath, [installedEntry], {
       cols: 100,
       rows: 28,
       cwd: unrelatedCwd,
@@ -266,7 +273,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const childEnv = { ...process.env }
     delete childEnv.OPENALICE_HOME
     delete childEnv.OPENALICE_INSTANCE
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 110,
       rows: 30,
       cwd: dirname(cliEntry),
@@ -341,7 +348,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const childEnv = { ...process.env }
     delete childEnv.OPENALICE_HOME
     delete childEnv.OPENALICE_INSTANCE
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 110,
       rows: 30,
       cwd: dirname(cliEntry),
@@ -427,7 +434,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const childEnv = { ...process.env }
     delete childEnv.OPENALICE_HOME
     delete childEnv.OPENALICE_INSTANCE
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 110,
       rows: 32,
       cwd: dirname(cliEntry),
@@ -536,7 +543,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const childEnv = { ...process.env }
     delete childEnv.OPENALICE_HOME
     delete childEnv.OPENALICE_INSTANCE
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 120,
       rows: 32,
       cwd: dirname(cliEntry),
@@ -603,7 +610,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
   it('shows higher-priority CLI overrides as locked settings', async () => {
     const isolatedHome = await mkdtemp(join(tmpdir(), 'openalice-cli-settings-lock-'))
     temporaryPaths.push(isolatedHome)
-    const child = pty.spawn(process.execPath, [
+    const child = spawnPty(process.execPath, [
       cliEntry,
       '--port', '44000',
     ], {
@@ -662,7 +669,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
     const isolatedHome = await mkdtemp(join(tmpdir(), 'openalice-cli-instance-lock-'))
     temporaryPaths.push(isolatedHome)
     const instanceHome = join(isolatedHome, 'research-home')
-    const child = pty.spawn(process.execPath, [
+    const child = spawnPty(process.execPath, [
       cliEntry,
       '--instance', 'research',
       '--home', instanceHome,
@@ -722,7 +729,7 @@ describe.skipIf(process.platform === 'win32')('Supervisor TUI PTY', () => {
   it('explains when managed source is unavailable from a source-run CLI', async () => {
     const isolatedHome = await mkdtemp(join(tmpdir(), 'openalice-cli-managed-source-'))
     temporaryPaths.push(isolatedHome)
-    const child = pty.spawn(process.execPath, [cliEntry], {
+    const child = spawnPty(process.execPath, [cliEntry], {
       cols: 110,
       rows: 28,
       cwd: isolatedHome,
