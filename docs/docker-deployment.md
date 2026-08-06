@@ -162,3 +162,13 @@ CI builds with BuildKit's GitHub cache, reuses that caller-owned image with
 `--skip-build --image openalice:ci`, and uploads redacted container diagnostics
 on failure. The Docker workflow runs for deployment/runtime surfaces on PRs to
 `dev` or `master`, and again for matching direct changes on `master`.
+
+## Coolify deployment trigger
+
+Every successful `CI` run for `master` triggers the `Coolify Deploy` workflow.
+Configure `COOLIFY_WEBHOOK` and `COOLIFY_TOKEN` as repository secrets or as
+secrets of the `production` GitHub environment. The webhook is the application's
+Deploy Webhook URL from Coolify; the token must have the `deploy` permission.
+The workflow fails with a configuration error when either secret is missing,
+instead of silently accepting a merge that was not deployed. It can also be
+run manually for recovery without creating another commit.
