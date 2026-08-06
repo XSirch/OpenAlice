@@ -5,7 +5,7 @@ import { defaultFgcCoveragePolicy } from '../../domain/alice-invest/fixed-income
 import { defaultBrazilTaxPolicy } from '../../domain/alice-invest/tax/contracts.js'
 
 const definitions: FixedIncomeCustodyDefinitions = { version: 1, entries: [] }
-const config = { version: 1 as const, pluggy: { enabled: true, clientId: 'client', clientSecret: 'secret', itemIds: ['00000000-0000-4000-8000-000000000001'] } }
+const config = { version: 1 as const, pluggy: { enabled: true, clientId: 'client', clientSecret: 'secret', itemIds: ['00000000-0000-4000-8000-000000000001'], itemInstitutions: { '00000000-0000-4000-8000-000000000001': 'Nubank' } } }
 
 describe('open finance fixed-income routes', () => {
   it('returns the read-only Pluggy overview grouped by Item connector', async () => {
@@ -15,7 +15,7 @@ describe('open finance fixed-income routes', () => {
     const response = await app.request('/overview')
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual(overview)
-    expect(fetchOverview).toHaveBeenCalledWith({ clientId: 'client', clientSecret: 'secret' }, config.pluggy.itemIds)
+    expect(fetchOverview).toHaveBeenCalledWith({ clientId: 'client', clientSecret: 'secret' }, config.pluggy.itemIds, config.pluggy.itemInstitutions)
   })
 
   it('stores explicit classifications and reconciles them through a read-only snapshot', async () => {
@@ -29,7 +29,7 @@ describe('open finance fixed-income routes', () => {
     const reconciliation = await app.request('/fixed-income/reconcile')
     expect(reconciliation.status).toBe(200)
     expect(await reconciliation.json()).toEqual({ positions: [], unresolved: [], unclassifiedPositionIds: [] })
-    expect(fetchCustody).toHaveBeenCalledWith({ clientId: 'client', clientSecret: 'secret' }, config.pluggy.itemIds)
+    expect(fetchCustody).toHaveBeenCalledWith({ clientId: 'client', clientSecret: 'secret' }, config.pluggy.itemIds, config.pluggy.itemInstitutions)
     const fgc = await app.request('/fixed-income/fgc')
     expect(fgc.status).toBe(200)
     expect(await fgc.json()).toMatchObject({ eligibleAmountBRL: '0.00', reconciliation: { positions: [] } })

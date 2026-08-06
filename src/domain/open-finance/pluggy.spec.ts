@@ -65,6 +65,30 @@ describe('Pluggy custody client', () => {
     expect(snapshot.positions[0]?.institution).toBe('Nubank')
   })
 
+  it('uses the confirmed Item institution for MeuPluggy proxy connections', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ connector: { id: 999, name: 'MeuPluggy' } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ id: 'cdb', name: 'CDB', balance: 1000, currencyCode: 'BRL' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await fetchPluggyCustody({ clientId: 'id', clientSecret: 'secret' }, ['a1'], { a1: 'Nubank' })
+    expect(snapshot.positions[0]?.institution).toBe('Nubank')
+  })
+
+  it('does not report MeuPluggy itself as the custodian when an Item has no confirmed institution', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ connector: { name: 'MeuPluggy' } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ id: 'cdb', name: 'CDB', balance: 1000, currencyCode: 'BRL' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await fetchPluggyCustody({ clientId: 'id', clientSecret: 'secret' }, ['a1'])
+    expect(snapshot.positions[0]?.institution).toBeUndefined()
+  })
+
   it('omits closed Pluggy records with no material balance or quantity', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ apiKey: 'temporary-key' }), { status: 200 }))

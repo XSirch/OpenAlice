@@ -10,6 +10,7 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [itemIds, setItemIds] = useState<string[]>([])
+  const [itemInstitutions, setItemInstitutions] = useState<Record<string, string>>({})
   const [snapshot, setSnapshot] = useState<CustodySnapshot | null>(null)
   const [fgc, setFgc] = useState<FgcExposure | null>(null)
   const [ladder, setLadder] = useState<FixedIncomeLadder | null>(null)
@@ -25,6 +26,7 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
       setConfigured(config.pluggy.configured)
       setEnabled(config.pluggy.enabled)
       setItemIds(config.pluggy.itemIds)
+      setItemInstitutions(config.pluggy.itemInstitutions)
       if (config.pluggy.enabled && config.pluggy.configured) {
         const next = await api.openFinance.fixedIncomeSummary()
         setSnapshot(next.snapshot); onSnapshotChange?.(next.snapshot); setFgc(next.fgc); setLadder(next.ladder)
@@ -39,7 +41,8 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
     setBusy(true); setError(null)
     try {
       const parsedItemIds = itemIds.map((id) => id.trim()).filter(Boolean)
-      const config = await api.openFinance.save({ enabled, clientId, clientSecret, itemIds: parsedItemIds })
+      const confirmedInstitutions = Object.fromEntries(parsedItemIds.flatMap((id) => itemInstitutions[id]?.trim() ? [[id, itemInstitutions[id]!.trim()]] : []))
+      const config = await api.openFinance.save({ enabled, clientId, clientSecret, itemIds: parsedItemIds, itemInstitutions: confirmedInstitutions })
       setConfigured(config.pluggy.configured)
       setClientId(''); setClientSecret('')
       if (config.pluggy.enabled && config.pluggy.configured) {
@@ -65,7 +68,7 @@ export function OpenFinanceCustody({ onSnapshotChange }: { onSnapshotChange?: (s
           <input className="input" type="password" value={clientSecret} onChange={event => setClientSecret(event.target.value)} placeholder="Pluggy client secret" autoComplete="new-password" />
         </div>
       )}
-      <div className="mt-4"><label className="text-[12px] text-muted-foreground" htmlFor="pluggy-item-ids">MeuPluggy item IDs (one per line)</label><textarea id="pluggy-item-ids" className="input mt-1 min-h-20 w-full font-mono text-[12px]" value={itemIds.join('\n')} onChange={event => setItemIds(event.target.value.split(/\r?\n/))} placeholder="Item UUID from the Pluggy Dashboard" /><p className="mt-1 text-[11px] text-muted-foreground">MeuPluggy does not allow applications to list proxy items. Copy each linked item ID from the Dashboard.</p></div>
+      <div className="mt-4"><label className="text-[12px] text-muted-foreground" htmlFor="pluggy-item-ids">MeuPluggy item IDs (one per line)</label><textarea id="pluggy-item-ids" className="input mt-1 min-h-20 w-full font-mono text-[12px]" value={itemIds.join('\n')} onChange={event => setItemIds(event.target.value.split(/\r?\n/))} placeholder="Item UUID from the Pluggy Dashboard" /><p className="mt-1 text-[11px] text-muted-foreground">MeuPluggy exposes each linked bank as a proxy Item, but its Connector name remains “MeuPluggy”. Confirm the institution for each Item below.</p><div className="mt-3 space-y-2">{itemIds.map(id => id.trim()).filter(Boolean).map(id => <label key={id} className="grid gap-1 text-[11px] text-muted-foreground md:grid-cols-[minmax(0,1fr)_minmax(12rem,0.6fr)] md:items-center"><span className="truncate font-mono" title={id}>{id}</span><input className="input" value={itemInstitutions[id] ?? ''} onChange={event => setItemInstitutions(current => ({ ...current, [id]: event.target.value }))} placeholder="Instituição confirmada (ex.: Nubank)" /></label>)}</div></div>
       <label className="mt-4 flex items-center gap-2 text-[12px] text-muted-foreground"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} /> Enable read-only custody sync</label>
       <div className="mt-4 flex items-center gap-2"><button className="btn-primary text-[12px]" disabled={busy || (!configured && (!clientId || !clientSecret)) || (enabled && itemIds.every((id) => !id.trim()))} onClick={() => void save()}>{busy ? 'Saving...' : configured ? 'Update' : 'Save and connect'}</button>{configured && enabled && <button className="btn-secondary-sm" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing...' : 'Refresh custody'}</button>}</div>
       {error && <p role="alert" className="mt-3 text-[12px] text-destructive">{error}</p>}

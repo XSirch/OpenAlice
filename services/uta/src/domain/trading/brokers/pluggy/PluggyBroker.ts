@@ -156,7 +156,7 @@ export class PluggyBroker implements IBroker {
       throw new BrokerError('CONFIG', 'MeuPluggy is not configured or enabled in Open Finance settings.')
     }
     try {
-      this.snapshot = await fetchPluggyCustody({ clientId: pluggy.clientId, clientSecret: pluggy.clientSecret }, pluggy.itemIds)
+      this.snapshot = await fetchPluggyCustody({ clientId: pluggy.clientId, clientSecret: pluggy.clientSecret }, pluggy.itemIds, pluggy.itemInstitutions)
       this.loadedAt = Date.now()
       return this.snapshot
     } catch (error) {

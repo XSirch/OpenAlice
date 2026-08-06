@@ -45,15 +45,17 @@ RUN pnpm install --frozen-lockfile
 # `.dockerignore` removes `apps/desktop`, so Electron is not a discovered
 # workspace and cannot trigger a late dependency install in this server build.
 COPY . .
+# The server image executes JavaScript only. Declaration output is never
+# copied into the runtime image, so generating it only delays deployment.
 RUN pnpm exec turbo run build --filter=!./packages/uta-broker-* \
-    && pnpm exec tsup src/main.ts --format esm --dts --external node-pty
+    && pnpm exec tsup src/main.ts --format esm --external node-pty
 
 # Produce three dependency closures instead of pruning the whole workspace.
 # A workspace-wide production prune would retain the optional Broker Pack
 # workspaces and their SDKs even though no production process imports them.
-RUN pnpm --config.inject-workspace-packages=true --filter open-alice deploy --prod /runtime/root \
-    && pnpm --config.inject-workspace-packages=true --filter @traderalice/uta-service deploy --prod /runtime/uta \
-    && pnpm --config.inject-workspace-packages=true --filter @traderalice/connector-service deploy --prod /runtime/connector \
+RUN pnpm --config.inject-workspace-packages=true --config.package-import-method=hardlink --filter open-alice deploy --prod /runtime/root \
+    && pnpm --config.inject-workspace-packages=true --config.package-import-method=hardlink --filter @traderalice/uta-service deploy --prod /runtime/uta \
+    && pnpm --config.inject-workspace-packages=true --config.package-import-method=hardlink --filter @traderalice/connector-service deploy --prod /runtime/connector \
     && if find /runtime/root/node_modules /runtime/uta/node_modules /runtime/connector/node_modules \
         -type d \( \
           -path '*/node_modules/ccxt' -o \
@@ -106,19 +108,19 @@ RUN npm install -g \
 
 # Production artifacts. The Guardian script (`scripts/guardian/prod.mjs`)
 # expects Alice, UTA and Connector Service artifacts next to each other at /app.
-COPY --from=build /src/dist                       ./dist
-COPY --from=build /src/services/uta/dist          ./services/uta/dist
-COPY --from=build /src/services/connector/dist    ./services/connector/dist
-COPY --from=build /src/ui/dist                    ./ui/dist
-COPY --from=build /src/default                    ./default
-COPY --from=build /src/src/workspaces/templates   ./src/workspaces/templates
+COPY --link --from=build /src/dist                       ./dist
+COPY --link --from=build /src/services/uta/dist          ./services/uta/dist
+COPY --link --from=build /src/services/connector/dist    ./services/connector/dist
+COPY --link --from=build /src/ui/dist                    ./ui/dist
+COPY --link --from=build /src/default                    ./default
+COPY --link --from=build /src/src/workspaces/templates   ./src/workspaces/templates
 # Workspace CLI launchers and their sibling payload are runtime resources just
 # like templates. Keep the image-owned directory intact for `cliBinPath()`, and
 # install the same self-contained launcher set into /usr/local/bin. Debian login
 # shells reset PATH, so ENV alone would make these commands disappear from the
 # actual Workspace terminal. Installing only the launchers would also break
 # their sibling `openalice-cli.cjs` lookup.
-COPY --from=build /src/src/workspaces/cli/bin      ./src/workspaces/cli/bin
+COPY --link --from=build /src/src/workspaces/cli/bin      ./src/workspaces/cli/bin
 RUN install -m 0755 /app/src/workspaces/cli/bin/alice /usr/local/bin/alice \
     && install -m 0755 /app/src/workspaces/cli/bin/alice-uta /usr/local/bin/alice-uta \
     && install -m 0755 /app/src/workspaces/cli/bin/alice-workspace /usr/local/bin/alice-workspace \
@@ -126,19 +128,19 @@ RUN install -m 0755 /app/src/workspaces/cli/bin/alice /usr/local/bin/alice \
     && install -m 0644 /app/src/workspaces/cli/bin/openalice-cli.cjs /usr/local/bin/openalice-cli.cjs
 # Alice, UTA Core, and Connector each receive only their own production
 # dependency closure. Live broker SDKs are downloaded later as Broker Packs.
-COPY --from=build /runtime/root/node_modules      ./node_modules
-COPY --from=build /src/package.json               ./package.json
+COPY --link --from=build /runtime/root/node_modules      ./node_modules
+COPY --link --from=build /src/package.json               ./package.json
 # Internal runtime packages are injected into the production dependency
 # closures above. Their manifests explicitly publish `dist`, so this image
 # does not need the source workspace tree (or the Broker Pack workspaces).
-COPY --from=build /src/services/uta/package.json  ./services/uta/package.json
-COPY --from=build /src/services/connector/package.json ./services/connector/package.json
-COPY --from=build /runtime/uta/node_modules       ./services/uta/node_modules
-COPY --from=build /runtime/connector/node_modules ./services/connector/node_modules
+COPY --link --from=build /src/services/uta/package.json  ./services/uta/package.json
+COPY --link --from=build /src/services/connector/package.json ./services/connector/package.json
+COPY --link --from=build /runtime/uta/node_modules       ./services/uta/node_modules
+COPY --link --from=build /runtime/connector/node_modules ./services/connector/node_modules
 # Guardian supervisor lives in the scripts/ tree; only the prod entry is
 # needed at runtime, but copying the directory keeps the file path the
 # CMD references stable.
-COPY --from=build /src/scripts                    ./scripts
+COPY --link --from=build /src/scripts                    ./scripts
 
 # Two-home model — see src/core/paths.ts.
 #   /app  = APP_RESOURCES_HOME  (image content, baked in)
@@ -161,7 +163,7 @@ EXPOSE 47331
 
 # Compose and remote orchestrators can distinguish "container process exists"
 # from "Alice HTTP surface is ready" without requiring curl in the slim image.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=6 \
   CMD ["node", "-e", "const p=process.env.OPENALICE_WEB_PORT||'47331';fetch('http://127.0.0.1:'+p+'/api/version').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 
 # tini handles signal forwarding + zombie reaping; Guardian then spawns
