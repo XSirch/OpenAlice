@@ -246,6 +246,7 @@ describe('isManagedTemplatePath', () => {
     expect(isManagedTemplatePath('.agents/skills/../../AGENTS.md')).toBe(false);
     expect(isManagedTemplatePath('.agents//skills/alice/SKILL.md')).toBe(false);
     expect(isManagedTemplatePath('/tmp/AGENTS.md')).toBe(false);
+    expect(isManagedTemplatePath('portfolio/goal.md')).toBe(false);
   });
 });
 

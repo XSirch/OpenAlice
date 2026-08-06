@@ -42,6 +42,7 @@ One concept has one primary owner:
 | Low-frequency market/fundamental/macro data | `traderhub` |
 | Quantitative K-line panels and source choice | `alice-analysis` |
 | Broker accounts/contracts/quotes and trading writes | `alice-uta` |
+| Goal-based portfolio review and candidate research | `alice-portfolio` |
 
 Other instructions may route to that owner but should not copy its manual.
 

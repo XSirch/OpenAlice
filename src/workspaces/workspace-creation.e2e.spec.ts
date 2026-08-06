@@ -25,6 +25,12 @@ const CHAT_FILES = join(CHAT_DIR, 'files');
 const CHAT_BOOTSTRAP = join(CHAT_DIR, 'bootstrap.mjs');
 const AQ_DIR = join(HERE, 'templates', 'auto-quant-v2');
 const AQ_BOOTSTRAP = join(AQ_DIR, 'bootstrap.mjs');
+const ALICE_INVEST_DIR = join(HERE, 'templates', 'alice-invest');
+const ALICE_INVEST_FILES = join(ALICE_INVEST_DIR, 'files');
+const ALICE_INVEST_BOOTSTRAP = join(ALICE_INVEST_DIR, 'bootstrap.mjs');
+const ALICE_PORTFOLIO_DIR = join(HERE, 'templates', 'alice-portfolio');
+const ALICE_PORTFOLIO_FILES = join(ALICE_PORTFOLIO_DIR, 'files');
+const ALICE_PORTFOLIO_BOOTSTRAP = join(ALICE_PORTFOLIO_DIR, 'bootstrap.mjs');
 
 /**
  * Run a bootstrap.mjs exactly as the launcher's runScript does: on the bundled
@@ -80,6 +86,43 @@ function chatMeta(): TemplateMeta {
     injectTools: true,
     injectPersona: true,
     bundledSkills: ['scan-value-chain', 'delegate-autoquant'],
+  };
+}
+
+function aliceInvestMeta(): TemplateMeta {
+  return {
+    name: 'alice-invest',
+    bootstrapScript: ALICE_INVEST_BOOTSTRAP,
+    filesDir: ALICE_INVEST_FILES,
+    templateDir: ALICE_INVEST_DIR,
+    version: '1.0.1',
+    defaultAgents: ['claude', 'codex'],
+    injectTools: false,
+    injectPersona: true,
+    bundledSkills: [],
+    upgradeStrategy: 'managed-context',
+  };
+}
+
+function alicePortfolioMeta(): TemplateMeta {
+  return {
+    name: 'alice-portfolio',
+    bootstrapScript: ALICE_PORTFOLIO_BOOTSTRAP,
+    filesDir: ALICE_PORTFOLIO_FILES,
+    templateDir: ALICE_PORTFOLIO_DIR,
+    version: '1.0.0',
+    defaultAgents: ['codex', 'claude'],
+    injectTools: false,
+    injectPersona: true,
+    bundledSkills: [
+      'alice-portfolio',
+      'alice-uta',
+      'alice',
+      'alice-analysis',
+      'traderhub',
+      'opencli-reader',
+    ],
+    upgradeStrategy: 'managed-context',
   };
 }
 
@@ -204,6 +247,91 @@ describe('chat workspace create — CLI-only injection (no MCP)', () => {
     expect(existsSync(join(dir, '.claude/skills/scan-value-chain/SKILL.md'))).toBe(true);
     expect(existsSync(join(dir, '.agents/skills/alice-uta/SKILL.md'))).toBe(true); // Pi shares .agents/skills
     expect(existsSync(join(dir, '.pi/skills'))).toBe(false);                       // avoid duplicate discovery
+    expect((await run('git', ['-C', dir, 'status', '--porcelain'])).trim()).toBe('');
+  });
+});
+
+describe('Alice Invest workspace create', () => {
+  it('creates the research-only desk with its managed instructions and shadow scan', async () => {
+    await runBootstrap(
+      ALICE_INVEST_BOOTSTRAP,
+      ['portfolio', dir],
+      { AQ_TEMPLATE_ROOT: ALICE_INVEST_DIR },
+      true,
+    );
+    await injectWorkspaceContext({
+      template: aliceInvestMeta(),
+      wsId: 'ws-invest-1',
+      dir,
+    });
+    await commitInitial(dir, 'alice-invest: portfolio');
+
+    const agents = await readFile(join(dir, 'AGENTS.md'), 'utf8');
+    expect(agents).toContain('Alice Invest is research-only');
+    expect(agents).toContain('Do not use `alice-uta` trading-write commands');
+    expect(await readFile(join(dir, 'CLAUDE.md'), 'utf8')).toBe(agents);
+
+    const shadowIssue = await readFile(join(dir, '.alice/issues/b3-shadow.md'), 'utf8');
+    expect(shadowIssue).toContain('assignee: "@new-each-run"');
+    expect(shadowIssue).toContain('Run only the configured read-only B3 shadow scan');
+    expect(shadowIssue).toContain('Do not call Inbox, Connector, Telegram, UTA, broker tools');
+    expect(existsSync(join(dir, '.agents/skills/self-scheduling/SKILL.md'))).toBe(true);
+    expect(existsSync(join(dir, '.agents/skills/alice-uta/SKILL.md'))).toBe(false);
+
+    const log = await run('git', ['-C', dir, 'log', '--pretty=%an <%ae>%n%s']);
+    expect(log.trim()).toBe('launcher <launcher@local>\nalice-invest: portfolio');
+    expect((await run('git', ['-C', dir, 'status', '--porcelain'])).trim()).toBe('');
+  });
+});
+
+describe('Alice Portfolio workspace create', () => {
+  it('creates durable goal memory and read-only portfolio guidance', async () => {
+    await runBootstrap(
+      ALICE_PORTFOLIO_BOOTSTRAP,
+      ['aposentadoria', dir],
+      { AQ_TEMPLATE_ROOT: ALICE_PORTFOLIO_DIR },
+      true,
+    );
+    await injectWorkspaceContext({
+      template: alicePortfolioMeta(),
+      wsId: 'ws-portfolio-1',
+      dir,
+    });
+    await commitInitial(dir, 'alice-portfolio: aposentadoria');
+
+    const goal = await readFile(join(dir, 'portfolio/goal.md'), 'utf8');
+    expect(goal).toContain('status: needs_user_input');
+    expect(goal).toContain('# Objetivo atual');
+    expect(goal).toContain('- Renda líquida mensal:');
+    expect(goal).toContain('- Dívidas, taxas e vencimentos:');
+    expect(goal).toContain('## Proteção e aposentadoria');
+    expect(goal).toContain('- Necessidades sucessórias:');
+    expect(goal).toContain('## Cobertura patrimonial');
+
+    const agents = await readFile(join(dir, 'AGENTS.md'), 'utf8');
+    expect(agents).toContain('O arquivo `portfolio/goal.md` é a memória canônica');
+    expect(agents).toContain('Atue como uma assessora patrimonial virtual');
+    expect(agents).toContain('Não diga que é CFP®, C-Pro R');
+    expect(agents).toContain('Não emita recomendação definitiva enquanto faltarem');
+    expect(agents).toContain('nunca envia, prepara, modifica ou cancela ordens');
+    expect(await readFile(join(dir, 'CLAUDE.md'), 'utf8')).toBe(agents);
+
+    for (const skill of ['alice-portfolio', 'alice-uta', 'alice', 'alice-analysis', 'traderhub']) {
+      expect(existsSync(join(dir, '.agents/skills', skill, 'SKILL.md')), skill).toBe(true);
+    }
+    const portfolioSkill = await readFile(
+      join(dir, '.agents/skills/alice-portfolio/SKILL.md'),
+      'utf8',
+    );
+    expect(portfolioSkill).toContain('alice-uta account portfolio --source meu-pluggy');
+    expect(portfolioSkill).toContain('Never say or imply that you hold CFP®, C-Pro R');
+    expect(portfolioSkill).toContain('The minimum suitability gate');
+    expect(portfolioSkill).toContain('known conflicts/compensation');
+    expect(portfolioSkill).toContain('Never invent a rate, fee, yield, CNPJ');
+    expect(existsSync(join(dir, '.mcp.json'))).toBe(false);
+
+    const log = await run('git', ['-C', dir, 'log', '--pretty=%an <%ae>%n%s']);
+    expect(log.trim()).toBe('launcher <launcher@local>\nalice-portfolio: aposentadoria');
     expect((await run('git', ['-C', dir, 'status', '--porcelain'])).trim()).toBe('');
   });
 });
