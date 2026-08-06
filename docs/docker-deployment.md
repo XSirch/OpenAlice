@@ -162,3 +162,9 @@ CI builds with BuildKit's GitHub cache, reuses that caller-owned image with
 `--skip-build --image openalice:ci`, and uploads redacted container diagnostics
 on failure. The Docker workflow runs for deployment/runtime surfaces on PRs to
 `dev` or `master`, and again for matching direct changes on `master`.
+
+BuildKit deployments keep production dependency closures as linked layers and
+use pnpm hardlinks while assembling them. This avoids recopying the package
+store and lets unchanged runtime dependencies survive source-only rebuilds.
+The runtime healthcheck begins after five seconds and retains a one-minute
+retry window for slower hosts.

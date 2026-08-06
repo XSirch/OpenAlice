@@ -103,7 +103,7 @@ describe('Dockerfile runtime contract', () => {
   })
 
   it('installs the complete sibling-based Workspace CLI set for login shells', () => {
-    expect(dockerfile).toContain('COPY --from=build /src/src/workspaces/cli/bin')
+    expect(dockerfile).toMatch(/COPY (?:--link )?--from=build \/src\/src\/workspaces\/cli\/bin/)
     expect(dockerfile).toContain('/usr/local/bin/openalice-cli.cjs')
     for (const command of ['alice', 'alice-uta', 'alice-workspace', 'traderhub']) {
       expect(dockerfile).toContain(`/usr/local/bin/${command}`)
