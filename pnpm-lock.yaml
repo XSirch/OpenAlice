@@ -39,9 +39,15 @@ overrides:
   '@vitest/mocker>vite': ^7.3.5
 
 patchedDependencies:
-  '@xterm/addon-serialize@0.15.0-beta.287': 81575700d58b62f9262d302aa4ae43b445a6273d579cd75dd6729c8883011ab9
-  '@xterm/addon-webgl@0.20.0-beta.286': 35e3034c77e6cad54b7c676c74764e53aa56bb4ea04c9864d1f37d168f56ba39
-  '@xterm/xterm@6.1.0-beta.287': 9c1de9931d86864923ff53bc9d64474a86478085ac81ea4e432648c7e23d702c
+  '@xterm/addon-serialize@0.15.0-beta.287':
+    hash: 81575700d58b62f9262d302aa4ae43b445a6273d579cd75dd6729c8883011ab9
+    path: patches/@xterm__addon-serialize@0.15.0-beta.287.patch
+  '@xterm/addon-webgl@0.20.0-beta.286':
+    hash: 35e3034c77e6cad54b7c676c74764e53aa56bb4ea04c9864d1f37d168f56ba39
+    path: patches/@xterm__addon-webgl@0.20.0-beta.286.patch
+  '@xterm/xterm@6.1.0-beta.287':
+    hash: 9c1de9931d86864923ff53bc9d64474a86478085ac81ea4e432648c7e23d702c
+    path: patches/@xterm__xterm@6.1.0-beta.287.patch
 
 importers:
 

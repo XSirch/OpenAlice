@@ -70,9 +70,9 @@
   },
   "volta": {
     "node": "22.19.0",
-    "pnpm": "11.7.0"
+    "pnpm": "10.34.5"
   },
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@10.34.5",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
     "@hono/node-server": "^2.0.12",
