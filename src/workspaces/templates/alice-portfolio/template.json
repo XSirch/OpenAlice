@@ -1,0 +1,9 @@
+{
+  "displayName": "Alice Portfolio",
+  "groupOrder": 40,
+  "description": "Holistic goal-based wealth planning using read-only MeuPluggy holdings and research on real investments.",
+  "defaultAgents": ["codex", "claude"],
+  "injectPersona": true,
+  "bundledSkills": ["alice-portfolio", "alice-uta", "alice", "alice-analysis", "traderhub", "opencli-reader"],
+  "upgradeStrategy": "managed-context"
+}
