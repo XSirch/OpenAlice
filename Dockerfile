@@ -14,7 +14,7 @@ WORKDIR /src
 
 # pnpm via corepack (ships with Node 22). Pin the version we develop with
 # so the install plan is reproducible.
-RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 
 # Cache-friendly: copy only manifests first so the dep-resolution layer
 # stays warm across source-only changes. The postinstall helper joins this layer
