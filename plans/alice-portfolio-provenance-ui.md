@@ -2,6 +2,13 @@
 
 Status: Completed on 2026-08-06.
 
+Follow-up on 2026-08-06: fixed the agent-facing portfolio projection, which
+was dropping `custodian` after the UTA response, preserved it in snapshots,
+resolved institution names through the documented Pluggy Item/Connector
+relationship, added a MeuPluggy account overview for bank accounts, cards and
+investments grouped by institution, and added a direct `portfolio/goal.md`
+shortcut to the Alice Portfolio sidebar.
+
 Owner guides: [[docs/workspace-agent-guidance.md]], [[docs/managed-workspace-runtime.md]].
 
 ## Decisions

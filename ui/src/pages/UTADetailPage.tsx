@@ -20,6 +20,7 @@ import { fmt, fmtPnl, fmtNum, fmtPctSigned, isUnsetDecimal } from '../lib/format
 import { secTypeToClass, assetClassLabel, ASSET_CLASS_ORDER, type AssetClass } from '../lib/asset-class'
 import { ContractCell, contractPrimary } from '../lib/contract-display'
 import { displayNameForUTA } from '../lib/uta-account-filter'
+import type { PluggyOverview } from '../api/open-finance'
 
 // ==================== Page ====================
 
@@ -48,6 +49,7 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
   const [dataError, setDataError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [clock, setClock] = useState<MarketClockState>(null)
+  const [pluggyOverview, setPluggyOverview] = useState<PluggyOverview | null>(null)
 
   useEffect(() => {
     api.trading.getBrokerPresets().then(r => setPresets(r.presets)).catch(() => {})
@@ -56,6 +58,13 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
   const uta = useMemo<UTAConfig | undefined>(() => tc.utas.find(u => u.id === id), [tc.utas, id])
   const preset = useMemo<BrokerPreset | undefined>(() => presets.find(p => p.id === uta?.presetId), [presets, uta])
   const health: BrokerHealthInfo | undefined = id ? healthMap[id] : undefined
+
+  useEffect(() => {
+    if (preset?.engine !== 'pluggy') { setPluggyOverview(null); return }
+    let cancelled = false
+    api.openFinance.overview().then((overview) => { if (!cancelled) setPluggyOverview(overview) }).catch(() => { if (!cancelled) setPluggyOverview(null) })
+    return () => { cancelled = true }
+  }, [preset?.engine])
 
   // Sub-account discovery — once per UTA. A failure (or a single-wallet
   // broker) leaves the list empty, so the selector simply never renders.
@@ -262,6 +271,7 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
 
           {!lastUpdated ? <UTADetailMainSkeleton /> : (
             <div className="space-y-5">
+              {preset?.engine === 'pluggy' && pluggyOverview && <PluggyOverviewPanel overview={pluggyOverview} />}
               {/* Keep the visual overview together, then give the operational
                   tables the full content width. The auto-fit grid responds to
                   this pane's real width after both app sidebars, rather than
@@ -343,6 +353,45 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
       )}
     </div>
   )
+}
+
+export function PluggyOverviewPanel({ overview }: { overview: PluggyOverview }) {
+  const bankTotal = overview.institutions.flatMap((institution) => institution.bankAccounts).reduce((sum, account) => sum + (account.balance ?? 0), 0)
+  const creditTotal = overview.institutions.flatMap((institution) => institution.creditCards).reduce((sum, account) => sum + (account.balance ?? 0), 0)
+  const investmentTotal = overview.institutions.reduce((sum, institution) => sum + (institution.investments.total ?? 0), 0)
+  return (
+    <section aria-label="MeuPluggy overview">
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold text-foreground">Overview</h2>
+        <p className="text-[12px] text-muted-foreground">Dados financeiros agrupados pela instituição de cada conexão Pluggy.</p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <PluggyCard title="Contas bancárias" total={fmt(bankTotal, 'BRL')}>
+          {overview.institutions.flatMap((institution) => institution.bankAccounts.map((account) => ({ institution, account }))).map(({ institution, account }) => (
+            <PluggyRow key={account.id} label={institution.name} detail={`${account.name}${account.numberLast4 ? ` · •••• ${account.numberLast4}` : ''}`} value={account.balance == null ? '—' : fmt(account.balance, account.currency)} />
+          ))}
+        </PluggyCard>
+        <PluggyCard title="Cartões de crédito" total={fmt(creditTotal, 'BRL')}>
+          {overview.institutions.flatMap((institution) => institution.creditCards.map((account) => ({ institution, account }))).map(({ institution, account }) => (
+            <PluggyRow key={account.id} label={account.name} detail={`${institution.name ?? 'Instituição não retornada'}${account.numberLast4 ? ` · •••• ${account.numberLast4}` : ''}`} value={account.balance == null ? '—' : fmt(account.balance, account.currency)} />
+          ))}
+        </PluggyCard>
+        <PluggyCard title="Investimentos" total={fmt(investmentTotal, 'BRL')}>
+          {overview.institutions.map((institution) => (
+            <PluggyRow key={institution.itemId} label={institution.name} detail={`${institution.investments.count} ativos`} value={institution.investments.total == null ? '—' : fmt(institution.investments.total, institution.investments.currency)} />
+          ))}
+        </PluggyCard>
+      </div>
+    </section>
+  )
+}
+
+function PluggyCard({ title, total, children }: { title: string; total: string; children: React.ReactNode }) {
+  return <div className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border px-4 py-4"><div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div><div className="mt-2 text-xl font-semibold text-foreground">{total}</div></div><div className="divide-y divide-border">{children}</div></div>
+}
+
+function PluggyRow({ label, detail, value }: { label?: string; detail: string; value: string }) {
+  return <div className="flex items-center justify-between gap-3 px-4 py-3"><div className="min-w-0"><div className="truncate text-[13px] font-medium text-foreground">{label ?? 'Instituição não retornada pelo Pluggy'}</div><div className="truncate text-[10px] text-muted-foreground">{detail}</div></div><div className="shrink-0 text-[12px] font-medium text-foreground">{value}</div></div>
 }
 
 // ==================== Shell ====================
@@ -754,6 +803,7 @@ function PositionMobileRow({ position: p, onClose }: { position: Position; onClo
         <div className="grid grid-cols-[minmax(0,1fr)_auto_16px] items-start gap-2">
           <div className="min-w-0">
             <ContractCell contract={p.contract} />
+            {p.custodian && <div className="mt-1 truncate text-[10px] text-muted-foreground">Custodian: {p.custodian}</div>}
             <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${p.side === 'long' ? 'bg-success/15 text-success' : 'bg-destructive/15 text-destructive'}`}>
               {p.side}
             </span>
@@ -806,6 +856,7 @@ function PositionRow({ position: p, onClose }: { position: Position; onClose: ()
     <tr className="border-t border-border hover:bg-muted/30 transition-colors">
       <td className="px-3 py-2">
         <ContractCell contract={p.contract} />
+        {p.custodian && <div className="mt-1 text-[10px] text-muted-foreground">Custodian: {p.custodian}</div>}
       </td>
       <td className="px-3 py-2">
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${p.side === 'long' ? 'bg-success/15 text-success' : 'bg-destructive/15 text-destructive'}`}>

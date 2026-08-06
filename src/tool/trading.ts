@@ -387,6 +387,7 @@ If the result is an object with a \`degraded\` array, one or more accounts could
             const percentOfPortfolio = totalMarketValueUsd.gt(0) ? mvUsd.div(totalMarketValueUsd).mul(100) : new Decimal(0)
             rows.push({
               source: uta.id, symbol: pos.contract.symbol,
+              custodian: pos.custodian,
               // secType + aliceId disambiguate same-symbol positions (ETH
               // spot vs ETH perp render identically without them) and give
               // the agent the exact id closePosition needs.

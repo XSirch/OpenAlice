@@ -32,6 +32,14 @@ function pos(symbol: string) {
   }
 }
 
+function pluggyPos(symbol: string, custodian?: string) {
+  return {
+    ...pos(symbol),
+    contract: { ...pos(symbol).contract, exchange: 'PLUGGY' },
+    custodian,
+  }
+}
+
 function fakeAccount(id: string, o: AccOpts) {
   // `fail` → a real transient outage (NETWORK) → degraded bucket.
   // `connecting` → the broker connect is still in flight (CONNECTING, what
@@ -88,6 +96,15 @@ describe('trading tools — partial tolerance (#390)', () => {
     const res = await run(tools.getPortfolio, {}) as unknown[]
     expect(Array.isArray(res)).toBe(true)
     expect(res).toHaveLength(2)
+  })
+
+  it('preserves Pluggy custodian without inventing a fallback value', async () => {
+    const tools = createTradingTools(fakeManager([
+      fakeAccount('meu-pluggy', { positions: [pluggyPos('CDB A', 'Itaú'), pluggyPos('CDB B')] }),
+    ]))
+    const res = await run(tools.getPortfolio, { source: 'meu-pluggy' }) as Array<Record<string, unknown>>
+    expect(res[0]?.custodian).toBe('Itaú')
+    expect(res[1]).toHaveProperty('custodian', undefined)
   })
 
   it('getAccount yields healthy account + error marker for the offline one', async () => {
