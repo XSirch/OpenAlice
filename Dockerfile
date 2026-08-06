@@ -46,7 +46,7 @@ RUN pnpm install --frozen-lockfile
 # workspace and cannot trigger a late dependency install in this server build.
 COPY . .
 RUN pnpm exec turbo run build --filter=!./packages/uta-broker-* \
-    && pnpm exec tsup src/main.ts --format esm --dts
+    && pnpm exec tsup src/main.ts --format esm --dts --external node-pty
 
 # Produce three dependency closures instead of pruning the whole workspace.
 # A workspace-wide production prune would retain the optional Broker Pack

@@ -91,6 +91,7 @@ describe('Dockerfile runtime contract', () => {
     expect(packageJson.dependencies?.['node-pty']).toBeUndefined()
     expect(packageJson.optionalDependencies?.['node-pty']).toMatch(/^\^1\./)
     expect(dockerfile).toContain('RUN pnpm install --frozen-lockfile')
+    expect(dockerfile).toContain('--external node-pty')
   })
 
   it('copies pnpm patch files before the frozen dependency install', () => {
