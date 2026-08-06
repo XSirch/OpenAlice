@@ -48,6 +48,10 @@ export function UrlAdopter() {
         <Route path="/auto-quant/workspaces/:wsId/view/:path" element={<AdoptAutoQuantFileViewer />} />
         <Route path="/auto-quant/workspaces/:wsId" element={<AdoptAutoQuantWorkspace />} />
         <Route path="/auto-quant/workspaces/:wsId/s/:sessionId" element={<AdoptAutoQuantWorkspace />} />
+        <Route path="/alice-portfolio" element={<AdoptStatic spec={{ kind: 'alice-portfolio-landing', params: {} }} />} />
+        <Route path="/alice-portfolio/workspaces/:wsId/view/:path" element={<AdoptAlicePortfolioFileViewer />} />
+        <Route path="/alice-portfolio/workspaces/:wsId" element={<AdoptAlicePortfolioWorkspace />} />
+        <Route path="/alice-portfolio/workspaces/:wsId/s/:sessionId" element={<AdoptAlicePortfolioWorkspace />} />
         <Route path="/portfolio" element={<AdoptStatic spec={{ kind: 'portfolio', params: {} }} />} />
         <Route path="/portfolio/returns" element={<AdoptStatic spec={{ kind: 'portfolio-returns', params: {} }} />} />
         <Route path="/portfolio/events" element={<AdoptStatic spec={{ kind: 'corporate-events', params: {} }} />} />
@@ -252,6 +256,12 @@ function AdoptAutoQuantWorkspace() {
   return <AdoptStatic spec={{ kind: 'workspace', params }} />
 }
 
+function AdoptAlicePortfolioWorkspace() {
+  const { wsId, sessionId } = useParams<{ wsId: string; sessionId?: string }>()
+  if (!wsId) return <Navigate to="/alice-portfolio" replace />
+  return <AdoptStatic spec={{ kind: 'workspace', params: { wsId, ...(sessionId ? { sessionId } : {}), source: 'alice-portfolio' } }} />
+}
+
 function AdoptWorkspaceManager() {
   const { sessionId } = useParams<{ sessionId: string }>()
   if (!sessionId) return <Navigate to="/chat/manager" replace />
@@ -325,6 +335,14 @@ function AdoptAutoQuantFileViewer() {
   )
 }
 
+function AdoptAlicePortfolioFileViewer() {
+  const { wsId, path } = useParams<{ wsId: string; path: string }>()
+  const [search] = useSearchParams()
+  if (!wsId || !path) return <Navigate to="/alice-portfolio" replace />
+  const returnSessionId = search.get('sessionId') ?? undefined
+  return <AdoptStatic spec={{ kind: 'file-viewer', params: { wsId, path, source: 'alice-portfolio', ...(returnSessionId ? { returnSessionId } : {}) } }} />
+}
+
 function AdoptTrackedFileViewer() {
   const { wsId, path } = useParams<{ wsId: string; path: string }>()
   const [search] = useSearchParams()
@@ -372,16 +390,19 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'tracked-issue-detail': return 'tracked'
     case 'chat-landing':       return 'chat'
     case 'auto-quant-landing': return 'auto-quant'
+    case 'alice-portfolio-landing': return 'alice-portfolio'
     case 'workspace-manager':  return 'chat'
     case 'workspace':
       return spec.params.source === 'chat'
         ? 'chat'
-        : spec.params.source === 'auto-quant' ? 'auto-quant' : 'workspaces'
+        : spec.params.source === 'auto-quant' ? 'auto-quant' : spec.params.source === 'alice-portfolio' ? 'alice-portfolio' : 'workspaces'
     case 'file-viewer':
       return spec.params.source === 'chat'
         ? 'chat'
         : spec.params.source === 'auto-quant'
           ? 'auto-quant'
+        : spec.params.source === 'alice-portfolio'
+          ? 'alice-portfolio'
         : spec.params.source === 'tracked'
           ? 'tracked'
           : 'workspaces'

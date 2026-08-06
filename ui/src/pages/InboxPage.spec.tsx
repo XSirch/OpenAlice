@@ -44,6 +44,7 @@ beforeEach(async () => {
   vi.mocked(readWorkspaceFile).mockResolvedValue({
     kind: 'ok',
     content: '<!doctype html><html><body><h1>Close report</h1></body></html>',
+    revision: 'r1',
   })
 })
 

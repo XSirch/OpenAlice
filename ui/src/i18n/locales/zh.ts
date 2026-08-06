@@ -11,6 +11,7 @@ export const zh: Resources = {
       workspaces: '工作区',
       market: '市场',
       news: '新闻',
+      alicePortfolio: 'Alice Portfolio',
       tradingAsGit: '交易即 Git',
       portfolio: '投资组合',
       wealthForecast: '财富预测',

@@ -149,6 +149,8 @@ export interface Position {
   costBasisSource?: 'reported' | 'transactions'
   /** Earliest known application date supplied by the custody provider. */
   acquiredAt?: string
+  /** Financial institution holding an Open Finance position in custody. */
+  custodian?: string
   /**
    * Venue risk metadata for leveraged derivatives (see {@link PositionRisk}).
    * Undefined for spot and for brokers without per-position leverage — so

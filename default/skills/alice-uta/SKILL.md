@@ -58,6 +58,11 @@ alice-uta account portfolio --source <account-id>   # one account
 alice-uta account portfolio --source <account-id> --symbol AAPL
 ```
 
+MeuPluggy positions may include `custodian`, the financial institution holding
+that asset. Preserve it in per-asset answers and group holdings by institution
+when the user asks which bank holds which assets. If it is absent, say
+`instituição não informada pelo Pluggy`; never infer the bank from the asset.
+
 `--source` takes the id returned by `account list`; it is not `--account` and
 is not a broker-native account number.
 

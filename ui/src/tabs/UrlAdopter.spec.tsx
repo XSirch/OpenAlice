@@ -95,4 +95,17 @@ describe('UrlAdopter file provenance', () => {
     }))
     expect(mocks.setSidebar).toHaveBeenCalledWith('tracked')
   })
+
+  it('restores an Alice Portfolio file with its dedicated navigation context', async () => {
+    render(
+      <MemoryRouter initialEntries={['/alice-portfolio/workspaces/portfolio-1/view/portfolio%2Fgoal.md']}>
+        <UrlAdopter />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(mocks.openOrFocus).toHaveBeenCalledWith({
+      kind: 'file-viewer',
+      params: { wsId: 'portfolio-1', path: 'portfolio/goal.md', source: 'alice-portfolio' },
+    }))
+    expect(mocks.setSidebar).toHaveBeenCalledWith('alice-portfolio')
+  })
 })
