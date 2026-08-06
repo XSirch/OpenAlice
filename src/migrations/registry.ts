@@ -14,7 +14,7 @@
  * deletion + Workspace pivot turned the pre-0.40 data shapes over completely, so
  * pre-0.40 installs rebuild `data/` rather than migrate. The framework stays for
  * future upgrades. Numbering continues FORWARD from the highest id ever shipped
- * (next: 0030) — never reuse a retired id, since existing installs' journals
+ * (next: 0049) — never reuse a retired id, since existing installs' journals
  * recorded the old ones.
  */
 
@@ -57,6 +57,9 @@ import { migration as migration_0042_repair_snapshot_interval } from './0042_rep
 import { migration as migration_0043_auto_quant_default_workspace } from './0043_auto_quant_default_workspace/index.js'
 import { migration as migration_0044_session_native_titles } from './0044_session_native_titles/index.js'
 import { migration as migration_0045_retire_workspace_agent_pins } from './0045_retire_workspace_agent_pins/index.js'
+import { migration as migration_0046_pi_local_workspace_provider } from './0046_pi_local_workspace_provider/index.js'
+import { migration as migration_0047_session_runtime_bindings } from './0047_session_runtime_bindings/index.js'
+import { migration as migration_0048_semantic_issue_assignees } from './0048_semantic_issue_assignees/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -97,4 +100,7 @@ export const REGISTRY: Migration[] = [
   migration_0043_auto_quant_default_workspace,
   migration_0044_session_native_titles,
   migration_0045_retire_workspace_agent_pins,
+  migration_0046_pi_local_workspace_provider,
+  migration_0047_session_runtime_bindings,
+  migration_0048_semantic_issue_assignees,
 ]
