@@ -125,9 +125,10 @@ OpenAlice-Broker-Packs-<version>-<platform>-<arch>.json
 OpenAlice-Broker-<engine>-<version>-<platform>-<arch>.tgz
 ```
 
-The release workflow runs this on macOS arm64, macOS x64, Windows x64, and
-Linux x64; publishes the files with the desktop release; mirrors them to the
-download CDN; and verifies every catalog and referenced archive.
+A human-directed release runs this on each supported release platform,
+publishes the files with the release, mirrors them to the download CDN, and
+verifies every catalog and referenced archive. No GitHub Actions workflow
+performs these steps automatically.
 
 Before a candidate can publish, each platform runner downloads the real Broker
 Packs from the previous GitHub Release, activates them in an isolated
@@ -152,12 +153,9 @@ through `ComSpec` on Windows; the shared runner supplies the already-quoted
 command line verbatim so Node does not quote it a second time. Package scripts
 must not rely on POSIX quoting.
 
-After its fast contract/type preflight, the Desktop Package Smoke workflow runs
-a dedicated Windows Broker Pack job in parallel with desktop packaging. That
-job exercises the Pack deployment path, while the Windows desktop job reruns
-the cached desktop build through the packaged-smoke wrapper, so both
-release-facing `pnpm.cmd` call sites fail during PR validation rather than after
-a release starts.
+Before a release, run the Windows Broker Pack deployment path and the packaged
+desktop smoke locally on a suitable Windows host. Both release-facing
+`pnpm.cmd` call sites must pass before publication.
 
 Desktop package acceptance rejects `ccxt`, `longbridge`, its native binding,
 and `@alpacahq/alpaca-trade-api` if they reappear under packaged

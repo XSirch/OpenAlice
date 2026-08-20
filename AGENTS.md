@@ -82,7 +82,7 @@ Choose delivery authority before implementation:
 
 | Mode | Trigger | Delivery to `dev` |
 |---|---|---|
-| Serial / interactive | Default: the user is actively requesting and steering concrete work | After proportional local verification, open and merge the PR without waiting for pending remote CI; delete the feature branch and return to updated `dev` unless the user says to pause |
+| Serial / interactive | Default: the user is actively requesting and steering concrete work | After proportional local verification, open and merge the PR; delete the feature branch and return to updated `dev` unless the user says to pause |
 | Autonomous / topic contribution | Explicit `/goal` or direct request to autonomously find and contribute improvements | Keep one community-facing Draft PR for the active topic, add related work as atomic commits, and leave the topic unmerged for later acceptance |
 
 Internal agent decomposition must not become one GitHub PR per finding. Define a
@@ -97,12 +97,10 @@ one `area:*`; add another area only when the topic intentionally crosses owner
 boundaries. Add `review:deep` for trading writes, persisted configuration,
 credentials, destructive actions, security boundaries, or substantial
 cross-surface structure. A later interactive message does not retroactively
-authorize merging an autonomous topic PR. Related work may continue while its
-latest CI is pending, but a known failure must be repaired before adding more
-scope. In serial work, pending CI likewise must not become a synchronous lock;
-inspect the previous PR checks and post-merge `dev` run before publishing the
-next increment. `master` promotions, releases, explicit review pauses, and
-untrusted contributions keep their full synchronous gates. Detailed topic,
+authorize merging an autonomous topic PR. Every increment must carry its local
+verification evidence because this repository has no GitHub Actions workflows.
+`master` promotions, releases, explicit review pauses, and untrusted
+contributions keep their full synchronous gates. Detailed topic,
 branch, PR, promotion, hotfix, and external-contribution procedures live in
 [[docs/development-workflow.md]]
 ([Development workflow](docs/development-workflow.md)).
@@ -136,7 +134,7 @@ Add checks according to the touched surface:
 `pnpm test:e2e` is non-trading: it must never load configured broker accounts
 or submit orders. Live-paper acceptance is a separate, explicit lane:
 `OPENALICE_UTA_LIVE_PAPER=1 pnpm test:uta:live-paper`. Never run that lane as
-routine CI or against real-money accounts. Inspect the account mode and the
+routine validation or against real-money accounts. Inspect the account mode and the
 pre-test positions/orders before acknowledging it, then verify the account is
 flat after the run even when a test fails. Do not call a change verified when
 the surface-specific path was skipped; state the remaining gap.
@@ -157,11 +155,10 @@ change whose subject is the signing/notarization/update chain. State that
 release-only residual risk instead of making every development iteration pay
 the signing cost.
 
-When optimizing CI/CD, preserve the lane boundaries above. First remove
-duplicate jobs, cancel superseded runs, narrow path triggers, reuse caches and
-unsigned build artifacts, and measure the slow step before considering larger
-runners. Do not trade away the full `master` promotion/release gates merely to
-make routine `dev` feedback look faster.
+GitHub Actions is intentionally disabled to avoid hosted-runner and artifact
+usage. Do not add files under `.github/workflows/` without explicit maintainer
+direction. Run and record the local, surface-specific checks instead; releases
+remain human-directed and require their complete local gates.
 
 ## Deferred Work and Issues
 
