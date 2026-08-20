@@ -158,10 +158,10 @@ vault path. This mode intentionally stays out of ordinary PR CI because it
 uses a paid external model and a repository secret would broaden the trust
 boundary.
 
-CI builds with BuildKit's GitHub cache, reuses that caller-owned image with
-`--skip-build --image openalice:ci`, and uploads redacted container diagnostics
-on failure. The Docker workflow runs for deployment/runtime surfaces on PRs to
-`dev` or `master`, and again for matching direct changes on `master`.
+GitHub Actions is intentionally disabled. For deployment/runtime changes, run
+`pnpm docker:smoke` locally against the checkout and preserve only the compact,
+redacted diagnostics needed to explain a failure. A caller-owned image may be
+reused with `--skip-build --image <tag>` when its provenance is recorded.
 
 BuildKit deployments keep production dependency closures as linked layers and
 use pnpm hardlinks while assembling them. This avoids recopying the package

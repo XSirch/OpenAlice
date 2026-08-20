@@ -569,8 +569,8 @@ wrapper with no embedded dugite Git present, then performs a real
 The second assertion deliberately uses an observable Workspace side effect,
 not a model claiming that a command succeeded. The run emits a versioned JSON
 receipt whose individual checks make PATH, injection, CLI transport, runtime
-output, tool use, and cleanup failures distinguishable. The Desktop Package
-Smoke jobs preserve these receipts as CI artifacts. The release workflow is
+output, tool use, and cleanup failures distinguishable. Preserve the compact
+receipt with the local release evidence. The supported release path is
 Linux/VPS-only and does not publish macOS or Windows desktop installers.
 
 ### N-1 desktop upgrade acceptance
@@ -659,8 +659,8 @@ such as `node-pty` and therefore requires Visual Studio Build Tools with the
 C++ desktop workload. This is a source-build prerequisite only; users running
 the produced OpenAlice installer do not need Visual Studio.
 
-The `Desktop Package Smoke` workflow runs on Linux only. Native macOS and
-Windows package builds are intentionally outside the supported CI and release
+Run the desktop package smoke locally on Linux for the supported release path.
+Native macOS and Windows package builds are outside the supported release
 surface.
 
 A release-facing change should also verify a clean-machine flow:

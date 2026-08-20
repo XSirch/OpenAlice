@@ -63,9 +63,10 @@ The stable installer is served from the OpenAlice site:
 curl -fsSL https://openalice.ai/install | bash
 ```
 
-The release workflow publishes the same bytes as a versioned GitHub Release
-asset, mirrors them to `download.openalice.ai`, records their SHA-256 in the
-download manifest, and updates the rolling `install` alias without caching it.
+A human-directed release may publish the same bytes as a versioned GitHub
+Release asset, mirror them to `download.openalice.ai`, record their SHA-256 in
+the download manifest, and update the rolling `install` alias without caching
+it. The repository has no workflow that performs those actions automatically.
 The main-site route proxies that release-owned alias and refuses non-script
 upstream content.
 
@@ -133,8 +134,9 @@ runs `npm ci --omit=dev --ignore-scripts` in the staged release.
   runner; its product contract belongs to [[docs/remote-access.md]].
 - `scripts/install-smoke/` — clean user, local HTTP fixture, automated smoke,
   manual playground, exact Pi release assets, and an offline npm fixture.
-- `.github/workflows/cli-installer-smoke.yml` — checkout acceptance on relevant
-  PRs and live raw-channel acceptance after installer changes merge to `dev`.
+- `scripts/install-docker-smoke.mjs`, `scripts/install-channel-smoke.mjs`, and
+  `scripts/remote-ssh-smoke.mjs` are the local acceptance entry points; GitHub
+  Actions is intentionally disabled.
 - `docs/local-runtime.md` — behavior after the installed command starts a
   source-backed localhost Runtime.
 - `docs/reference/install-script/README.md` — Claude Code and Codex research;
@@ -308,8 +310,8 @@ source and selector when it does not. This catches changed payload bytes even
 when the product version and branch name are unchanged. The platform Runtime
 keeps a separate manifest identity so a macOS CLI can match the same release's
 Linux CLI while each host still verifies its own Runtime bytes. The CLI package
-version must equal the root OpenAlice version; tests and the release workflow
-reject a mismatch. `remote` has no independent branch/version option.
+version must equal the root OpenAlice version; tests and the manual release
+preflight reject a mismatch. `remote` has no independent branch/version option.
 
 The resulting directory is:
 
@@ -536,8 +538,8 @@ Environment inputs:
 | `OPENALICE_INSTALL_UPDATE_CHANNEL` | Internal exact-provenance reproduction seam used by managed SSH installs |
 | `OPENALICE_EXPECTED_CLI_VERSION` | Internal verified-update guard; rejects a payload whose CLI/product version differs from the release manifest |
 | `OPENALICE_RUNTIME_RELEASE_BASE_URL` | Release/test override for Runtime metadata and archive downloads |
-| `OPENALICE_INSTALLER_RELEASE_VERSION` | Embedded by the release workflow; binds the installer to one OpenAlice tag and Runtime set |
-| `OPENALICE_INSTALLER_UPDATE_CHANNEL` | Embedded as `stable` by the release workflow; keeps the exact tag independently updateable through the public release channel |
+| `OPENALICE_INSTALLER_RELEASE_VERSION` | Embedded by the manual release build; binds the installer to one OpenAlice tag and Runtime set |
+| `OPENALICE_INSTALLER_UPDATE_CHANNEL` | Embedded as `stable` by the manual release build; keeps the exact tag independently updateable through the public release channel |
 | `OPENALICE_RUNTIME_ARCHIVE`, `OPENALICE_RUNTIME_ARCHIVE_SHA256` | Local/CI equivalents of the development Runtime archive flags |
 | `NO_COLOR` | Disable installer color output |
 | `HOME`, `SHELL`, `PATH`, `TERM` | Standard environment used for paths, profile detection, conflicts, and color |
@@ -650,9 +652,9 @@ It verifies:
 - installed uninstall execution that removes CLI assets and PATH integration
   while preserving data, Workspaces, sources, credentials, and keys.
 
-Relevant PRs run this deterministic acceptance in CI against the exact checkout.
-The same workflow runs `pnpm test:remote:docker` in a separate clean SSH fixture
-so installer changes cannot pass while managed remote is broken.
+Relevant PRs must record this deterministic acceptance against the exact
+checkout. Run `pnpm test:remote:docker` separately in a clean SSH fixture so
+installer changes cannot pass while managed remote is broken.
 
 ### Live dev-channel acceptance
 
@@ -673,11 +675,11 @@ the matching `--branch dev` payload through the real network path, and verifies:
 - an identical second install reuses the same content identity and immutable
   release directory.
 
-The workflow runs this job after relevant changes merge to `dev`. PR checks use
-the checkout fixtures instead, because the raw dev URL correctly continues to
-represent the previously merged branch until the PR lands. A network failure is
-reported separately from deterministic checkout acceptance rather than being
-hidden by a local fixture.
+Run this check manually after relevant changes merge to `dev`. Before merge,
+use the checkout fixtures because the raw dev URL correctly continues to
+represent the previously merged branch until the PR lands. Report a network
+failure separately from deterministic checkout acceptance rather than hiding
+it behind a local fixture.
 
 ### Manual interaction review
 
@@ -745,17 +747,17 @@ Before publishing or promoting a change that affects the installer:
    version, release asset hashes, lockfile engine floor, and root/CLI Node
    engines. Do not accidentally advertise mutable `dev` as a stable release.
 3. Run the fast installer tests and the full repository-required checks.
-4. Require checkout install and managed-remote CI acceptance to pass, then
-   require the post-merge `pnpm test:install:dev-channel` result for current
-   `dev` to be green.
+4. Run checkout install and managed-remote acceptance locally, then require the
+   post-merge `pnpm test:install:dev-channel` result for current `dev` to be
+   green.
 5. Walk `pnpm test:install:docker --interactive` as a human when prompts,
    progress, PATH guidance, or next steps changed.
 6. Exercise the installed CLI from `--source`; include the localhost handoff if
    the payload or start boundary changed.
-7. Treat the `dev` to `master` merge as the release event. The release workflow
-   repeats checkout acceptance before publication, creates the installer from
-   the accepted tag, then verifies the versioned asset, R2 `install` alias,
-   manifest checksum, and main-site proxy. State the remaining
+7. Treat the `dev` to `master` merge as the release decision. Publication is a
+   separate explicit manual operation: repeat checkout acceptance, create the
+   installer from the accepted tag, then verify the versioned asset, R2
+   `install` alias, manifest checksum, and main-site proxy. State the remaining
    archive/signature gap explicitly.
 8. Keep Electron signing and notarization in the Electron release lane; the CLI
    preview must not read those secrets.

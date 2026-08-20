@@ -247,10 +247,11 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 ### Tasks blocked
 
-- 24 tasks are blocked by owner Telegram bot/private chat, owner-authorized
+- 24 tasks were blocked by owner Telegram bot/private chat, owner-authorized
   OpenRouter credential, read-only B3 and crypto sources, temporal shadow
-  observation, or a green GitHub Actions run. Each corresponding backlog task
-  records a concrete `next_action`; no fixture was used as external evidence.
+  observation, or complete validation evidence. Each corresponding backlog
+  task records a concrete `next_action`; no fixture was used as external
+  evidence.
 
 ### Code changes and migrations
 
@@ -274,13 +275,13 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 | Full `pnpm test` | Passed: 354 files, 3,195 tests; 2 files and 22 tests skipped |
 | Docker smoke | Must be rerun with a retained final result before it is recorded as passed |
 
-### CI and readiness
+### Historical CI evidence and current readiness
 
-- `.github/workflows/alice-invest-validation.yml` runs the requested matrix in
-  separate checks/Docker jobs, enables Corepack, caches pnpm, and emits a
-  fail-closed readiness/financial-execution summary. It completed successfully
-  for PR #3 and merge commit `56a09d14` on 2026-07-17:
-  https://github.com/XSirch/OpenAlice/actions/runs/29610105448.
+- The retired `.github/workflows/alice-invest-validation.yml` completed
+  successfully for PR #3 and merge commit `56a09d14` on 2026-07-17:
+  https://github.com/XSirch/OpenAlice/actions/runs/29610105448. This is
+  historical evidence only; the repository no longer contains GitHub Actions
+  workflows, so current validation must be run and recorded locally.
 - Final readiness remains `global=not_ready`,
   `fixed_income=research_only`, `b3_signals=research_only`, and
   `crypto_signals=research_only`; `execution_enabled=false`.
@@ -289,6 +290,7 @@ operational readiness. See `tasks.json` for the blocked and pending graph.
 
 1. Configure and authorize the least-privilege external credentials and
    controlled temporal tests listed in `tasks.json`.
-2. Publish this branch and run the GitHub Actions workflow through a master PR.
+2. Run and record the complete local validation matrix against the exact
+   promotion candidate.
 3. Do not promote any capability until the persisted, source-backed evidence
    has satisfied every criterion.

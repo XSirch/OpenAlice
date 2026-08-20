@@ -6,8 +6,8 @@ Delivery mode: Serial / interactive. The user selected serial delivery on
 2026-07-30 because the new TUI and its dependent Runtime/update work need each
 accepted increment integrated into `dev` before the next increment builds on
 it. Each increment gets proportional local verification, a PR to `dev`, and a
-merge without waiting on merely pending CI. A known completed failure blocks
-the next increment until repaired.
+merge after that evidence is recorded. A known failure blocks the next
+increment until repaired.
 
 Superseded planning PR: #852 was opened under the earlier parallel direction.
 It is not retroactively merged; the first serial implementation PR carries the

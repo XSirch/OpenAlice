@@ -16,8 +16,9 @@ Canonical startup rules: [[AGENTS.md]]. Guide index: [[docs/README.md]].
 - `master` is the stable/user-facing lane and the default GitHub branch. A
   `dev` to `master` merge is a versioned release event, not another integration
   step.
-- Release automation runs from `master` and derives public artifacts from the
-  accepted release tag. It is the only path that updates stable CDN aliases.
+- The repository has no GitHub Actions workflows. A merge to `master` does not
+  publish artifacts or update stable CDN aliases; any release publication is a
+  separate, explicit, human-directed operation.
 - `archive/dev-pre-beta6` is a historical snapshot; do not modify or delete it.
 - `local` is a legacy shared-worktree branch. It is not the default workflow;
   audit its unmerged commits before deciding whether to retain or retire it.
@@ -60,17 +61,17 @@ steering concrete work.
 1. Branch from current `dev`.
 2. Explain material design choices while working.
 3. Implement and run proportional verification.
-4. Before publishing the next increment, inspect the previous serial PR checks
-   and its post-merge `dev` run. Repair a completed failure before stacking more
-   work; record a still-pending run without waiting on it.
+4. Before publishing the next increment, inspect the previous increment's
+   recorded local verification. Repair a known failure before stacking more
+   work.
 5. Open a PR to `dev`, confirm the intended base and head, and merge immediately
-   unless the user requests a review pause or earlier CI has a known failure.
+   unless the user requests a review pause or earlier verification has a known
+   failure.
 6. Delete the merged feature branch and return to updated `dev`.
 
 The PR durably integrates the completed increment into `dev` and records its
-diff; it is not a synchronous CI or approval pause. Remote CI is
-one-increment-delayed feedback in this mode: it continues after merge and must
-be checked before the next serial publication.
+diff. There is no remote CI backstop, so the PR body must identify the exact
+local checks and any unavailable platform evidence.
 
 ### Autonomous / topic contribution
 
@@ -104,9 +105,8 @@ or the maintainer explicitly authorizes concurrent topics. Never create another
 PR merely because one internal task or agent finished.
 
 A later interactive message does not retroactively authorize merging the topic
-PR. Related increments may continue while its latest CI is pending because new
-pushes supersede older runs. A completed failure must be understood and repaired
-before adding more scope.
+PR. A known verification failure must be understood and repaired before adding
+more scope.
 
 #### Topic PR labels
 
@@ -157,7 +157,7 @@ git commit -m "<terse outcome>"
 git push -u origin HEAD
 gh pr create --base dev --head "$(git branch --show-current)"
 
-# Serial mode: after confirming the PR base/head, do not wait on pending CI.
+# Serial mode: merge only after recording the required local verification.
 gh pr merge <number> --merge --delete-branch
 ```
 
@@ -188,47 +188,23 @@ Do not append agent-vendor advertising or automatic co-author trailers.
 Credit human reports, designs, or reviews through `CONTRIBUTORS.md` and links to
 the issue/PR that shaped the work.
 
-## CI Feedback Lanes
+## Local Verification Only
 
-CI provides both change-level confidence and post-merge integration feedback.
-Its execution stays the same, but its blocking authority depends on the
-delivery lane:
+GitHub Actions is intentionally disabled to avoid hosted-runner and artifact
+quota usage. The repository must not contain `.yml` or `.yaml` files under
+`.github/workflows/` unless the maintainer explicitly reverses this policy.
 
-- Every PR to `dev` or `master` runs independent Ubuntu build and unit-test
-  lanes so either failure is visible without waiting for the other. The stable
-  `build-and-test` aggregate check requires both lanes to pass.
-- PRs whose complete diff is limited to `ui/`, `docs/`, or root documentation
-  skip the macOS/Windows runtime matrix. Any other path keeps the full matrix.
-- Superseded runs for the same PR are cancelled. Only the latest-head result is
-  actionable evidence.
-- Desktop Package Smoke runs its workflow-contract and root-typecheck preflight
-  before allocating the expensive host package matrix and Windows Broker Pack
-  lane. The native package lanes still start together after that fast gate.
-- In serial mode, a `dev` PR may merge after proportional local verification
-  while its remote checks are pending. Before the next serial PR is published,
-  inspect both that PR's checks and the resulting `dev` push run. A completed
-  failure blocks further stacking until it is understood and repaired; pending
-  status alone does not block progress.
-- Autonomous topic PRs remain open for later acceptance. Pending runs do not
-  block related commits, but only the latest head is evidence and a completed
-  failure blocks further scope until repaired. CI never grants merge authority.
-- A push to `dev` runs the focused Ubuntu Guardian/full-stack smoke instead of
-  repeating the PR's complete build, test, and cross-platform jobs.
-- Installer or distributed-CLI PRs run deterministic clean-container install
-  and managed-SSH acceptance against the checked-out tree. After merge, the
-  `dev` push separately downloads `raw/.../dev/install` into a clean container,
-  installs `--branch dev`, and verifies the live preview channel's provenance,
-  commands, server control surface, and idempotent reuse.
-- A push to `master` always runs the complete matrix.
-- Once this workflow version reaches the default `master` branch, the scheduled
-  validation checks out current `dev` and runs the complete matrix, providing a
-  daily cross-platform backstop for lightweight PRs.
+Pull requests, pushes to `dev`, and pushes to `master` do not run automated
+remote checks. Each increment therefore records the exact local commands and
+platforms used as its evidence. Run the root typecheck and test suite for code
+changes, then add every surface-specific gate listed in `AGENTS.md` and the
+applicable owner guide. A green check from an external contributor or an old
+Actions run is not evidence for the current commit.
 
-Keep the lightweight-path allowlist narrow. Changes to dependencies, runtime,
-Guardian, Electron, packaging, scripts, workflows, or any unclassified path
-must still produce Windows and macOS evidence. In serial `dev` work that
-evidence may arrive after merge, but a known failure stops the next increment;
-it must be green before promotion to `master` or release.
+Cross-platform, installer, Docker, package, and live dev-channel checks remain
+release gates when applicable; they are executed manually on the required
+hosts. If a required platform is unavailable, record the residual risk and do
+not call the promotion or release fully verified.
 
 ### Package signing boundary
 
@@ -253,22 +229,12 @@ This boundary keeps expensive, credentialed, externally rate-limited release
 work out of the interactive development loop while retaining the same runtime
 and resource-layout coverage.
 
-### CI/CD optimization order
+### Hosted automation boundary
 
-Optimize measured waiting time without collapsing the confidence lanes:
-
-1. cancel superseded work and avoid repeating the PR matrix on `dev` push;
-2. use narrow path classification to skip irrelevant host/package jobs;
-3. cache dependency, build, and safe unsigned-package inputs across jobs;
-4. split fast contract/type gates from slower host/runtime acceptance so the
-   first actionable failure arrives early;
-5. measure queue time versus install/build/test time before buying larger
-   runners;
-6. keep complete promotion/release acceptance, signing, and publication gated
-   even when routine `dev` feedback is deliberately asynchronous.
-
-Any CI optimization PR should include before/after timing evidence and name the
-confidence gate it preserves, moves, or removes.
+Do not reintroduce hosted CI, scheduled Actions, release workflows, artifact
+uploads, or cache-producing Actions as an incidental implementation detail.
+That requires explicit maintainer approval, a quota/retention plan, and an
+update to this guide and the no-workflows regression test.
 
 ## Merge and Cleanup
 
@@ -319,26 +285,24 @@ Before merging a promotion:
 
 - run the normal build/test gates against the full promotion delta;
 - add entry-path, trading, runtime, or package smokes required by included work;
-- follow [[docs/cli-installer.md]]; require the checkout installer/remote jobs
-  and the post-merge live dev-channel job to be green, and walk the interactive
-  installer locally when its human-facing flow changed;
-- confirm the new release version, notes, and tag intent; the release workflow
-  must see a version whose tag does not already exist, and the root and
+- follow [[docs/cli-installer.md]]; run the checkout installer/remote checks and
+  the live dev-channel check locally, and walk the interactive installer when
+  its human-facing flow changed;
+- confirm the new release version, notes, and tag intent; verify that the tag
+  does not already exist, and that the root and
   `packages/cli` manifests must carry that same product version;
-- confirm CI and release workflow triggers still match the branch policy.
+- confirm that `.github/workflows/` contains no workflow files.
 
-The release workflow repeats the deterministic installer and managed-remote
-acceptance against the exact master candidate before it can create the tag and
-GitHub Release. It then creates the versioned installer from that tag, mirrors
-the same bytes to `download.openalice.ai/install`, writes the manifest checksum,
-and verifies both CDN objects. A manual `mirror_tag` run is recovery-only: it
-checks out that existing tag and may reproduce its bytes, but must never source
-an installer from current `master`.
+Merging the promotion does not create a tag, GitHub Release, installer, mirror,
+or manifest. Those external changes require a separate explicit instruction
+and must repeat deterministic installer and managed-remote acceptance against
+the exact accepted commit. Any manual mirror recovery must use an existing tag
+and must never source an installer from current `master`.
 
-The Cloudflare R2 mirror is optional for forks and private deployments. It runs
-only when `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`,
-`R2_BUCKET`, and `DOWNLOAD_BASE_URL` are all configured; otherwise the workflow
-keeps the GitHub Release and reports the skipped mirror as a notice.
+The Cloudflare R2 mirror is an optional manual release step for forks and
+private deployments. It requires `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_ACCOUNT_ID`, `R2_BUCKET`, and `DOWNLOAD_BASE_URL`; missing configuration
+means the mirror is skipped rather than partially published.
 
 The supported release target is Linux/VPS. Promotion builds and accepts the
 Linux headless Runtime for x64 and arm64, the Linux Broker Packs, and the CLI
@@ -413,15 +377,14 @@ its entry point in the same PR.
 sections, but ask the maintainer for framing before changing the tagline,
 pillars, hero, or other marketing language.
 
-Keep `AGENTS.md` and `CONTRIBUTING.md` consistent with this guide and with
-`.github/workflows/` branch triggers.
+Keep `AGENTS.md` and `CONTRIBUTING.md` consistent with this guide and with the
+no-GitHub-Actions policy.
 
 ## Risk Gates
 
 For a serial PR to `dev`, satisfy the locally runnable, surface-specific gate
-before merging and report any platform-only residual risk. Remote platform
-evidence may trail that merge under the feedback rule above. Before promotion
-to `master` or release, every applicable gate must be complete and green.
+before merging and report any platform-only residual risk. Before promotion to
+`master` or release, every applicable gate must be complete and green.
 
 | Boundary | Required evidence |
 |---|---|
@@ -431,7 +394,7 @@ to `master` or release, every applicable gate must be complete and green.
 | Desktop, Guardian, PTY, IPC, managed runtimes | Matching dev/Electron/package smoke on affected platforms |
 | UI/API contracts | Strict UI types, real browser route, and matching demo handler |
 | CLI bootstrap installer | Follow [CLI installer](cli-installer.md); run local `pnpm test:install:docker` against the real download path before release |
-| Public contributor/release workflow | Cross-check `AGENTS.md`, `CONTRIBUTING.md`, and GitHub Actions triggers |
+| Public contributor/release process | Cross-check `AGENTS.md`, `CONTRIBUTING.md`, and the no-GitHub-Actions policy |
 
 If a required gate cannot run, document the exact residual risk in the PR and
 do not substitute an unrelated green test.

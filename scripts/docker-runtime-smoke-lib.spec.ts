@@ -75,7 +75,6 @@ describe('Dockerfile runtime contract', () => {
   const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8')
   const dockerignore = readFileSync(resolve(root, '.dockerignore'), 'utf8')
   const compose = readFileSync(resolve(root, 'docker-compose.yml'), 'utf8')
-  const workflow = readFileSync(resolve(root, '.github/workflows/docker-smoke.yml'), 'utf8')
   const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
     packageManager: string
     dependencies?: Record<string, string>
@@ -127,11 +126,5 @@ describe('Dockerfile runtime contract', () => {
     expect(compose).toContain('stop_grace_period: 30s')
     expect(compose).toContain('max-size: "10m"')
     expect(compose).toContain('max-file: "3"')
-  })
-
-  it('runs the real Workspace smoke in Docker CI', () => {
-    expect(workflow).toContain('docker/build-push-action@v6')
-    expect(workflow).toContain('docker-runtime-smoke.mjs --skip-build --image openalice:ci')
-    expect(workflow).toContain('OPENALICE_DOCKER_SMOKE_LOG_FILE')
   })
 })
