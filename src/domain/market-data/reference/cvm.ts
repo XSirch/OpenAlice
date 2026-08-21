@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import unzipper from 'unzipper'
 
 /** CVM open-data helpers. This module consumes only official public archives. */
@@ -13,6 +14,7 @@ export interface CvmStatementLine {
   account: string
   value: number
   revision?: string
+  exerciseOrder?: string
   sourceUrl?: string
 }
 
@@ -37,6 +39,12 @@ export function cvmIpeArchiveUrl(year: number): string {
 
 export interface CvmStatementFetchInput { kind: CvmStatementKind; year: number; cvmCode: string }
 interface CvmArchiveFile { path: string; buffer(): Promise<Buffer> }
+export interface CvmOfficialArchiveSnapshot<T> {
+  sourceUrl: string
+  retrievedAt: string
+  rawPayloadChecksum: string
+  rows: T[]
+}
 
 /**
  * Download DFP/ITR public files and return only the requested issuer's
@@ -44,11 +52,15 @@ interface CvmArchiveFile { path: string; buffer(): Promise<Buffer> }
  * a filing's reference/receipt dates remain attached to every line.
  */
 export async function fetchCvmStatementLines(input: CvmStatementFetchInput): Promise<CvmStatementLine[]> {
-  const response = await fetch(cvmArchiveUrl(input.kind, input.year), { signal: AbortSignal.timeout(45_000) })
-  if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for ${input.kind} ${input.year}.`)
-  const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
-  const files = archive.files.filter((file) => /_(BPA|BPP|DRE|DFC|DVA|DMPL)_(con|ind)_\d{4}\.csv$/i.test(file.path))
-  return extractCvmStatementLines(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), input.cvmCode).map((line) => ({ ...line, sourceUrl: cvmArchiveUrl(input.kind, input.year) }))
+  return (await fetchCvmStatementArchive(input)).rows
+}
+
+export async function fetchCvmStatementArchive(input: CvmStatementFetchInput): Promise<CvmOfficialArchiveSnapshot<CvmStatementLine>> {
+  const sourceUrl = cvmArchiveUrl(input.kind, input.year)
+  const { archive, rawPayloadChecksum, retrievedAt } = await downloadCvmArchive(sourceUrl, `${input.kind} ${input.year}`)
+  const files = archive.files.filter((file) => /_(BPA|BPP|DRE|DRA|DVA|DMPL|DFC_(?:MD|MI))_(con|ind)_\d{4}\.csv$/i.test(file.path))
+  const rows = extractCvmStatementLines(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), input.cvmCode).map((line) => ({ ...line, sourceUrl }))
+  return { sourceUrl, retrievedAt, rawPayloadChecksum, rows }
 }
 
 /** Parse CSV fixture/archive files without retaining unrelated issuer rows. */
@@ -57,7 +69,7 @@ export function extractCvmStatementLines(files: Array<{ path: string; text: stri
   for (const file of files) {
     const records = parseSemicolonCsv(file.text)
     for (const row of records) {
-      if (row.CD_CVM !== cvmCode) continue
+      if (!sameCvmCode(row.CD_CVM, cvmCode)) continue
       const parsed = parseCvmStatementRow(row)
       if (parsed) lines.push(parsed)
     }
@@ -68,7 +80,7 @@ export function extractCvmStatementLines(files: Array<{ path: string; text: stri
 export function extractCvmCapitalComposition(files: Array<{ path: string; text: string }>, cvmCode: string): CvmCapitalComposition[] {
   const rows: CvmCapitalComposition[] = []
   for (const file of files) for (const row of parseSemicolonCsv(file.text)) {
-    if (row.CD_CVM !== cvmCode) continue
+    if (!sameCvmCode(row.CD_CVM, cvmCode)) continue
     const referenceDate = iso(row.DT_REFER)
     if (!referenceDate || !row.DENOM_CIA) continue
     rows.push({ cvmCode, company: row.DENOM_CIA, referenceDate, commonShares: quantity(row.QT_ACOES_ORDINARIAS), preferredShares: quantity(row.QT_ACOES_PREFERENCIAIS), treasuryShares: quantity(row.QT_ACOES_TESOURARIA) })
@@ -97,17 +109,20 @@ export async function fetchCvmCapitalComposition(year: number, cvmCode: string):
 /** Official CVM IPE documents. This returns document metadata, not an inferred
  * corporate action: consumers may classify only documented categories. */
 export async function fetchCvmIpeEvents(year: number, cvmCode: string): Promise<CvmIpeEvent[]> {
-  const response = await fetch(cvmIpeArchiveUrl(year), { signal: AbortSignal.timeout(30_000) })
-  if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for IPE ${year}.`)
-  const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()))
+  return (await fetchCvmIpeArchive(year, cvmCode)).rows
+}
+
+export async function fetchCvmIpeArchive(year: number, cvmCode: string): Promise<CvmOfficialArchiveSnapshot<CvmIpeEvent>> {
+  const sourceUrl = cvmIpeArchiveUrl(year)
+  const { archive, rawPayloadChecksum, retrievedAt } = await downloadCvmArchive(sourceUrl, `IPE ${year}`)
   const files = archive.files.filter((file) => /ipe_cia_aberta_\d{4}\.csv$/i.test(file.path))
-  return extractCvmIpeEvents(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), cvmCode)
+  return { sourceUrl, retrievedAt, rawPayloadChecksum, rows: extractCvmIpeEvents(await Promise.all(files.map(async (file) => ({ path: file.path, text: decodeCvmCsv(await file.buffer()) }))), cvmCode) }
 }
 
 export function extractCvmIpeEvents(files: Array<{ path: string; text: string }>, cvmCode: string): CvmIpeEvent[] {
   const records: CvmIpeEvent[] = []
   for (const file of files) for (const row of parseSemicolonCsv(file.text)) {
-    if ((row.Codigo_CVM ?? row.CD_CVM) !== cvmCode) continue
+    if (!sameCvmCode(row.Codigo_CVM ?? row.CD_CVM, cvmCode)) continue
     const referenceDate = iso(row.Data_Referencia ?? row.DT_REFER)
     const category = row.Categoria?.trim()
     const type = row.Tipo?.trim()
@@ -160,11 +175,12 @@ export function extractCvmIssuerMapping(files: Array<{ path: string; text: strin
 export function parseCvmStatementRow(row: Record<string, string>): CvmStatementLine | null {
   const value = Number((row.VL_CONTA ?? '').replace(/\./g, '').replace(',', '.'))
   const referenceDate = iso(row.DT_REFER)
-  if (!row.CD_CVM || !row.DENOM_CIA || !referenceDate || !row.GRUP_DFP || !row.CD_CONTA || !Number.isFinite(value)) return null
+  const statement = row.GRUP_DFP ?? row.GRUPO_DFP
+  if (!row.CD_CVM || !row.DENOM_CIA || !referenceDate || !statement || !row.CD_CONTA || !Number.isFinite(value)) return null
   return {
     cvmCode: row.CD_CVM, company: row.DENOM_CIA, referenceDate,
-    filedAt: iso(row.DT_RECEB) ?? null, statement: row.GRUP_DFP,
-    accountCode: row.CD_CONTA, account: row.DS_CONTA ?? row.CD_CONTA, value, revision: row.VERSAO?.trim() || row.VERSAO_DOCUMENTO?.trim() || '1',
+    filedAt: iso(row.DT_RECEB) ?? null, statement,
+    accountCode: row.CD_CONTA, account: row.DS_CONTA ?? row.CD_CONTA, value, revision: row.VERSAO?.trim() || row.VERSAO_DOCUMENTO?.trim() || '1', exerciseOrder: row.ORDEM_EXERC?.trim() || undefined,
   }
 }
 
@@ -189,11 +205,29 @@ function decodeCvmCsv(buffer: Buffer): string {
   return utf8.includes('\uFFFD') ? buffer.toString('latin1') : utf8
 }
 
+async function downloadCvmArchive(sourceUrl: string, label: string): Promise<{ archive: Awaited<ReturnType<typeof unzipper.Open.buffer>>; rawPayloadChecksum: string; retrievedAt: string }> {
+  const response = await fetch(sourceUrl, { redirect: 'error', signal: AbortSignal.timeout(45_000) })
+  if (!response.ok) throw new Error(`CVM returned HTTP ${response.status} for ${label}.`)
+  const declaredLength = Number(response.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLength) && declaredLength > 256 * 1024 * 1024) throw new Error(`CVM archive for ${label} exceeds 256 MiB.`)
+  const bytes = Buffer.from(await response.arrayBuffer())
+  if (bytes.byteLength === 0 || bytes.byteLength > 256 * 1024 * 1024) throw new Error(`CVM archive for ${label} has an invalid size.`)
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error(`CVM response for ${label} is not a ZIP archive.`)
+  const archive = await unzipper.Open.buffer(bytes)
+  if (archive.files.length === 0 || archive.files.length > 500) throw new Error(`CVM archive for ${label} has an invalid entry count.`)
+  for (const file of archive.files) if (file.path.includes('..') || /^[\\/]|^[A-Za-z]:/.test(file.path)) throw new Error(`CVM archive for ${label} contains an unsafe path.`)
+  return { archive, rawPayloadChecksum: createHash('sha256').update(bytes).digest('hex'), retrievedAt: new Date().toISOString() }
+}
+
 function iso(value: string | undefined): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? '')
   return m ? value! : null
 }
 function quantity(value: string | undefined): number | null { if (!value) return null; const parsed = Number(value.replace(/\./g, '').replace(',', '.')); return Number.isFinite(parsed) ? parsed : null }
+function sameCvmCode(left: string | undefined, right: string): boolean {
+  if (!left || !/^\d+$/.test(left) || !/^\d+$/.test(right)) return false
+  return left.replace(/^0+(?=\d)/, '') === right.replace(/^0+(?=\d)/, '')
+}
 
 /** RFC-4180-style quoted cells with the semicolon delimiter used by CVM. */
 export function parseSemicolonCsv(text: string): Record<string, string>[] {

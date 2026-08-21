@@ -21,6 +21,21 @@ describe('fixed income contracts', () => {
     const status = productType === 'cdb' ? 'eligible' : 'unknown'
     expect(fixedIncomeProductSchema.parse({ ...cdb, productType, fgc: { status } }).fgc.status).toBe(status)
   })
+  it.each([
+    'tesouro_selic', 'tesouro_prefixado', 'tesouro_prefixado_coupon',
+    'tesouro_ipca', 'tesouro_ipca_coupon', 'tesouro_renda_mais',
+    'tesouro_educa_mais', 'rdb', 'lc', 'debenture_incentivada',
+  ] as const)('adds the PRD instrument type %s without removing legacy types', (productType) => {
+    expect(fixedIncomeProductSchema.parse({ ...cdb, productType, fgc: { status: 'unknown' } }).productType).toBe(productType)
+  })
+  it.each([
+    { kind: 'cdi_plus', spreadPct: '1.25' },
+    { kind: 'selic_plus', spreadPct: '0.10' },
+    { kind: 'igpm_plus', spreadPct: '6.50' },
+    { kind: 'custom', label: 'Índice contratual', methodologyId: 'contract-index@1' },
+  ] as const)('adds the PRD indexer $kind with explicit decimal or methodology data', (rate) => {
+    expect(fixedIncomeProductSchema.parse({ ...cdb, rate }).rate).toEqual(rate)
+  })
   it('normalizes decimal custody values, source identity and data-base', () => {
     const position = normalizeFixedIncomePosition({
       id: 'pluggy-cdb-1', product: cdb, investedAmountBRL: '10000.10', currentAmountBRL: '10250.55', custodyAsOf: '2026-07-27',

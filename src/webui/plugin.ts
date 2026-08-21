@@ -37,6 +37,7 @@ import { createEntityRoutes } from './routes/entities.js'
 import { createWikilinkRoutes } from './routes/wikilink.js'
 import { createVersionRoutes } from './routes/version.js'
 import { createAliceInvestRoutes } from './routes/alice-invest.js'
+import { createFixedIncomeRoutes } from './routes/fixed-income.js'
 import { createAuthRoutes } from './routes/auth.js'
 import { createPreferencesRoutes } from './routes/preferences.js'
 import { initializeWindowsWorkspaceShellPreference } from '../core/windows-workspace-shell.js'
@@ -250,6 +251,11 @@ export class WebPlugin implements Plugin {
         const workspaceService = this.workspaceServiceRef?.current ?? this.workspaceService
         if (!workspaceService) throw new ConnectorInboundUnavailableError('Workspace service is unavailable for Connector inbound bridge')
         await rotateExternalConversationBinding(conversationBindings, workspaceService.resumeRegistry, connectorId, conversationId, ownerId)
+      },
+      async () => {
+        const response = await createFixedIncomeRoutes().request('/telegram-summary')
+        if (!response.ok) throw new Error(`fixed-income summary unavailable: ${response.status}`)
+        return await response.json() as { message: string }
       },
     ))
     app.use('*', createAuthMiddleware({

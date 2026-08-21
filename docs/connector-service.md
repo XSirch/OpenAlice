@@ -125,6 +125,10 @@ not ordinary operator-entered configuration.
 
 Both adapters reject commands from any account other than the linked owner.
 Use `/status` for adapter health and `/test` for an explicit delivery check.
+Telegram also exposes `/renda_fixa`: the Connector authenticates a bounded
+loopback read with the existing Connector HMAC key and returns Alice's redacted
+`research_only` portfolio summary. The command has no arbitrary URL parameter,
+provider refresh, recommendation-generation, UTA, or order capability.
 
 ### Setup lifecycle and UI ownership
 

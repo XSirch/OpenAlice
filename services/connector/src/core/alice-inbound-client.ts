@@ -23,3 +23,14 @@ export async function rotateAliceConversation(baseUrl: string, connectorId: stri
   })
   if (!response.ok) throw new Error(`Alice conversation rotation failed: ${response.status}`)
 }
+
+export async function readAliceLocalJson(baseUrl: string, path: string): Promise<unknown> {
+  if (path !== '/api/connector-inbound/fixed-income-summary') throw new Error('Connector local read path is not allowed')
+  const correlationId = `read-${randomUUID()}`
+  const body = ''
+  const response = await fetch(new URL(path, baseUrl), { headers: { 'x-openalice-connector-correlation-id': correlationId, 'x-openalice-connector-signature': await signConnectorInbound(correlationId, body) }, signal: AbortSignal.timeout(10_000) })
+  if (!response.ok) throw new Error(`Alice local read failed: ${response.status}`)
+  const text = await response.text()
+  if (Buffer.byteLength(text, 'utf8') > 64 * 1024) throw new Error('Alice local read exceeded 64 KiB')
+  return JSON.parse(text)
+}

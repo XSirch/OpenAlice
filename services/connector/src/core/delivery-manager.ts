@@ -28,6 +28,7 @@ export interface DeliveryManagerOptions {
   recorder?: ConnectorIORecorder
   acceptInbound?(message: ConnectorInboundTextMessage): Promise<void>
   rotateConversation?(connectorId: string, ownerId: string, conversationId: string): Promise<void>
+  readLocalJson?(path: string): Promise<unknown>
 }
 
 /**
@@ -158,6 +159,10 @@ export class DeliveryManager {
       rotateConversation: (connectorId, ownerId, conversationId) => {
         if (!this.options.rotateConversation) throw new Error('Conversation rotation is unavailable')
         return this.options.rotateConversation(connectorId, ownerId, conversationId)
+      },
+      readLocalJson: (path) => {
+        if (!this.options.readLocalJson) throw new Error('Local read API is unavailable')
+        return this.options.readLocalJson(path)
       },
     }
     await adapter.start(config, context)

@@ -32,4 +32,14 @@ describe('Connector inbound route', () => {
     expect((await app.request('/', { method: 'POST', body, headers })).status).toBe(202)
     expect(receive).toHaveBeenCalledTimes(2)
   })
+  it('serves the fixed-income summary only to the authenticated Connector', async () => {
+    const summary = vi.fn(async () => ({ message: 'RENDA FIXA — RESUMO READ-ONLY' }))
+    const app = createConnectorInboundRoutes(vi.fn(), undefined, summary)
+    expect((await app.request('/fixed-income-summary')).status).toBe(401)
+    const correlationId = 'fixed-income-read-1'
+    const response = await app.request('/fixed-income-summary', { headers: { 'x-openalice-connector-correlation-id': correlationId, 'x-openalice-connector-signature': await signConnectorInbound(correlationId, '') } })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ message: 'RENDA FIXA — RESUMO READ-ONLY' })
+    expect(summary).toHaveBeenCalledOnce()
+  })
 })

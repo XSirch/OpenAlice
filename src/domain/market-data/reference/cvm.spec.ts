@@ -20,6 +20,12 @@ describe('CVM open data', () => {
     const lines = extractCvmStatementLines([{ path: 'dfp_cia_aberta_DRE_con_2025.csv', text: 'CD_CVM;DENOM_CIA;DT_REFER;DT_RECEB;GRUP_DFP;CD_CONTA;DS_CONTA;VL_CONTA\n9512;"PETROLEO; BRASILEIRO S.A.";2025-12-31;2026-03-01;DRE;3.11;"Lucro; líquido";1.234,56\n1;Outra;2025-12-31;2026-03-01;DRE;3.11;Lucro;2,00\n' }], '9512')
     expect(lines).toEqual([expect.objectContaining({ cvmCode: '9512', company: 'PETROLEO; BRASILEIRO S.A.', account: 'Lucro; líquido', value: 1234.56 })])
   })
+  it('accepts current GRUPO_DFP headers and matches CVM code padding', () => {
+    const files = [{ path: 'dfp_cia_aberta_DRE_con_2026.csv', text: 'CD_CVM;DENOM_CIA;DT_REFER;GRUPO_DFP;CD_CONTA;DS_CONTA;VL_CONTA\n009512;PETROBRAS;2026-03-31;DRE;3.11;Lucro;1,00\n' }]
+    expect(extractCvmStatementLines(files, '9512')).toMatchObject([{ cvmCode: '009512', statement: 'DRE', value: 1 }])
+    const events = extractCvmIpeEvents([{ path: 'ipe_cia_aberta_2026.csv', text: 'Codigo_CVM;Nome_Companhia;Data_Referencia;Categoria;Tipo;Assunto;Versao\n9512;PETROBRAS;2026-08-01;Fato Relevante;Comunicado;Evento;1\n' }], '009512')
+    expect(events).toHaveLength(1)
+  })
   it('normalizes official capital composition without guessing missing share classes', () => {
     const rows = extractCvmCapitalComposition([{ path: 'dfp_cia_aberta_composicao_capital_2025.csv', text: 'CD_CVM;DENOM_CIA;DT_REFER;QT_ACOES_ORDINARIAS;QT_ACOES_PREFERENCIAIS;QT_ACOES_TESOURARIA\n9512;PETROBRAS;2025-12-31;13000000000;0;1000\n4770;VALE;2025-12-31;5000000000;;;\n' }], '9512')
     expect(rows).toEqual([expect.objectContaining({ cvmCode: '9512', commonShares: 13_000_000_000, preferredShares: 0, treasuryShares: 1000 })])

@@ -78,6 +78,7 @@ export const TELEGRAM_CONNECTOR_DEFINITION: ConnectorDefinition = {
       { name: 'status', description: 'Show connector health.' },
       { name: 'test', description: 'Send a test notification.' },
       { name: 'new', description: 'Start a new linked conversation.' },
+      { name: 'renda_fixa', description: 'Show the read-only fixed-income summary.' },
     ],
   }
 

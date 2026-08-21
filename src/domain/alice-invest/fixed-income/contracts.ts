@@ -6,12 +6,26 @@ const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO calenda
 
 /** CDI is an index/reference rate, deliberately absent from productType. */
 export const fixedIncomeProductTypeSchema = z.enum([
-  'cdb', 'lci', 'lca', 'tesouro_direto', 'fixed_income_fund', 'debenture', 'cri', 'cra',
+  'tesouro_selic', 'tesouro_prefixado', 'tesouro_prefixado_coupon',
+  'tesouro_ipca', 'tesouro_ipca_coupon', 'tesouro_renda_mais',
+  'tesouro_educa_mais', 'cdb', 'rdb', 'lc', 'lci', 'lca', 'debenture',
+  'debenture_incentivada', 'cri', 'cra',
+  // Retained for classified custody created before the advisor expansion.
+  'tesouro_direto', 'fixed_income_fund',
 ])
 export const fixedIncomeRateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('fixed'), annualRatePct: decimalString }).strict(),
   z.object({ kind: z.literal('cdi_percentage'), cdiPct: decimalString }).strict(),
+  z.object({ kind: z.literal('cdi_plus'), spreadPct: decimalString }).strict(),
+  z.object({ kind: z.literal('selic_plus'), spreadPct: decimalString }).strict(),
   z.object({ kind: z.literal('ipca_plus'), spreadPct: decimalString }).strict(),
+  z.object({ kind: z.literal('igpm_plus'), spreadPct: decimalString }).strict(),
+  z.object({
+    kind: z.literal('custom'),
+    label: z.string().trim().min(1).max(96),
+    methodologyId: z.string().trim().min(1).max(128),
+  }).strict(),
+  // Retained for existing classifications whose provider supplied a named rate.
   z.object({ kind: z.literal('other'), label: z.string().trim().min(1).max(96), annualRatePct: decimalString.optional() }).strict(),
 ])
 
@@ -19,6 +33,7 @@ export const fixedIncomeLiquiditySchema = z.object({
   redemption: z.enum(['daily', 'at_maturity', 'scheduled']),
   settlementBusinessDays: z.number().int().min(0).max(365),
   noticeBusinessDays: z.number().int().min(0).max(365).default(0),
+  gracePeriodEndDate: dateOnly.optional(),
 }).strict()
 
 export const fixedIncomeFeesSchema = z.object({
@@ -50,6 +65,9 @@ export const fixedIncomeProductSchema = z.object({
   assumptions: z.array(z.string().trim().min(1).max(512)).max(32).default([]),
 }).strict().superRefine((product, context) => {
   if (product.maturityDate <= product.issueDate) context.addIssue({ code: 'custom', path: ['maturityDate'], message: 'must be after issueDate' })
+  if (product.liquidity.gracePeriodEndDate && (product.liquidity.gracePeriodEndDate < product.issueDate || product.liquidity.gracePeriodEndDate > product.maturityDate)) {
+    context.addIssue({ code: 'custom', path: ['liquidity', 'gracePeriodEndDate'], message: 'must be between issueDate and maturityDate' })
+  }
   if (product.fgc.status !== 'eligible' && (product.fgc.coverageLimitBRL || product.fgc.issuerExposureBRL)) context.addIssue({ code: 'custom', path: ['fgc'], message: 'only eligible products can claim FGC coverage' })
 })
 

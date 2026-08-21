@@ -987,6 +987,12 @@ html[lang="ja"] .oa-onboarding-title {
   }
 }
 
+/* Fixed-income tables stay inside the bounded product region. Columns may
+   wrap on narrow screens instead of widening the entire application shell. */
+[aria-label='Conteúdo de renda fixa'] table {
+  min-width: 100%;
+}
+
 /* Final cascade-level safety net. Several domain animations are declared
    below the first reduced-motion block, so this lives at EOF on purpose. */
 @media (prefers-reduced-motion: reduce) {

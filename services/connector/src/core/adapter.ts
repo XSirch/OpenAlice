@@ -30,6 +30,7 @@ export interface ConnectorAdapterContext {
   sendTest(connectorId: string): Promise<string>
   acceptInbound(message: ConnectorInboundTextMessage): Promise<void>
   rotateConversation(connectorId: string, ownerId: string, conversationId: string): Promise<void>
+  readLocalJson(path: string): Promise<unknown>
 }
 
 export interface ConnectorAdapter {

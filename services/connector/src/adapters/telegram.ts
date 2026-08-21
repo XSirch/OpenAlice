@@ -201,11 +201,23 @@ export class TelegramConnectorAdapter implements ConnectorAdapter {
       }
       await reply('Started a new conversation. Send your next message to begin; previous history is retained.')
     })
+    registerFixedIncomeTelegramCommand(context, (userId) => this.isOwner(userId))
   }
 
   private isOwner(userId: string): boolean {
     return Boolean(this.ownerUserId && this.ownerUserId === userId)
   }
+}
+
+export function registerFixedIncomeTelegramCommand(context: ConnectorAdapterContext, isOwner: (userId: string) => boolean): void {
+  context.commands.register('renda_fixa', async ({ userId, reply }) => {
+    if (!isOwner(userId)) return reply('This command is only available to the linked owner.')
+    const value = await context.readLocalJson('/api/connector-inbound/fixed-income-summary')
+    if (!value || typeof value !== 'object' || typeof (value as { message?: unknown }).message !== 'string') throw new Error('Fixed-income summary response is invalid')
+    const message = (value as { message: string }).message
+    if (message.length === 0 || message.length > 3_500) throw new Error('Fixed-income summary response is outside Telegram limits')
+    await reply(message)
+  })
 }
 
 export function telegramConnectorRegistration(): ConnectorAdapterRegistration {

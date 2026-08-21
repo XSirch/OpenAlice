@@ -1,0 +1,9 @@
+Tipo Titulo;Data Vencimento;Data Base;Taxa Compra Manha;Taxa Venda Manha;PU Compra Manha;PU Venda Manha;PU Base Manha
+Tesouro Selic;01/03/2029;19/08/2026;0,03;0,04;19687,50;19672,33;19672,33
+Tesouro Prefixado;01/01/2029;19/08/2026;14,30;14,42;731,30;729,12;729,12
+Tesouro IPCA+ com Juros Semestrais;15/05/2037;19/08/2026;7,75;7,87;4250,71;4213,45;4213,45
+Tesouro IPCA+;15/08/2040;19/08/2026;7,54;7,66;1725,50;1698,55;1698,55
+Tesouro IGPM+ com Juros Semestrais;01/01/2031;19/08/2026;8,08;8,20;7612,84;7579,91;7579,91
+Tesouro Prefixado com Juros Semestrais;01/01/2031;19/08/2026;14,64;14,76;877,42;873,72;873,72
+Tesouro Renda+ Aposentadoria Extra;15/12/2049;19/08/2026;7,60;7,72;1955,72;1931,60;1931,60
+Tesouro Educa+;15/12/2035;19/08/2026;8,00;8,12;2823,15;2801,67;2801,67

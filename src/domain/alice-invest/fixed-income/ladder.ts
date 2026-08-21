@@ -8,7 +8,9 @@ export interface FixedIncomeLadderInput {
   positions: FixedIncomePosition[]
   asOf: string
   annualCdiPct?: string
+  annualSelicPct?: string
   annualIpcaPct?: string
+  annualIgpmPct?: string
 }
 
 export interface FixedIncomeLadderEntry {
@@ -25,7 +27,7 @@ export interface FixedIncomeLadderEntry {
   redemptionAmountBRL: string | null
   annualGrossRatePct: string | null
   annualNetRatePct: string | null
-  benchmark: 'CDI' | 'IPCA' | 'fixed' | 'other'
+  benchmark: 'CDI' | 'SELIC' | 'IPCA' | 'IGPM' | 'fixed' | 'other'
   assumptions: string[]
   gaps: string[]
 }
@@ -54,7 +56,7 @@ export function buildFixedIncomeLadder(input: FixedIncomeLadderInput): FixedInco
     const bucket = toBucket(daysToMaturity)
     const gaps: string[] = []
     const assumptions = [...position.product.assumptions]
-    const annualGrossRatePct = grossRate(position, input.annualCdiPct, input.annualIpcaPct, gaps)
+    const annualGrossRatePct = grossRate(position, input, gaps)
     const annualNetRatePct = netRate(position, asOf, input, gaps, assumptions)
     const entry: FixedIncomeLadderEntry = {
       id: position.id,
@@ -70,7 +72,7 @@ export function buildFixedIncomeLadder(input: FixedIncomeLadderInput): FixedInco
       redemptionAmountBRL: position.redemptionAmountBRL ?? null,
       annualGrossRatePct,
       annualNetRatePct,
-      benchmark: position.product.rate.kind === 'cdi_percentage' ? 'CDI' : position.product.rate.kind === 'ipca_plus' ? 'IPCA' : position.product.rate.kind === 'fixed' ? 'fixed' : 'other',
+      benchmark: benchmark(position),
       assumptions,
       gaps,
     }
@@ -80,16 +82,31 @@ export function buildFixedIncomeLadder(input: FixedIncomeLadderInput): FixedInco
   return { buckets, asOf: input.asOf, disclaimer: 'Estimativas informativas: não representam oferta, recomendação, garantia de resgate ou cálculo tributário individual.' }
 }
 
-function grossRate(position: FixedIncomePosition, cdi: string | undefined, ipca: string | undefined, gaps: string[]): string | null {
+function grossRate(position: FixedIncomePosition, input: FixedIncomeLadderInput, gaps: string[]): string | null {
   const rate = position.product.rate
   if (rate.kind === 'fixed') return rate.annualRatePct
   if (rate.kind === 'other') return rate.annualRatePct ?? null
   if (rate.kind === 'cdi_percentage') {
-    if (!cdi) { gaps.push('CDI annualized is required to compare this position.'); return null }
-    return new Decimal(cdi).mul(rate.cdiPct).div(100).toDecimalPlaces(4).toFixed(4)
+    if (!input.annualCdiPct) { gaps.push('CDI annualized is required to compare this position.'); return null }
+    return new Decimal(input.annualCdiPct).mul(rate.cdiPct).div(100).toDecimalPlaces(4).toFixed(4)
   }
-  if (!ipca) { gaps.push('IPCA annualized is required to compare this position.'); return null }
-  return new Decimal(1).plus(new Decimal(ipca).div(100)).mul(new Decimal(1).plus(new Decimal(rate.spreadPct).div(100))).minus(1).mul(100).toDecimalPlaces(4).toFixed(4)
+  if (rate.kind === 'custom') { gaps.push(`Custom rate methodology ${rate.methodologyId} is not implemented.`); return null }
+  const index = rate.kind === 'cdi_plus' ? input.annualCdiPct
+    : rate.kind === 'selic_plus' ? input.annualSelicPct
+      : rate.kind === 'ipca_plus' ? input.annualIpcaPct
+        : input.annualIgpmPct
+  const label = rate.kind === 'cdi_plus' ? 'CDI' : rate.kind === 'selic_plus' ? 'SELIC' : rate.kind === 'ipca_plus' ? 'IPCA' : 'IGPM'
+  if (!index) { gaps.push(`${label} annualized is required to compare this position.`); return null }
+  return new Decimal(1).plus(new Decimal(index).div(100)).mul(new Decimal(1).plus(new Decimal(rate.spreadPct).div(100))).minus(1).mul(100).toDecimalPlaces(4).toFixed(4)
+}
+
+function benchmark(position: FixedIncomePosition): FixedIncomeLadderEntry['benchmark'] {
+  const kind = position.product.rate.kind
+  if (kind === 'cdi_percentage' || kind === 'cdi_plus') return 'CDI'
+  if (kind === 'selic_plus') return 'SELIC'
+  if (kind === 'ipca_plus') return 'IPCA'
+  if (kind === 'igpm_plus') return 'IGPM'
+  return kind === 'fixed' ? 'fixed' : 'other'
 }
 
 function netRate(position: FixedIncomePosition, asOf: Date, input: FixedIncomeLadderInput, gaps: string[], assumptions: string[]): string | null {
@@ -104,8 +121,12 @@ function netRate(position: FixedIncomePosition, asOf: Date, input: FixedIncomeLa
       principalBRL: position.investedAmountBRL,
       calendarDays: holdingDays,
       businessDays: Math.round(holdingDays * 252 / 365),
+      acquisitionDate: position.acquiredDate,
+      redemptionDate: position.product.maturityDate,
       annualCdiPct: input.annualCdiPct,
+      annualSelicPct: input.annualSelicPct,
       annualIpcaPct: input.annualIpcaPct,
+      annualIgpmPct: input.annualIgpmPct,
     })
     assumptions.push('Net rate assumes contractual rate, the supplied indexer and current Brazilian IOF/IR brackets; it excludes issuer/default, reinvestment and mark-to-market effects.')
     return new Decimal(projection.netBRL).div(position.investedAmountBRL).pow(new Decimal(365).div(holdingDays)).minus(1).mul(100).toDecimalPlaces(4).toFixed(4)

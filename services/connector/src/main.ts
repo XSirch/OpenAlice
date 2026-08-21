@@ -18,7 +18,7 @@ import { discordConnectorRegistration } from './adapters/discord.js'
 import { telegramConnectorRegistration } from './adapters/telegram.js'
 import { ConnectorIOJournal } from './core/io-journal.js'
 import { ConnectorInboundJournal } from './core/inbound-journal.js'
-import { AliceInboundClient, rotateAliceConversation } from './core/alice-inbound-client.js'
+import { AliceInboundClient, readAliceLocalJson, rotateAliceConversation } from './core/alice-inbound-client.js'
 import { ConnectorInboundDispatcher } from './core/inbound-dispatcher.js'
 import { dataPath } from '@/core/paths.js'
 
@@ -61,6 +61,7 @@ async function main(): Promise<void> {
     rotateConversation: (connectorId, ownerId, conversationId) => rotateAliceConversation(
       aliceUrl, connectorId, ownerId, conversationId,
     ),
+    readLocalJson: (path) => readAliceLocalJson(aliceUrl, path),
   })
   await manager.start()
 

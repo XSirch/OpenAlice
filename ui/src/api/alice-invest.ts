@@ -2,4 +2,47 @@ import { fetchJson } from './client'
 export interface AliceInvestEvidence { criterion: string; status: string; observedAt: string; source: string; details?: string }
 export interface AliceInvestReadiness { capability: string; state: string; evaluatedAt: string; evidence: AliceInvestEvidence[]; blockers: string[] }
 export interface AliceInvestSnapshot { readiness: AliceInvestReadiness[]; switches: Record<string, boolean>; executionEnabled: false }
-export const aliceInvestApi = { load: () => fetchJson<AliceInvestSnapshot>('/api/alice-invest') }
+export interface FixedIncomeSourceState { id: string; label: string; mode: 'official_automatic' | 'manual_import' | 'user_confirmation'; state: string; freshness: string }
+export interface FixedIncomeWorkspaceOverview {
+  readiness: 'research_only'; executionEnabled: false; generatedAt: string
+  policy: { liquidityReservePct: string; readiness: 'research_only'; executionEnabled: false; recommendationGenerationEnabled: false }
+  sourceStates: FixedIncomeSourceState[]
+  capabilities: { treasuryPricing: boolean; switchSimulation: boolean; bankRanking: boolean; privateCreditAnalysis: boolean; financialExecution: false }
+}
+export interface FixedIncomeSwitchView { decision: string; actionable: false; readiness: 'research_only'; hold: { netFinalBRL: string }; reinvest: { netFinalBRL: string }; delta: { netBRL: string; annualizedUpliftPct: string }; constraints: Array<{ id: string; passed: boolean }>; calculationTraceId: string }
+export interface FixedIncomeHistoryView { readiness: 'research_only'; executionEnabled: false; history: { deliveries: Array<{ eventId: string; deliveredAt: string; channel: string }>; manualOutcomes: Array<{ recommendationId: string; recordedAt: string; outcome: string; note?: string }>; audit: Array<{ id: string; at: string; kind: string; detail: string }> } }
+export interface FixedIncomeOpportunitiesView { readiness: 'research_only'; executionEnabled: false; opportunities: Array<{ id: string; observedAt: string; validUntil?: string; availability: 'indicative' | 'confirmed' | 'expired' | 'unknown'; origin: string; distributor: string; minimumBRL?: string; maximumAvailableBRL?: string; product: { productType: string; issuer: { legalName: string; conglomerate?: string }; maturityDate: string; fgc: { status: string } }; rate: { kind: string; annualRatePct?: string; cdiPct?: string; spreadPct?: string }; provenance: { publisher: string; dataAsOf: string; rawPayloadChecksum: string } }> }
+export interface FixedIncomeShadowView { state: 'collecting' | 'validation_failed' | 'eligible_for_human_readiness_decision'; distinctObservationDays: number; observationCount: number; period: { from: string | null; to: string | null }; metrics: { staleDataEvents: number; providerFailures: number; alerts: number; duplicateAlerts: number; reviewedAlerts: number; falsePositives: number; falsePositiveRatePct: string }; blockers: string[]; walkthrough: { completedAt: string; reviewer: string; result: 'passed' | 'failed'; notes: string } | null; readiness: 'research_only'; canEnableRecommendations: false }
+export interface FixedIncomeCvmEvidenceView { readiness: 'research_only'; executionEnabled: false; snapshot: { observedAt: string; expiresAt: string; quality: { score: number; confidence: number; criticalFieldsMissing: string[] }; payload: { year: string; statements: Array<{ kind: 'DFP' | 'ITR'; company: string; referenceDate: string; statement: string; accountCode: string; account: string; value: string }>; events: Array<{ company: string; referenceDate: string; category: string; type: string; subject: string }> }; provenance: Array<{ publisher: string; sourceUrl: string; dataAsOf: string; retrievedAt: string; rawPayloadChecksum: string }> } }
+export interface FixedIncomeDocumentInspectionView { readiness: 'research_only'; executionEnabled: false; persisted: false; document: { fileName: string; contentType: string; byteLength: number; documentHash: string; extractionState: 'text_extracted' | 'binary_pending_extraction'; extractedText?: string; pageCount?: number; pages?: Array<{ page: number; startOffset: number; endOffset: number }>; trust: 'untrusted_document_content'; securitySignals: string[] } }
+export interface FixedIncomePublicPosition { id: string; product: { productType: string; issuer: { legalName: string; conglomerate?: string }; rate: { kind: string; annualRatePct?: string; cdiPct?: string; spreadPct?: string; label?: string }; issueDate: string; maturityDate: string; liquidity: { redemption: string; settlementBusinessDays: number; noticeBusinessDays: number }; fgc: { status: string }; fees: { administrationAnnualPct: string; performancePct: string; entryPct: string; exitPct: string }; assumptions: string[] }; investedAmountBRL: string; currentAmountBRL: string; marketValueBRL?: string; redemptionAmountBRL?: string; acquiredDate?: string; custodyAsOf: string; source: { provider: string } }
+export interface FixedIncomePositionsView { readiness: 'research_only'; executionEnabled: false; fetchedAt: string; positions: FixedIncomePublicPosition[]; unclassified: Array<{ id: string; name: string; code?: string | null; type?: string | null; value?: number | null; currency: string; institution?: string | null; asOf?: string | null; classification: null }>; gaps: Array<{ reason: string }> }
+export interface FixedIncomePositionDetailView {
+  readiness: 'research_only'; executionEnabled: false; position: FixedIncomePublicPosition; gaps: string[]
+  detail: {
+    updatedAt: string
+    lots: Array<{ id: string; acquisitionDate: string; settlementDate?: string; quantity: string; unitCostBRL: string; totalCostBRL: string; accruedFeesBRL: string; taxLotMethod: string; source: { provider: string; observedAt: string; evidenceChecksum: string } }>
+    cashFlows: Array<{ id: string; lotId?: string; date: string; kind: string; grossBRL: string; indexationRuleId?: string; taxRuleId?: string; status: string }>
+    risk: { durationYears: string | null; modifiedDurationYears: string | null; convexity: string | null; dv01BRL: string | null; creditScore: number | null; liquidityScore: number | null; structuralScore: number | null; confidenceScore: number | null; methodologyIds: string[]; dataAsOf: string } | null
+    documents: Array<{ id: string; documentType: string; documentHash: string; sourceUrl: string; dataAsOf: string }>
+  }
+  recommendationHistory: Array<{ recordedAt: string; outcome: string; note?: string }>
+  calculationMemory: { available: boolean; reason?: string; latest?: FixedIncomePositionCalculation; history: FixedIncomePositionCalculation[] }
+}
+export interface FixedIncomePositionCalculation { calculationTraceId: string; calculatedAt: string; targetDate: string; decision: string; holdNetBRL: string; reinvestNetBRL: string; netDeltaBRL: string; annualizedUpliftPct: string; breakEvenAnnualNetRatePct: string; methodologyIds: string[] }
+export interface FixedIncomeCreditAnalysisView { readiness: 'research_only'; actionable: false; assetId: string; deterministicScore: number; decision: 'watch' | 'avoid' | 'review_credit' | 'insufficient_data'; adjustedNetPremiumRangePct: { low: string; high: string }; reasonCodes: string[]; evidence: Array<{ id: string; documentType: string; documentHash: string; locator: string }>; calculationTraceId: string; methodologyId: 'private-credit-analysis@1' }
+export interface FixedIncomeHealthView { state: 'disabled' | 'collecting' | 'degraded' | 'unavailable'; readiness: 'research_only'; executionEnabled: false; checkedAt: string; monitor: { enabled: boolean; notificationsEnabled: boolean; lastEvent: { at: string; kind: string; detail: string } | null; circuitState: 'open_recently' | 'no_recent_open_event' }; operations: { auditEvents: number; deliveries: number; manualOutcomes: number } }
+export const aliceInvestApi = {
+  load: () => fetchJson<AliceInvestSnapshot>('/api/alice-invest'),
+  fixedIncomeOverview: () => fetchJson<FixedIncomeWorkspaceOverview>('/api/alice-invest/fixed-income/overview'),
+  fixedIncomePositions: () => fetchJson<FixedIncomePositionsView>('/api/alice-invest/fixed-income/positions'),
+  simulateFixedIncomeSwitch: (input: unknown) => fetchJson<FixedIncomeSwitchView>('/api/alice-invest/fixed-income/simulations/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }),
+  fixedIncomeHistory: () => fetchJson<FixedIncomeHistoryView>('/api/alice-invest/fixed-income/history'),
+  fixedIncomeOpportunities: () => fetchJson<FixedIncomeOpportunitiesView>('/api/alice-invest/fixed-income/opportunities'),
+  fixedIncomeShadowValidation: () => fetchJson<FixedIncomeShadowView>('/api/alice-invest/fixed-income/shadow-validation'),
+  fixedIncomeHealth: () => fetchJson<FixedIncomeHealthView>('/api/alice-invest/fixed-income/health'),
+  fixedIncomeCvmEvidence: (cvmCode: string, year: string) => fetchJson<FixedIncomeCvmEvidenceView>(`/api/alice-invest/fixed-income/credit-sources/cvm?cvmCode=${encodeURIComponent(cvmCode)}&year=${encodeURIComponent(year)}`),
+  inspectFixedIncomeDocument: (input: unknown) => fetchJson<FixedIncomeDocumentInspectionView>('/api/alice-invest/fixed-income/credit-documents/inspect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }),
+  fixedIncomePositionDetail: (positionId: string) => fetchJson<FixedIncomePositionDetailView>(`/api/alice-invest/fixed-income/positions/${encodeURIComponent(positionId)}`),
+  analyzeFixedIncomeCredit: (input: unknown) => fetchJson<FixedIncomeCreditAnalysisView>('/api/alice-invest/fixed-income/credit-analysis', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }),
+}

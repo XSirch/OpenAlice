@@ -51,9 +51,12 @@ import { createDerivativesTools } from './tool/derivatives.js'
 import { createIndexTools } from './tool/indices.js'
 import { createEconomyTools } from './tool/economy.js'
 import { createAliceInvestCustodyTools } from './tool/alice-invest-custody.js'
+import { createAliceInvestFixedIncomeTools } from './tool/alice-invest-fixed-income.js'
 import { SessionStore } from './core/session.js'
 import { createInboxStore } from './core/inbox-store.js'
 import { AliceInvestMonitorService } from './domain/alice-invest/signals/monitor-service.js'
+import { FixedIncomeShadowMonitorService } from './domain/alice-invest/fixed-income/shadow-monitor-service.js'
+import { FixedIncomeMonitorService } from './domain/alice-invest/fixed-income/monitor-service.js'
 import { startInboxConnectorBridge } from './services/connector-client/index.js'
 import { ToolCenter } from './core/tool-center.js'
 import { WorkspaceToolCenter } from './core/workspace-tool-center.js'
@@ -305,6 +308,7 @@ async function main() {
   }
   toolCenter.register(createEconomyTools(economyClient, commodityClient), 'economy')
   toolCenter.register(createAliceInvestCustodyTools(), 'alice-invest-custody')
+  toolCenter.register(createAliceInvestFixedIncomeTools(), 'alice-invest-fixed-income')
 
   console.log(`tool-center: ${toolCenter.list().length} tools registered`)
 
@@ -313,6 +317,10 @@ async function main() {
   const inboxStore = createInboxStore()
   const aliceInvestMonitor = new AliceInvestMonitorService(inboxStore)
   aliceInvestMonitor.start()
+  const fixedIncomeShadowMonitor = new FixedIncomeShadowMonitorService()
+  fixedIncomeShadowMonitor.start()
+  const fixedIncomeMonitor = new FixedIncomeMonitorService({ inbox: inboxStore })
+  fixedIncomeMonitor.start()
 
   // ==================== Entity store (durable cross-workspace tracked-index) ====================
 
@@ -445,6 +453,8 @@ async function main() {
     stopped = true
     newsCollector?.stop()
     aliceInvestMonitor.stop()
+    fixedIncomeShadowMonitor.stop()
+    fixedIncomeMonitor.stop()
     for (const plugin of [...corePlugins, ...optionalPlugins.values()]) {
       await plugin.stop()
     }
