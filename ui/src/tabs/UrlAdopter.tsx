@@ -411,7 +411,7 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'template-detail':    return 'workspaces'
     case 'trading-as-git':     return 'trading-as-git'
     case 'connectors':         return 'connectors'
-    case 'alice-invest':       return 'settings'
+    case 'alice-invest':       return 'alice-invest'
     case 'portfolio':
     case 'portfolio-returns':
     case 'corporate-events':

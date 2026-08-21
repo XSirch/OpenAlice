@@ -40,6 +40,20 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('UrlAdopter file provenance', () => {
+  it('restores Renda Fixa with its own navigation context', async () => {
+    render(
+      <MemoryRouter initialEntries={['/alice-invest']}>
+        <UrlAdopter />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mocks.openOrFocus).toHaveBeenCalledWith({
+      kind: 'alice-invest',
+      params: {},
+    }))
+    expect(mocks.setSidebar).toHaveBeenCalledWith('alice-invest')
+  })
+
   it('restores an Ask Alice file deep link with its Session return context', async () => {
     render(
       <MemoryRouter initialEntries={[

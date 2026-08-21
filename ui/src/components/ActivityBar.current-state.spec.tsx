@@ -43,6 +43,7 @@ vi.mock('react-i18next', () => ({
     t: (key: string) => ({
       'nav.item.chat': 'Ask Alice',
       'nav.item.settings': 'Settings',
+      'nav.item.fixedIncome': 'Renda Fixa',
       'nav.section.beta': 'Beta',
       'nav.section.system': 'System',
     })[key] ?? key,
@@ -82,5 +83,14 @@ describe('ActivityBar current destination', () => {
     expect(screen.getByRole('button', { name: 'Ask Alice' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('button', { name: 'Settings' }).getAttribute('aria-current')).toBeNull()
     expect(document.querySelectorAll('nav [aria-current="page"]')).toHaveLength(1)
+  })
+
+  it('opens Renda Fixa as its own navigation destination', () => {
+    render(<ActivityBar open onClose={vi.fn()} />)
+
+    screen.getByRole('button', { name: 'Renda Fixa' }).click()
+
+    expect(mocks.setSidebar).toHaveBeenCalledWith('alice-invest')
+    expect(mocks.openOrFocus).toHaveBeenCalledWith({ kind: 'alice-invest', params: {} })
   })
 })

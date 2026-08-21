@@ -16,6 +16,7 @@ describe('ActivityBar navigation hierarchy', () => {
       'market',
       'news',
       'alice-portfolio',
+      'alice-invest',
     ])
     expect(system?.items.map((item) => item.page)).toContain('workspaces')
   })

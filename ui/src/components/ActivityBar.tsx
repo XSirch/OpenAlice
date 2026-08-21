@@ -34,6 +34,7 @@ function activitySectionFor(page: Page): ActivitySection {
     case 'automation':           return 'automation'
     case 'news':                 return 'news'
     case 'alice-portfolio':      return 'alice-portfolio'
+    case 'alice-invest':         return 'alice-invest'
   }
 }
 

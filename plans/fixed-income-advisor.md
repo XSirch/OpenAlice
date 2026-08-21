@@ -266,6 +266,11 @@ demo walk rendered the complete detail and an associated simulation at 390x844;
 the document width matched the viewport and the scoped Axe audit reported zero
 violations and zero incomplete checks.
 
+A navigation follow-up on 2026-08-21 made the shipped surface discoverable:
+the primary Activity Bar now exposes `Renda Fixa`, opens `/alice-invest`, and
+keeps its own navigation context on direct links instead of incorrectly
+highlighting Settings.
+
 Final repository gate on 2026-08-20: root, UI, Connector Service, and Connector
 Protocol TypeScript passed; `pnpm test` passed with 590 files/4 skipped and
 4,276 tests/36 skipped. An earlier loaded run timed out in unrelated UTA and

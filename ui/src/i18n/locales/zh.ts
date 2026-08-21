@@ -12,6 +12,7 @@ export const zh: Resources = {
       market: '市场',
       news: '新闻',
       alicePortfolio: 'Alice Portfolio',
+      fixedIncome: 'Renda Fixa',
       tradingAsGit: '交易即 Git',
       portfolio: '投资组合',
       wealthForecast: '财富预测',

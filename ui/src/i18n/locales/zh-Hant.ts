@@ -20,6 +20,7 @@ export const zhHant: Resources = {
       market: '市場',
       news: '新聞',
       alicePortfolio: 'Alice Portfolio',
+      fixedIncome: 'Renda Fixa',
       tradingAsGit: '交易即 Git',
       portfolio: '投資組合',
       wealthForecast: '財富預測',

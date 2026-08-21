@@ -96,6 +96,7 @@ export type ActivitySection =
   | 'automation'
   | 'news'
   | 'alice-portfolio'
+  | 'alice-invest'
 
 export interface Tab {
   id: string

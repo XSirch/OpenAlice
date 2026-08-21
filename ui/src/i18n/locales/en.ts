@@ -23,6 +23,7 @@ export const en = {
       market: 'Market',
       news: 'News',
       alicePortfolio: 'Alice Portfolio',
+      fixedIncome: 'Renda Fixa',
       tradingAsGit: 'Trading as Git',
       portfolio: 'Portfolio',
       wealthForecast: 'Wealth forecast',
