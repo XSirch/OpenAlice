@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { readAliceInvestConfig } from '../../core/alice-invest-config.js'
 import { ReadinessEvidenceStore } from '../../domain/alice-invest/readiness/evidence-store.js'
 import { projectAllReadiness } from '../../domain/alice-invest/readiness/projection.js'
+import { createFixedIncomeRoutes } from './fixed-income.js'
 
 export interface AliceInvestRouteDeps { evidenceStore?: ReadinessEvidenceStore }
 
@@ -9,6 +10,7 @@ export interface AliceInvestRouteDeps { evidenceStore?: ReadinessEvidenceStore }
 export function createAliceInvestRoutes(deps: AliceInvestRouteDeps = {}) {
   const app = new Hono()
   const evidenceStore = deps.evidenceStore ?? new ReadinessEvidenceStore()
+  app.route('/fixed-income', createFixedIncomeRoutes())
   app.get('/', async (c) => {
     const config = await readAliceInvestConfig()
     await evidenceStore.init()

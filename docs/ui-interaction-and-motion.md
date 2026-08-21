@@ -96,6 +96,37 @@ away from the pointer.
 
 ## Shared Vocabulary
 
+### Alice Invest fixed-income workspace
+
+`ui/src/pages/AliceInvestPage.tsx` owns the page-local Renda Fixa navigator.
+Its sections share one mounted page rather than creating a second tab shell.
+At narrow widths the navigator scrolls horizontally, metric grids collapse,
+and the positions comparison moves to its dedicated section. The content
+scroll region is named and keyboard-focusable. The simulator's only primary
+action says `Simular sem executar`; the page must never render buy, sell,
+redeem, transfer, or order controls. The opportunity section reads the private
+persisted catalog and distinguishes confirmed, indicative, and expired states.
+The operation section shows the stored shadow-validation day count and blockers
+instead of inferring readiness from configuration. It also renders the
+fixed-income monitor's persisted delivery count, last redacted operational
+event, notification switch, and recent circuit-open evidence; disabled is a
+first-class state rather than an error.
+
+The Credit section accepts an explicit CVM code/year and shows DFP/ITR/IPE
+quality, dates, and raw checksums without automatically assigning a score. Its
+document picker inspects bounded PDF/text/CSV/JSON/passive-HTML input, labels
+extracted content untrusted, and never persists or turns it into an order. The
+guided analysis form sends only explicit human inputs and the inspected
+document hash/locator to the deterministic engine. The Positions section loads
+redacted classified records from the Alice Invest API and opens a read-only
+detail; absent lots, cash flows, market metrics, or calculation traces remain
+visibly absent instead of being inferred from custody labels.
+
+The demo handlers under `ui/src/demo/handlers/aliceInvest.ts` use redacted,
+synthetic custody, FGC, source, history, and simulation data. Keep every
+`/api/alice-invest/fixed-income/*` contract used by the page represented there
+so demo success cannot come from the catch-all handler.
+
 ### Component primitive ownership
 
 Behavioral UI primitives live as source under `ui/src/components/ui/`. They are

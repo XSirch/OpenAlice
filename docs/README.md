@@ -53,6 +53,9 @@ and running-update comparison behind the Shell CLI plan. The
 [Herdr remote Runtime note](reference/herdr-remote-architecture.md) records a
 pinned public-source architecture comparison behind the authoritative remote
 guide, also without vendoring third-party code.
+The [fixed-income source viability note](reference/fixed-income-source-viability.md)
+records the dated official-source, access, freshness, and licensing decisions
+behind the fixed-income advisor provider contract.
 
 ## Incident Records
 

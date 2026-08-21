@@ -1,0 +1,47 @@
+{
+  "fixtureVersion": 1,
+  "redaction": {
+    "syntheticIdentifiers": true,
+    "containsCredentials": false
+  },
+  "snapshot": {
+    "provider": "pluggy",
+    "fetchedAt": "2026-08-20T12:00:00.000Z",
+    "positions": [
+      {
+        "id": "pluggy-position-redacted-001",
+        "name": "CDB Pós-Fixado",
+        "code": "CDB-EXEMPLO-2027",
+        "type": "FIXED_INCOME",
+        "quantity": 1,
+        "value": 11342.57,
+        "originalAmount": 10000,
+        "profit": 1342.57,
+        "acquiredAt": "2025-08-20T00:00:00.000Z",
+        "costBasisSource": "reported",
+        "grossAmount": 11342.57,
+        "unitValue": 11342.57,
+        "currency": "BRL",
+        "institution": "Banco Exemplo Confirmado",
+        "asOf": "2026-08-20T00:00:00.000Z"
+      },
+      {
+        "id": "pluggy-position-redacted-002",
+        "name": "Tesouro IPCA+",
+        "code": "NTNB-EXEMPLO-2035",
+        "type": "TREASURY",
+        "quantity": 2.5,
+        "value": 9876.54,
+        "currency": "BRL",
+        "institution": "Corretora Exemplo Confirmada",
+        "asOf": "2026-08-20T00:00:00.000Z"
+      }
+    ]
+  },
+  "documentedGaps": [
+    "Pluggy does not provide tax-lot identity for every connector.",
+    "Acquisition cost and acquisition date may be absent or reconstructed from transactions.",
+    "Provider product names do not prove instrument subtype, issuer conglomerate, or FGC eligibility.",
+    "Custody value is not evidence of an executable secondary-market price."
+  ]
+}

@@ -10,6 +10,7 @@ export class ConnectorInboundUnavailableError extends Error {}
 export function createConnectorInboundRoutes(
   receive: (message: ConnectorInboundTextMessage) => Promise<void>,
   rotate?: (input: { connectorId: string; conversationId: string; ownerId: string }) => Promise<void>,
+  fixedIncomeSummary?: () => Promise<{ message: string }>,
 ) {
   const app = new Hono()
   app.post('/', async (c) => {
@@ -48,6 +49,14 @@ export function createConnectorInboundRoutes(
       throw error
     }
     return c.json({ accepted: true, correlationId: input.correlationId }, 202)
+  })
+  app.get('/fixed-income-summary', async (c) => {
+    const correlationId = c.req.header('x-openalice-connector-correlation-id')
+    if (!correlationId || !await verifyConnectorInbound(correlationId, '', c.req.header('x-openalice-connector-signature'))) return c.json({ error: 'unauthorized' }, 401)
+    if (!fixedIncomeSummary) return c.json({ error: 'fixed-income summary unavailable' }, 503)
+    const summary = await fixedIncomeSummary()
+    if (!summary.message || summary.message.length > 3_500) return c.json({ error: 'invalid fixed-income summary' }, 503)
+    return c.json(summary)
   })
   return app
 }

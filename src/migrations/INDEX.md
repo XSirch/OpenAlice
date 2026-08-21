@@ -48,3 +48,6 @@ Each row corresponds to one migration in `src/migrations/`. The runner applies p
 | `0046_pi_local_workspace_provider` | 0.89.1-beta | 2026-08-04 | workspaces/workspaces/*/.pi, workspaces/departed-workspaces/*/.pi, Pi user agent directory/models.json | Move OpenAlice-managed Pi providers from the global model registry into Workspace-local extensions. |
 | `0047_session_runtime_bindings` | 0.90.0-beta | 2026-08-05 | workspaces/state/resume-identities.json | Version product Session identities for durable runtime, credential-reference, model, and effort bindings. |
 | `0048_semantic_issue_assignees` | 0.90.0-beta | 2026-08-06 | workspaces/<id>/.alice/issues/*.md | Replace deprecated @workspace/@new Issue aliases with behavior-named assignee tokens. |
+| `0049_fixed_income_advisor` | 0.90.0-beta | 2026-08-20 | fixed-income-advisor-policy.json, fixed-income-custody.json | Seed the read-only fixed-income advisor policy while preserving existing custody classifications. |
+| `0050_fixed_income_position_state` | 0.90.0-beta | 2026-08-20 | state/fixed-income-position-state.json | Create private versioned evidence and calculation memory for fixed-income positions. |
+| `0051_fixed_income_shadow_walkthrough` | 0.90.0-beta | 2026-08-21 | state/fixed-income-shadow-validation.json | Upgrade fixed-income shadow evidence to persist append-only human walkthroughs. |

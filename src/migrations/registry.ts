@@ -14,7 +14,7 @@
  * deletion + Workspace pivot turned the pre-0.40 data shapes over completely, so
  * pre-0.40 installs rebuild `data/` rather than migrate. The framework stays for
  * future upgrades. Numbering continues FORWARD from the highest id ever shipped
- * (next: 0049) — never reuse a retired id, since existing installs' journals
+ * (next: 0052) — never reuse a retired id, since existing installs' journals
  * recorded the old ones.
  */
 
@@ -60,6 +60,9 @@ import { migration as migration_0045_retire_workspace_agent_pins } from './0045_
 import { migration as migration_0046_pi_local_workspace_provider } from './0046_pi_local_workspace_provider/index.js'
 import { migration as migration_0047_session_runtime_bindings } from './0047_session_runtime_bindings/index.js'
 import { migration as migration_0048_semantic_issue_assignees } from './0048_semantic_issue_assignees/index.js'
+import { migration as migration_0049_fixed_income_advisor } from './0049_fixed_income_advisor/index.js'
+import { migration as migration_0050_fixed_income_position_state } from './0050_fixed_income_position_state/index.js'
+import { migration as migration_0051_fixed_income_shadow_walkthrough } from './0051_fixed_income_shadow_walkthrough/index.js'
 
 export const REGISTRY: Migration[] = [
   migration_0008_disable_targetless_cron_jobs,
@@ -103,4 +106,7 @@ export const REGISTRY: Migration[] = [
   migration_0046_pi_local_workspace_provider,
   migration_0047_session_runtime_bindings,
   migration_0048_semantic_issue_assignees,
+  migration_0049_fixed_income_advisor,
+  migration_0050_fixed_income_position_state,
+  migration_0051_fixed_income_shadow_walkthrough,
 ]

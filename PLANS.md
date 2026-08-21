@@ -21,6 +21,10 @@ the durable truth after it changes.
 
 ## Active
 
+- [[plans/fixed-income-advisor.md]] — Delivers the read-only fixed-income
+  advisor through public-data viability, deterministic portfolio math, Tesouro
+  switch analysis, risk-constrained products, product surfaces, and shadow
+  validation while preserving the no-execution boundary.
 - [[plans/shell-first-cli-supervisor.md]] — Delivers a first-class Shell
   Supervisor TUI, persistent Guardian-owned Runtime lifecycle, standalone
   headless release bundle, atomic update/rollback, and real N-1 plus PTY

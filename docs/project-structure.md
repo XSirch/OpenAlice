@@ -320,6 +320,7 @@ generated `src/migrations/INDEX.md`.
 | Workspace offboarding, restore/purge, Session retirement | [Workspace and Session lifecycle](workspace-lifecycle.md) |
 | Template versions, managed-asset reconciliation, upgrade recovery | [Workspace Template Upgrade](workspace-template-upgrade.md) |
 | Broker/account/execution behavior | `services/uta/src/domain/trading/` + [UTA live testing](uta-live-testing.md) |
+| Read-only fixed-income contracts, lots, cash flows, tax, calendars, pricing, switch simulations, and policy | `src/domain/alice-invest/fixed-income/`; HTTP simulations live in `src/webui/routes/fixed-income.ts`, agent tools in `src/tool/alice-invest-fixed-income.ts`, and provider boundaries additionally follow [Market data architecture](market-data-architecture.md) |
 | Shared Alice ↔ UTA shapes | `packages/uta-protocol/` and both callers |
 | External Inbox notifications and IM adapters | [Connector Service](connector-service.md) |
 | Renderer/API surface | `ui/`, `src/webui/`, and matching demo handlers |
